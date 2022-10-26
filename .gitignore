@@ -1,3 +1,4 @@
 cba.out
 bin
 localconfig
+.env
