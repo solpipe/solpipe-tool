@@ -1,0 +1,9 @@
+
+#HiddenServiceStatistics 0
+#HiddenServiceSingleHopMode 1
+#HiddenServiceNonAnonymousMode 1
+HiddenServiceSingleHopMode 0
+HiddenServiceNonAnonymousMode 0
+SocksPort 0
+
+

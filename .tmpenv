@@ -1,0 +1,7 @@
+
+PROGRAM_ID_CBA=2nV2HN9eaaoyk4WmiiEtUShup9hVQ21rNawfor9qoqam
+CRANKER_FP="/Users/joel/work/solana/solmate-pay/tests/data/CRANKER_FP.json"
+MINT_FP="/Users/joel/work/solana/solmate-pay/tests/data/MINT_FP.json"
+VALIDATOR_FP="/Users/joel/work/solana/solmate-pay/tests/data/VALIDATOR_FP.json"
+VALIDATOR_ADMIN_FP="/Users/joel/work/solana/solmate-pay/tests/data/VALIDATOR_ADMIN_FP.json"
+VALIDATOR_ID=GZYo2TveidR4g5qwtL7BhkdsWpPFzYLDG8VAMbextYwx
