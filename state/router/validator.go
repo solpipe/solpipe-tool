@@ -1,16 +1,16 @@
 package router
 
 import (
+	log "github.com/sirupsen/logrus"
 	cba "github.com/solpipe/cba"
 	rpt "github.com/solpipe/solpipe-tool/state/receipt"
 	"github.com/solpipe/solpipe-tool/state/sub"
 	val "github.com/solpipe/solpipe-tool/state/validator"
-	log "github.com/sirupsen/logrus"
 )
 
 type refValidator struct {
 	v    val.Validator
-	data cba.ValidatorMember
+	data cba.ValidatorManager
 }
 
 type lookUpValidator struct {
@@ -29,10 +29,10 @@ func createLookupValidator() *lookUpValidator {
 
 type ValidatorWithData struct {
 	V    val.Validator
-	Data cba.ValidatorMember
+	Data cba.ValidatorManager
 }
 
-func (in *internal) lookup_add_validator(v val.Validator, data cba.ValidatorMember) *refValidator {
+func (in *internal) lookup_add_validator(v val.Validator, data cba.ValidatorManager) *refValidator {
 	ref := &refValidator{v: v, data: data}
 	in.l_validator.byId[v.Id.String()] = ref
 	in.l_validator.byVote[data.Vote.String()] = ref

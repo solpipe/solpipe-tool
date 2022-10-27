@@ -5,50 +5,54 @@ import (
 	"encoding/binary"
 	"errors"
 
-	cba "github.com/solpipe/cba"
-	ll "github.com/solpipe/solpipe-tool/ds/list"
-	dssub "github.com/solpipe/solpipe-tool/ds/sub"
-	vrs "github.com/solpipe/solpipe-tool/state/version"
 	"github.com/SolmateDev/solana-go"
 	sgorpc "github.com/SolmateDev/solana-go/rpc"
 	sgows "github.com/SolmateDev/solana-go/rpc/ws"
 	bin "github.com/gagliardetto/binary"
 	log "github.com/sirupsen/logrus"
+	cba "github.com/solpipe/cba"
+	ll "github.com/solpipe/solpipe-tool/ds/list"
+	dssub "github.com/solpipe/solpipe-tool/ds/sub"
+	vrs "github.com/solpipe/solpipe-tool/state/version"
 )
 
 type SubscriptionProgramGroup struct {
 	ControllerC chan<- dssub.ResponseChannel[cba.Controller]
 	ValidatorC  chan<- dssub.ResponseChannel[ValidatorGroup]
-	PipelineC   chan<- dssub.ResponseChannel[PipelineGroup]
-	BidListC    chan<- dssub.ResponseChannel[cba.BidList]
-	BidSummaryC chan<- dssub.ResponseChannel[BidSummary]
-	PeriodRingC chan<- dssub.ResponseChannel[cba.PeriodRing]
-	StakeC      chan<- dssub.ResponseChannel[StakeGroup]
-	ReceiptC    chan<- dssub.ResponseChannel[ReceiptGroup]
-	PayoutC     chan<- dssub.ResponseChannel[PayoutWithData]
+
+	PipelineC      chan<- dssub.ResponseChannel[PipelineGroup]
+	BidListC       chan<- dssub.ResponseChannel[cba.BidList]
+	BidSummaryC    chan<- dssub.ResponseChannel[BidSummary]
+	PeriodRingC    chan<- dssub.ResponseChannel[cba.PeriodRing]
+	StakeC         chan<- dssub.ResponseChannel[StakeGroup]
+	StakerReceiptC chan<- dssub.ResponseChannel[cba.StakerReceipt]
+	ReceiptC       chan<- dssub.ResponseChannel[ReceiptGroup]
+	PayoutC        chan<- dssub.ResponseChannel[PayoutWithData]
 }
 
 type internalSubscriptionProgramGroup struct {
-	controller *dssub.SubHome[cba.Controller]
-	validator  *dssub.SubHome[ValidatorGroup]
-	pipeline   *dssub.SubHome[PipelineGroup]
-	bidList    *dssub.SubHome[cba.BidList]
-	bidSummary *dssub.SubHome[BidSummary]
-	periodRing *dssub.SubHome[cba.PeriodRing]
-	stake      *dssub.SubHome[StakeGroup]
-	receipt    *dssub.SubHome[ReceiptGroup]
-	payout     *dssub.SubHome[PayoutWithData]
+	controller   *dssub.SubHome[cba.Controller]
+	validator    *dssub.SubHome[ValidatorGroup]
+	pipeline     *dssub.SubHome[PipelineGroup]
+	bidList      *dssub.SubHome[cba.BidList]
+	bidSummary   *dssub.SubHome[BidSummary]
+	periodRing   *dssub.SubHome[cba.PeriodRing]
+	stake        *dssub.SubHome[StakeGroup]
+	stakeReceipt *dssub.SubHome[StakeReceiptGroup]
+	receipt      *dssub.SubHome[ReceiptGroup]
+	payout       *dssub.SubHome[PayoutWithData]
 }
 
 type ProgramAllResult struct {
-	Controller *cba.Controller
-	Validator  *ll.Generic[*ValidatorGroup]
-	Pipeline   *ll.Generic[*PipelineGroup]
-	PeriodRing map[string]*PeriodGroup
-	BidList    map[string]*BidGroup
-	Stake      *ll.Generic[*StakeGroup]
-	Receipt    *ll.Generic[*ReceiptGroup]
-	Payout     *ll.Generic[*PayoutWithData]
+	Controller   *cba.Controller
+	Validator    *ll.Generic[*ValidatorGroup]
+	Pipeline     *ll.Generic[*PipelineGroup]
+	PeriodRing   map[string]*PeriodGroup
+	BidList      map[string]*BidGroup
+	Stake        *ll.Generic[*StakeGroup]
+	StakeReceipt *ll.Generic[*StakeReceiptGroup] // new from refactored code
+	Receipt      *ll.Generic[*ReceiptGroup]
+	Payout       *ll.Generic[*PayoutWithData]
 }
 
 func createProgramAllResult() *ProgramAllResult {
@@ -97,8 +101,8 @@ func FetchProgramAll(ctx context.Context, rpcClient *sgorpc.Client, version vrs.
 							ans.Controller = x
 						}
 					}
-				case cba.ValidatorMemberDiscriminator:
-					x := new(cba.ValidatorMember)
+				case cba.ValidatorManagerDiscriminator:
+					x := new(cba.ValidatorManager)
 					err = c.Decode(x)
 					if err == nil {
 						if x.Controller.Equals(controllerId) {
@@ -142,8 +146,8 @@ func FetchProgramAll(ctx context.Context, rpcClient *sgorpc.Client, version vrs.
 							IsOpen: true,
 						}
 					}
-				case cba.StakerMemberDiscriminator:
-					x := new(cba.StakerMember)
+				case cba.StakerManagerDiscriminator:
+					x := new(cba.StakerManager)
 					err = c.Decode(x)
 					if err == nil {
 						ans.Stake.Append(&StakeGroup{
@@ -192,9 +196,10 @@ func FetchProgramAll(ctx context.Context, rpcClient *sgorpc.Client, version vrs.
 	return ans, nil
 }
 
-/*	updateBidC        chan<- util.ResponseChannel[util.BidGroup]
-	updatePeriodC     chan<- util.ResponseChannel[cba.PeriodRing]
-	updateBidSummaryC chan<- util.ResponseChannel[util.BidSummary]
+/*
+updateBidC        chan<- util.ResponseChannel[util.BidGroup]
+updatePeriodC     chan<- util.ResponseChannel[cba.PeriodRing]
+updateBidSummaryC chan<- util.ResponseChannel[util.BidSummary]
 */
 func SubscribeProgramAll(
 	ctx context.Context,
@@ -238,14 +243,15 @@ func SubscribeProgramAll(
 type DATA_TYPE int
 
 const (
-	TYPE_CONTROLLER DATA_TYPE = 0
-	TYPE_VALIDATOR  DATA_TYPE = 1
-	TYPE_PIPELINE   DATA_TYPE = 2
-	TYPE_BIDS       DATA_TYPE = 3
-	TYPE_PERIODS    DATA_TYPE = 4
-	TYPE_STAKER     DATA_TYPE = 5
-	TYPE_PAYOUT     DATA_TYPE = 6
-	TYPE_RECEIPT    DATA_TYPE = 7
+	TYPE_CONTROLLER     DATA_TYPE = 0
+	TYPE_VALIDATOR      DATA_TYPE = 1
+	TYPE_PIPELINE       DATA_TYPE = 2
+	TYPE_BIDS           DATA_TYPE = 3
+	TYPE_PERIODS        DATA_TYPE = 4
+	TYPE_STAKER         DATA_TYPE = 5
+	TYPE_PAYOUT         DATA_TYPE = 6
+	TYPE_RECEIPT        DATA_TYPE = 7
+	TYPE_STAKER_RECEIPT DATA_TYPE = 8
 )
 
 func loopSubscribePipeline(
@@ -262,11 +268,12 @@ func loopSubscribePipeline(
 	var err error
 
 	D_controller := binary.BigEndian.Uint64(cba.ControllerDiscriminator[:])
-	D_validator := binary.BigEndian.Uint64(cba.ValidatorMemberDiscriminator[:])
+	D_validator := binary.BigEndian.Uint64(cba.ValidatorManagerDiscriminator[:])
 	D_pipeline := binary.BigEndian.Uint64(cba.PipelineDiscriminator[:])
 	D_bidlist := binary.BigEndian.Uint64(cba.BidListDiscriminator[:])
 	D_periodring := binary.BigEndian.Uint64(cba.PeriodRingDiscriminator[:])
-	D_stake := binary.BigEndian.Uint64(cba.StakerMemberDiscriminator[:])
+	D_stake := binary.BigEndian.Uint64(cba.StakerManagerDiscriminator[:])
+	D_stakeReceipt := binary.BigEndian.Uint64(cba.StakerReceiptDiscriminator[:])
 	D_receipt := binary.BigEndian.Uint64(cba.ReceiptDiscriminator[:])
 	D_payout := binary.BigEndian.Uint64(cba.PayoutDiscriminator[:])
 
@@ -337,7 +344,7 @@ out:
 					in.controller.Broadcast(*y)
 					trackingAccounts[x.Value.Pubkey.String()] = TYPE_CONTROLLER
 				case D_validator:
-					y := new(cba.ValidatorMember)
+					y := new(cba.ValidatorManager)
 					err = bin.UnmarshalBorsh(y, data)
 					if err != nil {
 						break out
@@ -380,7 +387,7 @@ out:
 					}
 					in.periodRing.Broadcast(*y)
 				case D_stake:
-					y := new(cba.StakerMember)
+					y := new(cba.StakerManager)
 					err = bin.UnmarshalBorsh(y, data)
 					if err != nil {
 						break out
@@ -391,6 +398,19 @@ out:
 						IsOpen: true,
 					})
 					trackingAccounts[x.Value.Pubkey.String()] = TYPE_STAKER
+				case D_stakeReceipt:
+					// TODO
+					y := new(cba.StakerReceipt)
+					err = bin.UnmarshalBorsh(y, data)
+					if err != nil {
+						break out
+					}
+					in.stakeReceipt.Broadcast(StakeReceiptGroup{
+						Id:     x.Value.Pubkey,
+						Data:   *y,
+						IsOpen: true,
+					})
+					trackingAccounts[x.Value.Pubkey.String()] = TYPE_STAKER_RECEIPT
 				case D_receipt:
 					y := new(cba.Receipt)
 					err = bin.UnmarshalBorsh(y, data)

@@ -3,8 +3,8 @@ package sub
 import (
 	"math/big"
 
-	cba "github.com/solpipe/cba"
 	sgo "github.com/SolmateDev/solana-go"
+	cba "github.com/solpipe/cba"
 )
 
 func GetBidSummary(list *cba.BidList) *BidSummary {
@@ -20,7 +20,7 @@ func GetBidSummary(list *cba.BidList) *BidSummary {
 
 type ValidatorGroup struct {
 	Id     sgo.PublicKey
-	Data   cba.ValidatorMember
+	Data   cba.ValidatorManager
 	IsOpen bool
 }
 
@@ -62,7 +62,13 @@ type BidSummary struct {
 
 type StakeGroup struct {
 	Id     sgo.PublicKey
-	Data   cba.StakerMember
+	Data   cba.StakerManager
+	IsOpen bool
+}
+
+type StakeReceiptGroup struct {
+	Id     sgo.PublicKey
+	Data   cba.StakerReceipt
 	IsOpen bool
 }
 
