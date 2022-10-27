@@ -3,12 +3,12 @@ package validator
 import (
 	"context"
 
+	log "github.com/sirupsen/logrus"
 	cba "github.com/solpipe/cba"
 	rpt "github.com/solpipe/solpipe-tool/state/receipt"
-	log "github.com/sirupsen/logrus"
 )
 
-func (e1 Validator) Update(data cba.ValidatorMember) {
+func (e1 Validator) Update(data cba.ValidatorManager) {
 	e1.internalC <- func(in *internal) {
 		in.on_data(data)
 	}
@@ -16,7 +16,7 @@ func (e1 Validator) Update(data cba.ValidatorMember) {
 
 // get alerted when the pipeline data has been changed
 // the payout is not changed until UpdatePayout is called
-func (in *internal) on_data(data cba.ValidatorMember) {
+func (in *internal) on_data(data cba.ValidatorManager) {
 	in.data = &data
 	//in.validatorHome.Broadcast(data)
 

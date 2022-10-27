@@ -3,20 +3,20 @@ package validator
 import (
 	"context"
 
+	sgo "github.com/SolmateDev/solana-go"
+	log "github.com/sirupsen/logrus"
 	cba "github.com/solpipe/cba"
 	sub2 "github.com/solpipe/solpipe-tool/ds/sub"
 	ntk "github.com/solpipe/solpipe-tool/state/network"
 	rpt "github.com/solpipe/solpipe-tool/state/receipt"
-	sgo "github.com/SolmateDev/solana-go"
-	log "github.com/sirupsen/logrus"
 )
 
 type internal struct {
 	ctx            context.Context
 	errorC         chan<- error
 	id             sgo.PublicKey
-	data           *cba.ValidatorMember
-	validatorHome  *sub2.SubHome[cba.ValidatorMember]
+	data           *cba.ValidatorManager
+	validatorHome  *sub2.SubHome[cba.ValidatorManager]
 	stakeRatioHome *sub2.SubHome[StakeStatus]
 	receiptHome    *sub2.SubHome[rpt.ReceiptWithData]
 	receipt        rpt.Receipt
@@ -33,8 +33,8 @@ func loopInternal(
 	cancel context.CancelFunc,
 	internalC <-chan func(*internal),
 	id sgo.PublicKey,
-	data *cba.ValidatorMember,
-	validatorHome *sub2.SubHome[cba.ValidatorMember],
+	data *cba.ValidatorManager,
+	validatorHome *sub2.SubHome[cba.ValidatorManager],
 	activatedStakeHome sub2.Subscription[ntk.VoteStake],
 	totalStatkeHome sub2.Subscription[ntk.VoteStake],
 	stakeRatioHome *sub2.SubHome[StakeStatus],

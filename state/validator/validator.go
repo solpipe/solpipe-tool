@@ -7,12 +7,12 @@ import (
 	"fmt"
 	"math/big"
 
+	sgo "github.com/SolmateDev/solana-go"
+	sgorpc "github.com/SolmateDev/solana-go/rpc"
 	cba "github.com/solpipe/cba"
 	dssub "github.com/solpipe/solpipe-tool/ds/sub"
 	"github.com/solpipe/solpipe-tool/state/network"
 	rpt "github.com/solpipe/solpipe-tool/state/receipt"
-	sgo "github.com/SolmateDev/solana-go"
-	sgorpc "github.com/SolmateDev/solana-go/rpc"
 )
 
 func ValidatorMemberId(controllerId sgo.PublicKey, vote sgo.PublicKey) (sgo.PublicKey, uint8, error) {
@@ -45,7 +45,7 @@ type Validator struct {
 	internalC chan<- func(*internal)
 	//rpc            *sgorpc.Client
 	//ws             *sgows.Client
-	updateC        chan<- dssub.ResponseChannel[cba.ValidatorMember]
+	updateC        chan<- dssub.ResponseChannel[cba.ValidatorManager]
 	stakeRatioC    chan<- dssub.ResponseChannel[StakeStatus]
 	updateReceiptC chan<- dssub.ResponseChannel[rpt.ReceiptWithData]
 }
@@ -90,7 +90,7 @@ func DeltaStake(oldStake StakeStatus, newStake StakeStatus) DeltaStakeStatus {
 func CreateValidator(
 	ctx context.Context,
 	id sgo.PublicKey,
-	data *cba.ValidatorMember,
+	data *cba.ValidatorManager,
 	rpcClient *sgorpc.Client,
 	//wsClient *sgows.Client,
 	activatedStakeHome dssub.Subscription[network.VoteStake],
@@ -98,7 +98,7 @@ func CreateValidator(
 ) (Validator, error) {
 	var err error
 	internalC := make(chan func(*internal), 10)
-	validatorHome := dssub.CreateSubHome[cba.ValidatorMember]()
+	validatorHome := dssub.CreateSubHome[cba.ValidatorManager]()
 	stakeRatioHome := dssub.CreateSubHome[StakeStatus]()
 	receiptHome := dssub.CreateSubHome[rpt.ReceiptWithData]()
 	if data == nil {
@@ -167,14 +167,14 @@ func (e1 Validator) StakeRatio() (voteStake uint64, totalStake uint64, err error
 	return
 }
 
-func (e1 Validator) Data() (cba.ValidatorMember, error) {
+func (e1 Validator) Data() (cba.ValidatorManager, error) {
 	err := e1.ctx.Err()
 	if err != nil {
-		return cba.ValidatorMember{}, err
+		return cba.ValidatorManager{}, err
 	}
 	doneC := e1.ctx.Done()
 	errorC := make(chan error, 1)
-	ansC := make(chan cba.ValidatorMember, 1)
+	ansC := make(chan cba.ValidatorManager, 1)
 	e1.internalC <- func(in *internal) {
 		if in.data == nil {
 			errorC <- errors.New("no data")
@@ -190,7 +190,7 @@ func (e1 Validator) Data() (cba.ValidatorMember, error) {
 	case err = <-errorC:
 	}
 	if err != nil {
-		return cba.ValidatorMember{}, err
+		return cba.ValidatorManager{}, err
 	} else {
 		return <-ansC, nil
 	}
@@ -201,11 +201,11 @@ func (e1 Validator) Print() (string, error) {
 	if err != nil {
 		return "", err
 	}
-	return fmt.Sprintf("Validator:\n\tAdmin=%s\n\tReceipt=%s\n\tVote=%s", data.Admin.String(), data.Receipt.String(), data.Vote.String()), nil
+	return fmt.Sprintf("Validator:\n\tAdmin=%s\n\tReceipt=%+v\n\tVote=%s", data.Admin.String(), data.Ring, data.Vote.String()), nil
 }
 
-func (e1 Validator) OnStats() dssub.Subscription[cba.ValidatorMember] {
-	return dssub.SubscriptionRequest(e1.updateC, func(data cba.ValidatorMember) bool {
+func (e1 Validator) OnStats() dssub.Subscription[cba.ValidatorManager] {
+	return dssub.SubscriptionRequest(e1.updateC, func(data cba.ValidatorManager) bool {
 		return true
 	})
 }
