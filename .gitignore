@@ -2,3 +2,4 @@ cba.out
 bin
 localconfig
 .env
+.DS_Store

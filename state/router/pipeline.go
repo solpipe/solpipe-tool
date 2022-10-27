@@ -1,12 +1,12 @@
 package router
 
 import (
+	log "github.com/sirupsen/logrus"
 	cba "github.com/solpipe/cba"
 	pyt "github.com/solpipe/solpipe-tool/state/payout"
 	pipe "github.com/solpipe/solpipe-tool/state/pipeline"
 	"github.com/solpipe/solpipe-tool/state/slot"
 	"github.com/solpipe/solpipe-tool/state/sub"
-	log "github.com/sirupsen/logrus"
 )
 
 type lookUpPipeline struct {
@@ -33,9 +33,9 @@ func (in *internal) on_pipeline(obj sub.PipelineGroup, slotHome slot.SlotHome) e
 
 	id := obj.Id
 	if !obj.IsOpen {
-		y, present := in.l_pipeline.byId[id.String()]
+		pipeline, present := in.l_pipeline.byId[id.String()]
 		if present {
-			y.Close()
+			pipeline.Close()
 			delete(in.l_pipeline.byId, id.String())
 		}
 		return nil
@@ -44,20 +44,20 @@ func (in *internal) on_pipeline(obj sub.PipelineGroup, slotHome slot.SlotHome) e
 
 	var err error
 
-	p, mainPresent := in.l_pipeline.byId[id.String()]
+	pipeline, mainPresent := in.l_pipeline.byId[id.String()]
 	if !mainPresent {
-		p, err = pipe.CreatePipeline(in.ctx, id, &data, in.rpc, slotHome)
+		pipeline, err = pipe.CreatePipeline(in.ctx, id, &data, in.rpc, slotHome)
 		if err != nil {
 			return err
 		}
-		in.l_pipeline.byId[id.String()] = p
+		in.l_pipeline.byId[id.String()] = pipeline
 	}
 
 	{
 		y, present := in.l_pipeline.bidListWithNoPipeline[id.String()]
 		if present {
 			log.Debugf("fill bid pipeline=%s", id.String())
-			p.UpdateBid(y)
+			pipeline.UpdateBid(y)
 			delete(in.l_pipeline.bidListWithNoPipeline, id.String())
 		}
 
@@ -66,7 +66,7 @@ func (in *internal) on_pipeline(obj sub.PipelineGroup, slotHome slot.SlotHome) e
 		y, present := in.l_pipeline.periodRingWithNoPipeline[id.String()]
 		if present {
 			log.Debugf("fill period pipeline=%s", id.String())
-			p.UpdatePeriod(y)
+			pipeline.UpdatePeriod(y)
 			delete(in.l_pipeline.periodRingWithNoPipeline, id.String())
 		}
 
@@ -76,7 +76,7 @@ func (in *internal) on_pipeline(obj sub.PipelineGroup, slotHome slot.SlotHome) e
 		if present {
 			for _, payout := range y {
 				log.Debugf("fill payout pipeline=%s payout=%s", id.String(), payout.Id.String())
-				p.UpdatePayout(payout)
+				pipeline.UpdatePayout(payout)
 				delete(y, payout.Id.String())
 			}
 		}
@@ -85,9 +85,9 @@ func (in *internal) on_pipeline(obj sub.PipelineGroup, slotHome slot.SlotHome) e
 
 	if !mainPresent {
 		// new pipeline, so send a broadcast out
-		in.oa.pipeline.Broadcast(p)
+		in.oa.pipeline.Broadcast(pipeline)
 
-		go loopDelete(in.ctx, p.OnClose(), in.reqClose.pipelineCloseC, p.Id, in.ws)
+		go loopDelete(in.ctx, pipeline.OnClose(), in.reqClose.pipelineCloseC, pipeline.Id, in.ws)
 		//in.oa.controllerCloseC
 	}
 

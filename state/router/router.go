@@ -4,6 +4,10 @@ import (
 	"context"
 	"errors"
 
+	sgo "github.com/SolmateDev/solana-go"
+	sgorpc "github.com/SolmateDev/solana-go/rpc"
+	sgows "github.com/SolmateDev/solana-go/rpc/ws"
+	log "github.com/sirupsen/logrus"
 	cba "github.com/solpipe/cba"
 	dssub "github.com/solpipe/solpipe-tool/ds/sub"
 	ctr "github.com/solpipe/solpipe-tool/state/controller"
@@ -15,10 +19,6 @@ import (
 	"github.com/solpipe/solpipe-tool/state/sub"
 	val "github.com/solpipe/solpipe-tool/state/validator"
 	vrs "github.com/solpipe/solpipe-tool/state/version"
-	sgo "github.com/SolmateDev/solana-go"
-	sgorpc "github.com/SolmateDev/solana-go/rpc"
-	sgows "github.com/SolmateDev/solana-go/rpc/ws"
-	log "github.com/sirupsen/logrus"
 )
 
 type Router struct {
@@ -43,14 +43,8 @@ func CreateRouter(
 	version vrs.CbaVersion,
 ) (Router, error) {
 	var err error
-	if all == nil {
-		all, err = sub.FetchProgramAll(ctx, rpcClient, version)
-		if err != nil {
-			return Router{}, err
-		}
-	}
-	controller := network.Controller
 
+	// TODO: add ctx,cancel call here
 	startErrorC := make(chan error, 1)
 	subErrorC := make(chan error, 1)
 
@@ -58,6 +52,14 @@ func CreateRouter(
 	if err != nil {
 		return Router{}, err
 	}
+
+	if all == nil {
+		all, err = sub.FetchProgramAll(ctx, rpcClient, version)
+		if err != nil {
+			return Router{}, err
+		}
+	}
+	controller := network.Controller
 
 	validatorG := dssub.SubscriptionRequest(subAll.ValidatorC, func(data sub.ValidatorGroup) bool {
 		return true

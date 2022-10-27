@@ -3,22 +3,22 @@ package slot
 import (
 	"context"
 
-	sub2 "github.com/solpipe/solpipe-tool/ds/sub"
 	sgows "github.com/SolmateDev/solana-go/rpc/ws"
 	"github.com/google/uuid"
 	log "github.com/sirupsen/logrus"
+	dssub "github.com/solpipe/solpipe-tool/ds/sub"
 )
 
 type SlotHome struct {
 	id   uuid.UUID
-	reqC chan<- sub2.ResponseChannel[uint64]
+	reqC chan<- dssub.ResponseChannel[uint64]
 	ctx  context.Context
 }
 
 func SubscribeSlot(ctxOutside context.Context, wsClient *sgows.Client) (SlotHome, error) {
 	ctx, cancel := context.WithCancel(ctxOutside)
 	initC := make(chan error, 1)
-	home := sub2.CreateSubHome[uint64]()
+	home := dssub.CreateSubHome[uint64]()
 	reqC := home.ReqC
 	var err error
 	id, err := uuid.NewRandom()
@@ -38,8 +38,8 @@ func SubscribeSlot(ctxOutside context.Context, wsClient *sgows.Client) (SlotHome
 	}, nil
 }
 
-func (sh SlotHome) OnSlot() sub2.Subscription[uint64] {
-	return sub2.SubscriptionRequest(sh.reqC, func(x uint64) bool { return true })
+func (sh SlotHome) OnSlot() dssub.Subscription[uint64] {
+	return dssub.SubscriptionRequest(sh.reqC, func(x uint64) bool { return true })
 }
 
 func (sh SlotHome) CloseSignal() <-chan struct{} {
@@ -50,7 +50,7 @@ func (sh SlotHome) CloseSignal() <-chan struct{} {
 func loopSlot(
 	ctx context.Context,
 	initErrorC chan<- error,
-	home *sub2.SubHome[uint64],
+	home *dssub.SubHome[uint64],
 	wsClient *sgows.Client,
 	cancel context.CancelFunc,
 	id uuid.UUID,

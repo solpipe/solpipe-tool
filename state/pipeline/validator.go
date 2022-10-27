@@ -19,6 +19,7 @@ func (e1 Pipeline) OnValidator() dssub.Subscription[ValidatorUpdate] {
 	})
 }
 
+// Use the activated stake (from staking accounts, not from solpipe account) to calculate real time TPS.
 func (e1 Pipeline) OnRelativeStake() dssub.Subscription[sub.StakeUpdate] {
 	return dssub.SubscriptionRequest(e1.updateStakeStatusC, func(x sub.StakeUpdate) bool {
 		return true

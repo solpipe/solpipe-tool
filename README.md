@@ -1,4 +1,4 @@
-# go-staker
+# solpipe-tool
 
 This go module allows staked-valditors to sell bandwidth and developers to buy bandwidth via the onchain Solpipe program.  The Solpipe Solana program is a continuous bandwidth auctioning mechanism.
 

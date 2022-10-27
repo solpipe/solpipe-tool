@@ -6,13 +6,13 @@ import (
 	"testing"
 	"time"
 
-	bdr "github.com/solpipe/solpipe-tool/agent/bidder"
-	sle "github.com/solpipe/solpipe-tool/test/single"
 	sgo "github.com/SolmateDev/solana-go"
 	sgotkn "github.com/SolmateDev/solana-go/programs/token"
 	sgorpc "github.com/SolmateDev/solana-go/rpc"
 	"github.com/joho/godotenv"
 	log "github.com/sirupsen/logrus"
+	bdr "github.com/solpipe/solpipe-tool/agent/bidder"
+	sle "github.com/solpipe/solpipe-tool/test/single"
 )
 
 func TestBidder(t *testing.T) {
@@ -29,6 +29,8 @@ func TestBidder(t *testing.T) {
 		cancel()
 	})
 	{
+		// cancel the test early by running
+		// echo "" | nc 127.0.0.1 3002
 		cancelCopy := cancel
 		go func() {
 			l, err2 := net.Listen("tcp", ":3002")
@@ -57,7 +59,7 @@ func TestBidder(t *testing.T) {
 		relayConfig.Admin.PublicKey(),
 		sgorpc.CommitmentFinalized,
 	)
-	if balance.Value == 0 {
+	if err != nil || balance.Value == 0 {
 		ctxT, cancelT := context.WithTimeout(ctx, 1*time.Minute)
 		defer cancelT()
 		script, err := sbox.Script(ctxT)
