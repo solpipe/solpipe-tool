@@ -3,13 +3,13 @@ package pipeline
 import (
 	"context"
 
+	sgo "github.com/SolmateDev/solana-go"
+	log "github.com/sirupsen/logrus"
 	cba "github.com/solpipe/cba"
 	ll "github.com/solpipe/solpipe-tool/ds/list"
 	sub2 "github.com/solpipe/solpipe-tool/ds/sub"
 	pyt "github.com/solpipe/solpipe-tool/state/payout"
 	val "github.com/solpipe/solpipe-tool/state/validator"
-	sgo "github.com/SolmateDev/solana-go"
-	log "github.com/sirupsen/logrus"
 )
 
 type validatorStakeSub struct {
@@ -99,7 +99,7 @@ out:
 	}
 }
 
-func (in *internal) on_validator(d cba.ValidatorMember, presentC chan<- bool) {
+func (in *internal) on_validator(d cba.ValidatorManager, presentC chan<- bool) {
 	x, present := in.validatorStakeSub[d.Vote.String()]
 	presentC <- present
 	if present {

@@ -4,14 +4,14 @@ import (
 	"context"
 	"errors"
 
+	sgorpc "github.com/SolmateDev/solana-go/rpc"
+	sgows "github.com/SolmateDev/solana-go/rpc/ws"
+	log "github.com/sirupsen/logrus"
 	cba "github.com/solpipe/cba"
 	sub2 "github.com/solpipe/solpipe-tool/ds/sub"
 	ctr "github.com/solpipe/solpipe-tool/state/controller"
 	ntk "github.com/solpipe/solpipe-tool/state/network"
 	"github.com/solpipe/solpipe-tool/state/sub"
-	sgorpc "github.com/SolmateDev/solana-go/rpc"
-	sgows "github.com/SolmateDev/solana-go/rpc/ws"
-	log "github.com/sirupsen/logrus"
 )
 
 type internal struct {
@@ -51,7 +51,8 @@ func loopInternal(
 	pipelineG sub2.Subscription[sub.PipelineGroup],
 	bidListG sub2.Subscription[cba.BidList],
 	periodRingG sub2.Subscription[cba.PeriodRing],
-	stakeG sub2.Subscription[sub.StakeGroup],
+	stakerManagerG sub2.Subscription[sub.StakeGroup],
+	stakerReceiptG sub2.Subscription[sub.StakerReceiptGroup],
 	receiptG sub2.Subscription[sub.ReceiptGroup],
 	payoutG sub2.Subscription[sub.PayoutWithData],
 	subAll *sub.SubscriptionProgramGroup,
@@ -127,11 +128,16 @@ out:
 		case d := <-receiptG.StreamC:
 			log.Debug("received receipt update____")
 			in.on_receipt(d)
-		case err = <-stakeG.ErrorC:
+		case err = <-stakerManagerG.ErrorC:
 			break out
-		case d := <-stakeG.StreamC:
-			log.Debug("received payout update____")
+		case d := <-stakerManagerG.StreamC:
+			log.Debug("received staker manager update____")
 			in.on_stake(d)
+		case err = <-stakerReceiptG.ErrorC:
+			break out
+		case d := <-stakerReceiptG.StreamC:
+			log.Debug("received staker receipt update____")
+			in.on_stake_receipt(d)
 		case id := <-oa.controllerCloseC:
 			if id.Equals(in.controller.Id()) {
 				err = errors.New("controller has closed")

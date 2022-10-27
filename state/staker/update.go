@@ -5,5 +5,17 @@ import (
 )
 
 func (e1 Staker) Update(d sub.StakeGroup) {
-	e1.dataC <- d
+
+	select {
+	case <-e1.ctx.Done():
+	case e1.dataStakerManagerC <- d:
+	}
+}
+
+func (e1 Staker) UpdateReceipt(d sub.StakerReceiptGroup) {
+	select {
+	case <-e1.ctx.Done():
+	case e1.dataStakerReceiptC <- d:
+	}
+
 }

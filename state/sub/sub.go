@@ -24,8 +24,8 @@ type SubscriptionProgramGroup struct {
 	BidListC       chan<- dssub.ResponseChannel[cba.BidList]
 	BidSummaryC    chan<- dssub.ResponseChannel[BidSummary]
 	PeriodRingC    chan<- dssub.ResponseChannel[cba.PeriodRing]
-	StakeC         chan<- dssub.ResponseChannel[StakeGroup]
-	StakerReceiptC chan<- dssub.ResponseChannel[cba.StakerReceipt]
+	StakerManagerC chan<- dssub.ResponseChannel[StakeGroup]
+	StakerReceiptC chan<- dssub.ResponseChannel[StakerReceiptGroup]
 	ReceiptC       chan<- dssub.ResponseChannel[ReceiptGroup]
 	PayoutC        chan<- dssub.ResponseChannel[PayoutWithData]
 }
@@ -37,8 +37,8 @@ type internalSubscriptionProgramGroup struct {
 	bidList      *dssub.SubHome[cba.BidList]
 	bidSummary   *dssub.SubHome[BidSummary]
 	periodRing   *dssub.SubHome[cba.PeriodRing]
-	stake        *dssub.SubHome[StakeGroup]
-	stakeReceipt *dssub.SubHome[StakeReceiptGroup]
+	stakeManager *dssub.SubHome[StakeGroup]
+	stakeReceipt *dssub.SubHome[StakerReceiptGroup]
 	receipt      *dssub.SubHome[ReceiptGroup]
 	payout       *dssub.SubHome[PayoutWithData]
 }
@@ -50,7 +50,7 @@ type ProgramAllResult struct {
 	PeriodRing   map[string]*PeriodGroup
 	BidList      map[string]*BidGroup
 	Stake        *ll.Generic[*StakeGroup]
-	StakeReceipt *ll.Generic[*StakeReceiptGroup] // new from refactored code
+	StakeReceipt *ll.Generic[*StakerReceiptGroup] // new from refactored code
 	Receipt      *ll.Generic[*ReceiptGroup]
 	Payout       *ll.Generic[*PayoutWithData]
 }
@@ -156,6 +156,16 @@ func FetchProgramAll(ctx context.Context, rpcClient *sgorpc.Client, version vrs.
 							IsOpen: true,
 						})
 					}
+				case cba.StakerManagerDiscriminator:
+					x := new(cba.StakerReceipt)
+					err = c.Decode(x)
+					if err == nil {
+						ans.StakeReceipt.Append(&StakerReceiptGroup{
+							Id:     r[i].Pubkey,
+							Data:   *x,
+							IsOpen: true,
+						})
+					}
 				case cba.ReceiptDiscriminator:
 					x := new(cba.Receipt)
 					err = c.Decode(x)
@@ -228,8 +238,8 @@ func SubscribeProgramAll(
 	ans.BidSummaryC = in.bidSummary.ReqC
 	in.periodRing = dssub.CreateSubHome[cba.PeriodRing]()
 	ans.PeriodRingC = in.periodRing.ReqC
-	in.stake = dssub.CreateSubHome[StakeGroup]()
-	ans.StakeC = in.stake.ReqC
+	in.stakeManager = dssub.CreateSubHome[StakeGroup]()
+	ans.StakerManagerC = in.stakeManager.ReqC
 	in.receipt = dssub.CreateSubHome[ReceiptGroup]()
 	ans.ReceiptC = in.receipt.ReqC
 	in.payout = dssub.CreateSubHome[PayoutWithData]()
@@ -309,10 +319,10 @@ out:
 			in.bidSummary.Delete(id)
 		case r := <-in.bidSummary.ReqC:
 			in.bidSummary.Receive(r)
-		case id := <-in.stake.DeleteC: // stake
-			in.stake.Delete(id)
-		case r := <-in.stake.ReqC:
-			in.stake.Receive(r)
+		case id := <-in.stakeManager.DeleteC: // stake
+			in.stakeManager.Delete(id)
+		case r := <-in.stakeManager.ReqC:
+			in.stakeManager.Receive(r)
 		case id := <-in.receipt.DeleteC: // receipt
 			in.receipt.Delete(id)
 		case r := <-in.receipt.ReqC:
@@ -392,7 +402,7 @@ out:
 					if err != nil {
 						break out
 					}
-					in.stake.Broadcast(StakeGroup{
+					in.stakeManager.Broadcast(StakeGroup{
 						Id:     x.Value.Pubkey,
 						Data:   *y,
 						IsOpen: true,
@@ -405,7 +415,7 @@ out:
 					if err != nil {
 						break out
 					}
-					in.stakeReceipt.Broadcast(StakeReceiptGroup{
+					in.stakeReceipt.Broadcast(StakerReceiptGroup{
 						Id:     x.Value.Pubkey,
 						Data:   *y,
 						IsOpen: true,
@@ -464,7 +474,7 @@ out:
 					case TYPE_PERIODS:
 						// periods are taken care of by the Pipeline account
 					case TYPE_STAKER:
-						in.stake.Broadcast(StakeGroup{
+						in.stakeManager.Broadcast(StakeGroup{
 							Id:     id,
 							IsOpen: false,
 						})

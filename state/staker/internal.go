@@ -10,11 +10,13 @@ import (
 )
 
 type internal struct {
-	ctx        context.Context
-	errorC     chan<- error
-	data       *sub.StakeGroup
-	stakerHome *dssub.SubHome[cba.StakerManager]
-	cancel     context.CancelFunc
+	ctx                  context.Context
+	errorC               chan<- error
+	dataManager          *sub.StakeGroup
+	dataReceiptByReceipt map[string]*sub.StakerReceiptGroup // map receipt id->stakerreceipt
+	dataReceiptById      map[string]*sub.StakerReceiptGroup // map stakerreceipt id->stakerreceipt
+	stakerHome           *dssub.SubHome[cba.StakerManager]
+	cancel               context.CancelFunc
 }
 
 func loopInternal(
@@ -22,8 +24,10 @@ func loopInternal(
 	cancel context.CancelFunc,
 	internalC <-chan func(*internal),
 	data sub.StakeGroup,
-	dataC <-chan sub.StakeGroup,
-	stakerHome *dssub.SubHome[cba.StakerManager],
+	dataStakerManagerC <-chan sub.StakeGroup,
+	dataStakerReceiptC <-chan sub.StakerReceiptGroup,
+	stakerManagerHome *dssub.SubHome[cba.StakerManager],
+	stakerReceiptHome *dssub.SubHome[sub.StakerReceiptGroup],
 ) {
 	var err error
 	doneC := ctx.Done()
@@ -32,10 +36,13 @@ func loopInternal(
 	in.ctx = ctx
 	in.cancel = cancel
 	in.errorC = errorC
-	in.data = &data
-	in.stakerHome = stakerHome
+	in.dataManager = &data
+	in.dataReceiptByReceipt = make(map[string]*sub.StakerReceiptGroup)
+	in.dataReceiptById = make(map[string]*sub.StakerReceiptGroup)
+	in.stakerHome = stakerManagerHome
 
-	defer stakerHome.Close()
+	defer stakerManagerHome.Close()
+	defer stakerReceiptHome.Close()
 
 out:
 	for {
@@ -46,18 +53,35 @@ out:
 			break out
 		case req := <-internalC:
 			req(in)
-		case d := <-dataC:
+		case d := <-dataStakerManagerC:
 			if d.IsOpen {
-				stakerHome.Broadcast(d.Data)
-				in.data = &d
+				stakerManagerHome.Broadcast(d.Data)
+				in.dataManager = &d
 			} else {
 				log.Debugf("exiting staker; stake member account closed")
 				break out
 			}
-		case id := <-stakerHome.DeleteC:
-			stakerHome.Delete(id)
-		case d := <-stakerHome.ReqC:
-			stakerHome.Receive(d)
+		case d := <-dataStakerReceiptC:
+			stakerReceiptHome.Broadcast(d)
+			ref := &d
+			if d.IsOpen {
+				in.dataReceiptByReceipt[d.Data.Receipt.String()] = ref
+				in.dataReceiptById[d.Id.String()] = ref
+			} else {
+				y, present := in.dataReceiptById[d.Id.String()]
+				if present {
+					delete(in.dataReceiptById, d.Id.String())
+					delete(in.dataReceiptByReceipt, y.Data.Receipt.String())
+				}
+			}
+		case id := <-stakerManagerHome.DeleteC:
+			stakerManagerHome.Delete(id)
+		case d := <-stakerManagerHome.ReqC:
+			stakerManagerHome.Receive(d)
+		case id := <-stakerReceiptHome.DeleteC:
+			stakerReceiptHome.Delete(id)
+		case d := <-stakerReceiptHome.ReqC:
+			stakerReceiptHome.Receive(d)
 		}
 	}
 

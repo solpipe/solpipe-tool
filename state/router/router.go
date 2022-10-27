@@ -69,7 +69,8 @@ func CreateRouter(
 	})
 	bidListG := dssub.SubscriptionRequest(subAll.BidListC, func(bl cba.BidList) bool { return true })
 	periodRingG := dssub.SubscriptionRequest(subAll.PeriodRingC, func(pr cba.PeriodRing) bool { return true })
-	stakeG := dssub.SubscriptionRequest(subAll.StakeC, func(pr sub.StakeGroup) bool { return true })
+	stakerManagerG := dssub.SubscriptionRequest(subAll.StakerManagerC, func(pr sub.StakeGroup) bool { return true })
+	stakerReceiptG := dssub.SubscriptionRequest(subAll.StakerReceiptC, func(pr sub.StakerReceiptGroup) bool { return true })
 	receiptG := dssub.SubscriptionRequest(subAll.ReceiptC, func(pr sub.ReceiptGroup) bool { return true })
 	payoutG := dssub.SubscriptionRequest(subAll.PayoutC, func(pr sub.PayoutWithData) bool { return true })
 
@@ -91,7 +92,8 @@ func CreateRouter(
 		pipelineG,
 		bidListG,
 		periodRingG,
-		stakeG,
+		stakerManagerG,
+		stakerReceiptG,
 		receiptG,
 		payoutG,
 		subAll,
@@ -295,7 +297,7 @@ func (e1 Router) OnBidSummary() dssub.Subscription[sub.BidSummary] {
 }
 
 func (e1 Router) OnStaker() dssub.Subscription[sub.StakeGroup] {
-	return dssub.SubscriptionRequest(e1.allGroup.StakeC, func(d sub.StakeGroup) bool {
+	return dssub.SubscriptionRequest(e1.allGroup.StakerManagerC, func(d sub.StakeGroup) bool {
 		return true
 	})
 }

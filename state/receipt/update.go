@@ -3,10 +3,10 @@ package receipt
 import (
 	"context"
 
+	sgo "github.com/SolmateDev/solana-go"
 	cba "github.com/solpipe/cba"
 	skr "github.com/solpipe/solpipe-tool/state/staker"
 	"github.com/solpipe/solpipe-tool/state/sub"
-	sgo "github.com/SolmateDev/solana-go"
 )
 
 func (e1 Receipt) Update(data cba.Receipt) {
@@ -25,7 +25,6 @@ func (e1 Receipt) UpdateStaker(s skr.Staker) {
 	e1.internalC <- func(in *internal) {
 		in.on_staker(s)
 	}
-	return
 }
 
 func (in *internal) on_staker(s skr.Staker) {
@@ -39,7 +38,7 @@ func (in *internal) on_staker(s skr.Staker) {
 	si := new(stakerInternal)
 	si.ctx = in.ctx
 	si.errorC = in.errorC
-	si.updateC = in.updateStakerC
+	si.updateC = in.updateStakerManagerC
 	go si.loop(s)
 }
 

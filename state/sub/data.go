@@ -66,7 +66,7 @@ type StakeGroup struct {
 	IsOpen bool
 }
 
-type StakeReceiptGroup struct {
+type StakerReceiptGroup struct {
 	Id     sgo.PublicKey
 	Data   cba.StakerReceipt
 	IsOpen bool

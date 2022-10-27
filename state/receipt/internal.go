@@ -3,23 +3,24 @@ package receipt
 import (
 	"context"
 
+	sgo "github.com/SolmateDev/solana-go"
+	log "github.com/sirupsen/logrus"
 	cba "github.com/solpipe/cba"
 	sub2 "github.com/solpipe/solpipe-tool/ds/sub"
 	skr "github.com/solpipe/solpipe-tool/state/staker"
 	"github.com/solpipe/solpipe-tool/state/sub"
-	sgo "github.com/SolmateDev/solana-go"
-	log "github.com/sirupsen/logrus"
 )
 
 type internal struct {
-	ctx           context.Context
-	cancel        context.CancelFunc
-	data          *cba.Receipt
-	errorC        chan<- error
-	stakers       map[string]skr.Staker
-	receiptHome   *sub2.SubHome[cba.Receipt]
-	updateStakerC chan<- sub.StakeGroup
-	deleteStakerC chan<- sgo.PublicKey
+	ctx                  context.Context
+	cancel               context.CancelFunc
+	data                 *cba.Receipt
+	errorC               chan<- error
+	stakers              map[string]skr.Staker
+	receiptHome          *sub2.SubHome[cba.Receipt]
+	updateStakerManagerC chan<- sub.StakeGroup
+	updateStakerReceiptC chan<- sub.StakerReceiptGroup
+	deleteStakerC        chan<- sgo.PublicKey
 }
 
 func loopInternal(
@@ -33,7 +34,8 @@ func loopInternal(
 	var err error
 	doneC := ctx.Done()
 	errorC := make(chan error, 1)
-	updateStakerC := make(chan sub.StakeGroup, 1)
+	updateStakerManagerC := make(chan sub.StakeGroup, 1)
+	updateStakerReceiptC := make(chan sub.StakerReceiptGroup, 1)
 	deleteStakerC := make(chan sgo.PublicKey, 1)
 
 	in := new(internal)
@@ -43,7 +45,8 @@ func loopInternal(
 	in.errorC = errorC
 	in.stakers = make(map[string]skr.Staker)
 	in.receiptHome = receiptHome
-	in.updateStakerC = updateStakerC
+	in.updateStakerManagerC = updateStakerManagerC
+	in.updateStakerReceiptC = updateStakerReceiptC
 	in.deleteStakerC = deleteStakerC
 
 	defer receiptHome.Close()
@@ -65,8 +68,10 @@ out:
 			receiptHome.Receive(d)
 		case id := <-deleteStakerC:
 			delete(in.stakers, id.String())
-		case d := <-updateStakerC:
-			log.Debugf("update stake id=%s; new stake=%d", d.Id.String(), d.Data.DelegatedStake)
+		case d := <-updateStakerManagerC:
+			log.Debugf("update stake admin =%s", d.Id.String(), d.Data.Admin)
+		case d := <-updateStakerReceiptC:
+			log.Debugf("update stake manager=%s; stake=%d", d.Data.Manager.String(), d.Data.DelegatedStake)
 		}
 	}
 
