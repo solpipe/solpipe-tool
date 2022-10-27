@@ -3,17 +3,17 @@ package staker
 import (
 	"context"
 
+	log "github.com/sirupsen/logrus"
 	cba "github.com/solpipe/cba"
 	dssub "github.com/solpipe/solpipe-tool/ds/sub"
 	"github.com/solpipe/solpipe-tool/state/sub"
-	log "github.com/sirupsen/logrus"
 )
 
 type internal struct {
 	ctx        context.Context
 	errorC     chan<- error
 	data       *sub.StakeGroup
-	stakerHome *dssub.SubHome[cba.StakerMember]
+	stakerHome *dssub.SubHome[cba.StakerManager]
 	cancel     context.CancelFunc
 }
 
@@ -23,7 +23,7 @@ func loopInternal(
 	internalC <-chan func(*internal),
 	data sub.StakeGroup,
 	dataC <-chan sub.StakeGroup,
-	stakerHome *dssub.SubHome[cba.StakerMember],
+	stakerHome *dssub.SubHome[cba.StakerManager],
 ) {
 	var err error
 	doneC := ctx.Done()

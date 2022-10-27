@@ -4,10 +4,10 @@ import (
 	"context"
 	"errors"
 
+	sgo "github.com/SolmateDev/solana-go"
 	cba "github.com/solpipe/cba"
 	dssub "github.com/solpipe/solpipe-tool/ds/sub"
 	"github.com/solpipe/solpipe-tool/state/sub"
-	sgo "github.com/SolmateDev/solana-go"
 )
 
 type Staker struct {
@@ -16,7 +16,7 @@ type Staker struct {
 	internalC    chan<- func(*internal)
 	dataC        chan<- sub.StakeGroup
 	Id           sgo.PublicKey // use stake member account id
-	updateStakeC chan<- dssub.ResponseChannel[cba.StakerMember]
+	updateStakeC chan<- dssub.ResponseChannel[cba.StakerManager]
 }
 
 func CreateStake(ctx context.Context, d sub.StakeGroup) (e1 Staker, err error) {
@@ -26,7 +26,7 @@ func CreateStake(ctx context.Context, d sub.StakeGroup) (e1 Staker, err error) {
 	//	err = errors.New("no data")
 	//	return
 	//}
-	stakerHome := dssub.CreateSubHome[cba.StakerMember]()
+	stakerHome := dssub.CreateSubHome[cba.StakerManager]()
 	updateStakeC := stakerHome.ReqC
 	ctxWithC, cancel := context.WithCancel(ctx)
 	go loopInternal(ctxWithC, cancel, internalC, d, dataC, stakerHome)
@@ -51,14 +51,14 @@ func (e1 Staker) OnClose() <-chan struct{} {
 	return e1.ctx.Done()
 }
 
-func (e1 Staker) Data() (ans cba.StakerMember, err error) {
+func (e1 Staker) Data() (ans cba.StakerManager, err error) {
 	err = e1.ctx.Err()
 	if err != nil {
 		return
 	}
 	doneC := e1.ctx.Done()
 	errorC := make(chan error, 1)
-	ansC := make(chan cba.StakerMember, 1)
+	ansC := make(chan cba.StakerManager, 1)
 	e1.internalC <- func(in *internal) {
 		if in.data == nil {
 			errorC <- errors.New("no receipt")
@@ -79,8 +79,8 @@ func (e1 Staker) Data() (ans cba.StakerMember, err error) {
 
 }
 
-func (e1 Staker) OnData() dssub.Subscription[cba.StakerMember] {
-	return dssub.SubscriptionRequest(e1.updateStakeC, func(data cba.StakerMember) bool {
+func (e1 Staker) OnData() dssub.Subscription[cba.StakerManager] {
+	return dssub.SubscriptionRequest(e1.updateStakeC, func(data cba.StakerManager) bool {
 		return true
 	})
 }
