@@ -5,6 +5,9 @@ import (
 	"errors"
 	"time"
 
+	sgo "github.com/SolmateDev/solana-go"
+	"github.com/cretz/bine/tor"
+	log "github.com/sirupsen/logrus"
 	cba "github.com/solpipe/cba"
 	pxyclt "github.com/solpipe/solpipe-tool/proxy/client"
 	"github.com/solpipe/solpipe-tool/script"
@@ -12,15 +15,12 @@ import (
 	pipe "github.com/solpipe/solpipe-tool/state/pipeline"
 	"github.com/solpipe/solpipe-tool/state/slot"
 	val "github.com/solpipe/solpipe-tool/state/validator"
-	sgo "github.com/SolmateDev/solana-go"
-	"github.com/cretz/bine/tor"
-	log "github.com/sirupsen/logrus"
 	"google.golang.org/grpc"
 )
 
 type validatorInsertInfo struct {
 	vu      pipe.ValidatorUpdate
-	data    cba.ValidatorMember
+	data    cba.ValidatorManager
 	periodC chan<- [2]uint64
 }
 
@@ -126,13 +126,19 @@ func (in *internal) update_validators(u validatorInsertInfo) {
 type validatorFeed struct {
 	ctx       context.Context
 	cancel    context.CancelFunc
-	data      cba.ValidatorMember
+	data      cba.ValidatorManager
 	id        sgo.PublicKey
 	connected bool
 	periodC   chan<- [2]uint64 // used to update period from loopInternal
 }
 
-func (in *internal) createValidatorFeed(vu pipe.ValidatorUpdate, data cba.ValidatorMember, periodC chan<- [2]uint64, tpsC chan<- float64, txC <-chan submitInfo) (*validatorFeed, error) {
+func (in *internal) createValidatorFeed(
+	vu pipe.ValidatorUpdate,
+	data cba.ValidatorManager,
+	periodC chan<- [2]uint64,
+	tpsC chan<- float64,
+	txC <-chan submitInfo,
+) (*validatorFeed, error) {
 
 	ctx, cancel := context.WithCancel(in.ctx)
 	scriptBuilder, err := in.config.ScriptBuilder(ctx)
@@ -188,7 +194,7 @@ func loopValidatorInternal(
 	validator val.Validator,
 	admin sgo.PrivateKey,
 	scriptBuilder *script.Script,
-	data cba.ValidatorMember,
+	data cba.ValidatorManager,
 	start uint64,
 	finish uint64,
 ) {

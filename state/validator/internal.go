@@ -20,8 +20,8 @@ type internal struct {
 	receiptHome    *sub2.SubHome[rpt.ReceiptWithData]
 	totalStake     uint64
 	activatedStake uint64
-	receipts       map[string]*receiptHolder // map payouts->
-	deletePayoutC  chan<- sgo.PublicKey
+	receipts       map[string]*receiptHolder // map payout id->receipt
+	//deletePayoutC  chan<- sgo.PublicKey
 	updateReceiptC chan<- cba.Receipt   // id=payout
 	deleteReceiptC chan<- sgo.PublicKey // id=payout
 }
