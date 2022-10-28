@@ -13,6 +13,7 @@ import (
 type Staker struct {
 	ctx                 context.Context
 	cancel              context.CancelFunc
+	Stake               sgo.PublicKey
 	internalC           chan<- func(*internal)
 	dataStakerManagerC  chan<- sub.StakeGroup
 	dataStakerReceiptC  chan<- sub.StakerReceiptGroup
@@ -49,6 +50,7 @@ func CreateStake(ctx context.Context, d sub.StakeGroup) (e1 Staker, err error) {
 		ctx:                 ctxWithC,
 		cancel:              cancel,
 		internalC:           internalC,
+		Stake:               d.Data.Stake,
 		dataStakerManagerC:  dataStakerManagerC,
 		dataStakerReceiptC:  dataStakerReceiptC,
 		Id:                  d.Id,
@@ -125,5 +127,11 @@ func (e1 Staker) Data() (ans StakerData, err error) {
 func (e1 Staker) OnData() dssub.Subscription[cba.StakerManager] {
 	return dssub.SubscriptionRequest(e1.updateStakeManagerC, func(data cba.StakerManager) bool {
 		return true
+	})
+}
+
+func (e1 Staker) OnReceipt(receipt sgo.PublicKey) dssub.Subscription[sub.StakerReceiptGroup] {
+	return dssub.SubscriptionRequest(e1.updateStakeReceiptC, func(obj sub.StakerReceiptGroup) bool {
+		return receipt.Equals(obj.Data.Receipt)
 	})
 }

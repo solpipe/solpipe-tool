@@ -3,22 +3,21 @@ package router
 import (
 	"errors"
 
+	sgo "github.com/SolmateDev/solana-go"
 	cba "github.com/solpipe/cba"
 	rpt "github.com/solpipe/solpipe-tool/state/receipt"
-	skr "github.com/solpipe/solpipe-tool/state/staker"
 	"github.com/solpipe/solpipe-tool/state/sub"
-	sgo "github.com/SolmateDev/solana-go"
 )
 
 type lookUpReceipt struct {
 	byId                map[string]rpt.Receipt
-	stakerWithNoReceipt map[string]map[string]skr.Staker // receipt id->staker id->staker
+	stakerWithNoReceipt map[string]map[string]stakerManagerExtra // receipt id->staker id->staker
 }
 
 func createLookupReceipt() *lookUpReceipt {
 	return &lookUpReceipt{
 		byId:                make(map[string]rpt.Receipt),
-		stakerWithNoReceipt: make(map[string]map[string]skr.Staker),
+		stakerWithNoReceipt: make(map[string]map[string]stakerManagerExtra),
 	}
 }
 
@@ -71,7 +70,7 @@ func (in *internal) on_receipt(obj sub.ReceiptGroup) error {
 	x, present := in.l_receipt.stakerWithNoReceipt[r.Id.String()]
 	if present {
 		for _, s := range x {
-			r.UpdateStaker(s)
+			r.UpdateStaker(s.obj, s.mgr)
 		}
 		delete(in.l_receipt.stakerWithNoReceipt, r.Id.String())
 	}

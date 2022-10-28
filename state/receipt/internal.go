@@ -7,7 +7,6 @@ import (
 	log "github.com/sirupsen/logrus"
 	cba "github.com/solpipe/cba"
 	sub2 "github.com/solpipe/solpipe-tool/ds/sub"
-	skr "github.com/solpipe/solpipe-tool/state/staker"
 	"github.com/solpipe/solpipe-tool/state/sub"
 )
 
@@ -16,7 +15,8 @@ type internal struct {
 	cancel               context.CancelFunc
 	data                 *cba.Receipt
 	errorC               chan<- error
-	stakers              map[string]skr.Staker
+	stakers              map[string]stakerInfo
+	registeredStake      uint64
 	receiptHome          *sub2.SubHome[cba.Receipt]
 	updateStakerManagerC chan<- sub.StakeGroup
 	updateStakerReceiptC chan<- sub.StakerReceiptGroup
@@ -43,7 +43,8 @@ func loopInternal(
 	in.cancel = cancel
 	in.data = data
 	in.errorC = errorC
-	in.stakers = make(map[string]skr.Staker)
+	in.registeredStake = 0
+	in.stakers = make(map[string]stakerInfo)
 	in.receiptHome = receiptHome
 	in.updateStakerManagerC = updateStakerManagerC
 	in.updateStakerReceiptC = updateStakerReceiptC
@@ -81,8 +82,5 @@ out:
 func (in *internal) finish(err error) {
 	log.Debug(err)
 	in.cancel()
-	// receipt is finished, so close all stakers
-	for _, s := range in.stakers {
-		s.Close()
-	}
+
 }

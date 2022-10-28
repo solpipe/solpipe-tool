@@ -4,6 +4,8 @@ import (
 	"errors"
 
 	sgo "github.com/SolmateDev/solana-go"
+	log "github.com/sirupsen/logrus"
+	cba "github.com/solpipe/cba"
 	skr "github.com/solpipe/solpipe-tool/state/staker"
 	"github.com/solpipe/solpipe-tool/state/sub"
 )
@@ -61,9 +63,11 @@ func (in *internal) on_stake(obj sub.StakeGroup) error {
 		if present {
 			for _, sr := range x {
 				ref.s.UpdateReceipt(sr)
+				in.on_stake_receipt_extra(sr, ref)
 			}
 			delete(in.l_staker.stakeReceiptWithNoStake, id.String())
 		}
+
 	}
 
 	// look up receipt
@@ -81,6 +85,7 @@ func (in *internal) on_stake_receipt(obj sub.StakerReceiptGroup) error {
 	ref, present := in.l_staker.byId[obj.Data.Manager.String()]
 	if present {
 		ref.s.UpdateReceipt(obj)
+		in.on_stake_receipt_extra(obj, ref)
 	} else {
 		x, present := in.l_staker.stakeReceiptWithNoStake[obj.Data.Manager.String()]
 		if !present {
@@ -90,18 +95,35 @@ func (in *internal) on_stake_receipt(obj sub.StakerReceiptGroup) error {
 		x[obj.Data.Receipt.String()] = obj
 	}
 
+	return nil
+}
+
+type stakerManagerExtra struct {
+	mgr cba.StakerManager
+	obj sub.StakerReceiptGroup
+}
+
+// tell the receipt that there is stake for the validator
+func (in *internal) on_stake_receipt_extra(obj sub.StakerReceiptGroup, ref *refStaker) {
+	data, err := ref.s.Data()
+	if err != nil {
+		log.Error(err)
+		return
+	}
 	r, present := in.l_receipt.byId[obj.Data.Receipt.String()]
 	if present {
-		r.UpdateStaker(ref.s)
+		r.UpdateStaker(obj, data.Manager)
 	} else {
 		x, present := in.l_receipt.stakerWithNoReceipt[r.Id.String()]
 		if !present {
-			x = make(map[string]skr.Staker)
+			x = make(map[string]stakerManagerExtra)
 			in.l_receipt.stakerWithNoReceipt[r.Id.String()] = x
 		}
-		x[ref.s.Id.String()] = ref.s
+		x[ref.s.Id.String()] = stakerManagerExtra{
+			mgr: data.Manager,
+			obj: obj,
+		}
 	}
-	return nil
 }
 
 func (e1 Router) StakerByStake(stakeId sgo.PublicKey) (skr.Staker, error) {
