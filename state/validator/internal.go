@@ -14,12 +14,10 @@ import (
 type internal struct {
 	ctx            context.Context
 	errorC         chan<- error
-	id             sgo.PublicKey
 	data           *cba.ValidatorManager
 	validatorHome  *sub2.SubHome[cba.ValidatorManager]
 	stakeRatioHome *sub2.SubHome[StakeStatus]
 	receiptHome    *sub2.SubHome[rpt.ReceiptWithData]
-	receipt        rpt.Receipt
 	totalStake     uint64
 	activatedStake uint64
 	receipts       map[string]*receiptHolder // map payouts->

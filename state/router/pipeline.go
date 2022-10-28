@@ -25,9 +25,9 @@ func createLookupPipeline() *lookUpPipeline {
 	}
 }
 
-func (in *internal) lookup_add_pipeline(p pipe.Pipeline) {
-	in.l_pipeline.byId[p.Id.String()] = p
-}
+//func (in *internal) lookup_add_pipeline(p pipe.Pipeline) {
+//	in.l_pipeline.byId[p.Id.String()] = p
+//}
 
 func (in *internal) on_pipeline(obj sub.PipelineGroup, slotHome slot.SlotHome) error {
 
@@ -60,7 +60,6 @@ func (in *internal) on_pipeline(obj sub.PipelineGroup, slotHome slot.SlotHome) e
 			pipeline.UpdateBid(y)
 			delete(in.l_pipeline.bidListWithNoPipeline, id.String())
 		}
-
 	}
 	{
 		y, present := in.l_pipeline.periodRingWithNoPipeline[id.String()]
@@ -69,7 +68,6 @@ func (in *internal) on_pipeline(obj sub.PipelineGroup, slotHome slot.SlotHome) e
 			pipeline.UpdatePeriod(y)
 			delete(in.l_pipeline.periodRingWithNoPipeline, id.String())
 		}
-
 	}
 	{
 		y, present := in.l_pipeline.payoutWithNoPipeline[id.String()]
@@ -80,7 +78,6 @@ func (in *internal) on_pipeline(obj sub.PipelineGroup, slotHome slot.SlotHome) e
 				delete(y, payout.Id.String())
 			}
 		}
-
 	}
 
 	if !mainPresent {

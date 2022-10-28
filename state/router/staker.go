@@ -4,7 +4,6 @@ import (
 	"errors"
 
 	sgo "github.com/SolmateDev/solana-go"
-	sgows "github.com/SolmateDev/solana-go/rpc/ws"
 	skr "github.com/solpipe/solpipe-tool/state/staker"
 	"github.com/solpipe/solpipe-tool/state/sub"
 )
@@ -17,8 +16,8 @@ type lookUpStaker struct {
 	byId                    map[string]*refStaker
 	byStake                 map[string]*refStaker
 	stakeReceiptWithNoStake map[string]map[string]sub.StakerReceiptGroup // manager id->receipt->staker receipt
-	delegationStreamC       <-chan sgows.Result
-	delegationErrorC        <-chan error
+	//delegationStreamC       <-chan sgows.Result
+	//delegationErrorC        <-chan error
 }
 
 func (in *internal) createLookupStaker() (*lookUpStaker, error) {
@@ -123,6 +122,9 @@ func (e1 Router) StakerByStake(stakeId sgo.PublicKey) (skr.Staker, error) {
 		errorC <- nil
 		ansC <- ref.s
 	}:
+	}
+	if err != nil {
+		return skr.Staker{}, err
 	}
 
 	select {

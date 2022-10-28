@@ -24,14 +24,18 @@ func (in *internal) on_data(data cba.ValidatorManager) {
 }
 
 func (e1 Validator) UpdateReceipt(r rpt.Receipt) {
+	doneC := e1.ctx.Done()
 	d, err := r.Data()
 	if err != nil {
 		log.Error(err)
 		return
 	}
 
-	e1.internalC <- func(in *internal) {
+	select {
+	case <-doneC:
+	case e1.internalC <- func(in *internal) {
 		in.on_receipt(r, d)
+	}:
 	}
 
 }

@@ -84,24 +84,25 @@ func (in *internal) on_validator(obj sub.ValidatorGroup) error {
 		}
 	}
 
-	if validatorData.IsSet {
-		// we have to go from receipt->payout->pipeline
-		// payout and pipeline accounts already exist before the creation of the receipt account
-		receipt, present := in.l_receipt.byId[validatorData.Receipt.String()]
-		if present {
-			receiptData, err := receipt.Data()
-			if err == nil {
-				payout, present := in.l_payout.byId[receiptData.Payout.String()]
-				if present {
-					payoutData, err := payout.p.Data()
-					if err == nil {
-						pipeline, present := in.l_pipeline.byId[payoutData.Pipeline.String()]
-						if present {
-							pipeline.UpdateValidatorByVote(
-								ref.v,
-								payoutData.Period.Start,
-								payoutData.Period.Start+payoutData.Period.Length,
-							)
+	// send validator to payout
+	for _, selectedPeriod := range obj.Data.Ring {
+		if !selectedPeriod.HasValidatorWithdrawn {
+			receipt, present := in.l_receipt.byId[selectedPeriod.Receipt.String()]
+			if present {
+				receiptData, err := receipt.Data()
+				if err == nil {
+					payout, present := in.l_payout.byId[receiptData.Payout.String()]
+					if present {
+						payoutData, err := payout.p.Data()
+						if err == nil {
+							pipeline, present := in.l_pipeline.byId[payoutData.Pipeline.String()]
+							if present {
+								pipeline.UpdateValidatorByVote(
+									ref.v,
+									payoutData.Period.Start,
+									payoutData.Period.Start+payoutData.Period.Length,
+								)
+							}
 						}
 					}
 				}
