@@ -5,14 +5,14 @@ import (
 	"errors"
 	"time"
 
+	sgo "github.com/SolmateDev/solana-go"
+	"github.com/cretz/bine/tor"
+	log "github.com/sirupsen/logrus"
 	cba "github.com/solpipe/cba"
 	ll "github.com/solpipe/solpipe-tool/ds/list"
 	"github.com/solpipe/solpipe-tool/proxy"
 	pipe "github.com/solpipe/solpipe-tool/state/pipeline"
 	"github.com/solpipe/solpipe-tool/state/sub"
-	sgo "github.com/SolmateDev/solana-go"
-	"github.com/cretz/bine/tor"
-	log "github.com/sirupsen/logrus"
 	"google.golang.org/grpc"
 )
 
@@ -157,7 +157,7 @@ out:
 		case <-pleaseConnectC:
 			ctxC, cancel := context.WithTimeout(ctx, 3*time.Minute)
 			defer cancel()
-			conn, err = proxy.CreateConnectionToPipeline(ctxC, p, t1)
+			conn, err = proxy.CreateConnectionToPipelineTor(ctxC, p, t1)
 			if err != nil {
 				log.Debugf("failed to connect to pipeline=%s with err: %s", p.Id.String(), err.Error())
 			} else {

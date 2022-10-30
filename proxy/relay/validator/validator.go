@@ -6,7 +6,6 @@ import (
 
 	"github.com/solpipe/solpipe-tool/proxy/relay"
 	ntk "github.com/solpipe/solpipe-tool/state/network"
-	pipe "github.com/solpipe/solpipe-tool/state/pipeline"
 	val "github.com/solpipe/solpipe-tool/state/validator"
 )
 
@@ -14,15 +13,18 @@ type external struct {
 	ctx       context.Context
 	internalC chan<- func(*internal)
 	Cancel    context.CancelFunc
-	pipeline  pipe.Pipeline
 	validator val.Validator
 	txC       chan<- *submitInfo
 }
 
-func Create(ctx context.Context, validator val.Validator, network ntk.Network, config relay.Configuration) (relay.Relay, error) {
-	var err error
+func Create(
+	ctx context.Context,
+	validator val.Validator,
+	network ntk.Network,
+	config relay.Configuration,
+) (relay.Relay, error) {
 
-	err = config.Check()
+	err := config.Check()
 	if err != nil {
 		return nil, err
 	}

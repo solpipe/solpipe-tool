@@ -3,6 +3,8 @@ package validator
 import (
 	"context"
 
+	sgo "github.com/SolmateDev/solana-go"
+	log "github.com/sirupsen/logrus"
 	cba "github.com/solpipe/cba"
 	rly "github.com/solpipe/solpipe-tool/proxy/relay"
 	"github.com/solpipe/solpipe-tool/script"
@@ -10,8 +12,6 @@ import (
 	rtr "github.com/solpipe/solpipe-tool/state/router"
 	"github.com/solpipe/solpipe-tool/state/slot"
 	val "github.com/solpipe/solpipe-tool/state/validator"
-	sgo "github.com/SolmateDev/solana-go"
-	log "github.com/sirupsen/logrus"
 )
 
 type listenPeriodInternal struct {
@@ -23,7 +23,7 @@ type listenPeriodInternal struct {
 	pipeline      pipe.Pipeline
 	pipelineData  cba.Pipeline
 	validator     val.Validator
-	validatorData cba.ValidatorMember
+	validatorData cba.ValidatorManager
 	config        rly.Configuration
 	script        *script.Script
 	payoutMap     map[string]pipe.PayoutWithData

@@ -1,8 +1,8 @@
 package script
 
 import (
-	cba "github.com/solpipe/cba"
 	sgo "github.com/SolmateDev/solana-go"
+	cba "github.com/solpipe/cba"
 )
 
 type BidReceiptSettings struct {
@@ -55,7 +55,7 @@ func (brs ReceiptSettings) Update(txHash sgo.Hash) (*cba.UpdateReceipt, error) {
 	b.SetPipelineAdminAccount(brs.PipelineAdmin.PublicKey())
 	b.SetRentAccount(sgo.SysVarRentPubkey)
 	b.SetSystemProgramAccount(sgo.SystemProgramID)
-	b.SetValidatorMemberAccount(brs.ValidatorMember)
+	b.SetValidatorManagerAccount(brs.ValidatorMember)
 	b.SetValidatorAdminAccount(brs.ValidatorAdmin)
 
 	var d [sgo.PublicKeyLength]byte

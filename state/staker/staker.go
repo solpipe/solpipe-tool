@@ -10,6 +10,28 @@ import (
 	"github.com/solpipe/solpipe-tool/state/sub"
 )
 
+// seeds=[b"staker_manager",controller.key().as_ref(),staker.key().as_ref()],
+
+func StakerManagerId(controllerId sgo.PublicKey, stake sgo.PublicKey) (sgo.PublicKey, uint8, error) {
+	// seeds=[b"validator_member",controller.key().as_ref(),vote.key().as_ref()],
+	name := "staker_manager"
+	return sgo.FindProgramAddress([][]byte{
+		[]byte(name[:]),
+		controllerId.Bytes(),
+		stake.Bytes(),
+	}, cba.ProgramID)
+}
+
+func StakerReceiptId(manager sgo.PublicKey, receipt sgo.PublicKey) (sgo.PublicKey, uint8, error) {
+	//seeds=[b"staker_receipt",staker_receipt.manager.as_ref(),staker_receipt.receipt.as_ref()],
+	name := "staker_receipt"
+	return sgo.FindProgramAddress([][]byte{
+		[]byte(name[:]),
+		manager.Bytes(),
+		receipt.Bytes(),
+	}, cba.ProgramID)
+}
+
 type Staker struct {
 	ctx                 context.Context
 	cancel              context.CancelFunc

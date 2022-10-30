@@ -3,11 +3,10 @@ package staker
 import (
 	"context"
 
-	cba "github.com/solpipe/cba"
-	ctr "github.com/solpipe/solpipe-tool/state/controller"
-	rtr "github.com/solpipe/solpipe-tool/state/router"
 	sgows "github.com/SolmateDev/solana-go/rpc/ws"
 	log "github.com/sirupsen/logrus"
+	ctr "github.com/solpipe/solpipe-tool/state/controller"
+	rtr "github.com/solpipe/solpipe-tool/state/router"
 )
 
 type internal struct {
@@ -65,8 +64,4 @@ func (in *internal) finish(err error) {
 	for i := 0; i < len(in.closeSignalCList); i++ {
 		in.closeSignalCList[i] <- err
 	}
-}
-
-func (in *internal) on_data(s cba.StakerMember) {
-
 }

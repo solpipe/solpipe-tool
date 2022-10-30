@@ -6,6 +6,8 @@ import (
 	"errors"
 	"net"
 
+	"github.com/cretz/bine/tor"
+	log "github.com/sirupsen/logrus"
 	"github.com/solpipe/solpipe-tool/agent/pipeline/admin"
 	"github.com/solpipe/solpipe-tool/proxy"
 	pxypipe "github.com/solpipe/solpipe-tool/proxy/relay/pipeline"
@@ -13,8 +15,6 @@ import (
 	pipe "github.com/solpipe/solpipe-tool/state/pipeline"
 	rtr "github.com/solpipe/solpipe-tool/state/router"
 	slt "github.com/solpipe/solpipe-tool/state/slot"
-	"github.com/cretz/bine/tor"
-	log "github.com/sirupsen/logrus"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/reflection"
 )
@@ -73,7 +73,7 @@ func Create(
 	go loopCloseTor(ctx, torMgr)
 
 	// listen on the tor onion address
-	torListener, err := proxy.CreateListener(
+	torListener, err := proxy.CreateListenerDeprecated(
 		ctx,
 		args.Relay.Admin,
 		&proxy.ServerConfiguration{},

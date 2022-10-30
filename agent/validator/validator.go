@@ -6,6 +6,11 @@ import (
 	"net"
 	"time"
 
+	sgo "github.com/SolmateDev/solana-go"
+	sgorpc "github.com/SolmateDev/solana-go/rpc"
+	sgows "github.com/SolmateDev/solana-go/rpc/ws"
+	"github.com/cretz/bine/tor"
+	log "github.com/sirupsen/logrus"
 	cba "github.com/solpipe/cba"
 	"github.com/solpipe/solpipe-tool/ds/sub"
 	"github.com/solpipe/solpipe-tool/proxy"
@@ -16,11 +21,6 @@ import (
 	rtr "github.com/solpipe/solpipe-tool/state/router"
 	val "github.com/solpipe/solpipe-tool/state/validator"
 	vrs "github.com/solpipe/solpipe-tool/state/version"
-	sgo "github.com/SolmateDev/solana-go"
-	sgorpc "github.com/SolmateDev/solana-go/rpc"
-	sgows "github.com/SolmateDev/solana-go/rpc/ws"
-	"github.com/cretz/bine/tor"
-	log "github.com/sirupsen/logrus"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/reflection"
 )
@@ -135,7 +135,7 @@ func Create(
 	router rtr.Router,
 	validator val.Validator,
 ) (agent Agent, err error) {
-	var data cba.ValidatorMember
+	var data cba.ValidatorManager
 	data, err = validator.Data()
 	if err != nil {
 		return
@@ -153,7 +153,7 @@ func Create(
 		cancel()
 		return
 	}
-	mainListener, err := proxy.CreateListener(ctx2, config.Admin, nil, t1)
+	mainListener, err := proxy.CreateListenerDeprecated(ctx2, config.Admin, nil, t1)
 	if err != nil {
 		cancel()
 		return

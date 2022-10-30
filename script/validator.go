@@ -4,11 +4,11 @@ import (
 	"context"
 	"errors"
 
-	cba "github.com/solpipe/cba"
-	val "github.com/solpipe/solpipe-tool/state/validator"
 	sgo "github.com/SolmateDev/solana-go"
 	sgorpc "github.com/SolmateDev/solana-go/rpc"
 	sgows "github.com/SolmateDev/solana-go/rpc/ws"
+	cba "github.com/solpipe/cba"
+	val "github.com/solpipe/solpipe-tool/state/validator"
 )
 
 // the validator will create a receipt account tying itself to a pipeline via the pipeline payout account.
@@ -41,7 +41,7 @@ func (e1 *Script) ValidatorSetPipeline(
 	b.SetSystemProgramAccount(sgo.SystemProgramID)
 	b.SetValidatorAdminAccount(validatorAdmin.PublicKey())
 	e1.AppendKey(validatorAdmin)
-	b.SetValidatorMemberAccount(validatorId)
+	b.SetValidatorManagerAccount(validatorId)
 
 	e1.txBuilder.AddInstruction(b.Build())
 
@@ -61,7 +61,7 @@ func (e1 *Script) AddValidator(
 	e1.AppendKey(vote)
 	e1.AppendKey(admin)
 
-	member, _, err = val.ValidatorMemberId(controller, vote.PublicKey())
+	member, _, err = val.ValidatorManagerId(controller, vote.PublicKey())
 	if err != nil {
 		return
 	}
@@ -69,7 +69,7 @@ func (e1 *Script) AddValidator(
 	b := cba.NewAddValidatorInstructionBuilder()
 
 	b.SetControllerAccount(controller)
-	b.SetValidatorMemberAccount(member)
+	b.SetValidatorManagerAccount(member)
 	b.SetVoteAccount(vote.PublicKey())
 	b.SetStakeAccount(stake)
 	b.SetVoteAdminAccount(vote.PublicKey()) // this is just the vote account again used for signing
@@ -103,8 +103,8 @@ func (e1 *Script) Deprecate_CreateValidatorReceipt(
 		return
 	}
 
-	var memberId sgo.PublicKey
-	memberId, _, err = val.ValidatorMemberId(controllerId, vote)
+	var managerId sgo.PublicKey
+	managerId, _, err = val.ValidatorManagerId(controllerId, vote)
 	if err != nil {
 		return
 	}
@@ -118,7 +118,7 @@ func (e1 *Script) Deprecate_CreateValidatorReceipt(
 	b.SetControllerAccount(controllerId)
 	//b.SetPipelineAdminAccount(pipelineAdmin.PublicKey())
 	b.SetPayoutAccount(payoutId)
-	b.SetValidatorMemberAccount(memberId)
+	b.SetValidatorManagerAccount(managerId)
 	b.SetValidatorAdminAccount(validatorAdmin)
 
 	e1.txBuilder.AddInstruction(b.Build())

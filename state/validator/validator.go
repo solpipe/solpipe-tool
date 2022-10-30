@@ -15,9 +15,9 @@ import (
 	rpt "github.com/solpipe/solpipe-tool/state/receipt"
 )
 
-func ValidatorMemberId(controllerId sgo.PublicKey, vote sgo.PublicKey) (sgo.PublicKey, uint8, error) {
+func ValidatorManagerId(controllerId sgo.PublicKey, vote sgo.PublicKey) (sgo.PublicKey, uint8, error) {
 	// seeds=[b"validator_member",controller.key().as_ref(),vote.key().as_ref()],
-	name := "validator_member"
+	name := "validator_manager"
 	return sgo.FindProgramAddress([][]byte{
 		[]byte(name[:]),
 		controllerId.Bytes(),

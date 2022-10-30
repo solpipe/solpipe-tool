@@ -18,6 +18,92 @@ import (
 // Requires gRPC-Go v1.32.0 or later.
 const _ = grpc.SupportPackageIsVersion7
 
+// EndpointClient is the client API for Endpoint service.
+//
+// For semantics around ctx use and closing/ending streaming RPCs, please refer to https://pkg.go.dev/google.golang.org/grpc/?tab=doc#ClientConn.NewStream.
+type EndpointClient interface {
+	GetClearNetAddress(ctx context.Context, in *EndpointRequest, opts ...grpc.CallOption) (*EndpointResponse, error)
+}
+
+type endpointClient struct {
+	cc grpc.ClientConnInterface
+}
+
+func NewEndpointClient(cc grpc.ClientConnInterface) EndpointClient {
+	return &endpointClient{cc}
+}
+
+func (c *endpointClient) GetClearNetAddress(ctx context.Context, in *EndpointRequest, opts ...grpc.CallOption) (*EndpointResponse, error) {
+	out := new(EndpointResponse)
+	err := c.cc.Invoke(ctx, "/job.Endpoint/GetClearNetAddress", in, out, opts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+// EndpointServer is the server API for Endpoint service.
+// All implementations must embed UnimplementedEndpointServer
+// for forward compatibility
+type EndpointServer interface {
+	GetClearNetAddress(context.Context, *EndpointRequest) (*EndpointResponse, error)
+	mustEmbedUnimplementedEndpointServer()
+}
+
+// UnimplementedEndpointServer must be embedded to have forward compatible implementations.
+type UnimplementedEndpointServer struct {
+}
+
+func (UnimplementedEndpointServer) GetClearNetAddress(context.Context, *EndpointRequest) (*EndpointResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method GetClearNetAddress not implemented")
+}
+func (UnimplementedEndpointServer) mustEmbedUnimplementedEndpointServer() {}
+
+// UnsafeEndpointServer may be embedded to opt out of forward compatibility for this service.
+// Use of this interface is not recommended, as added methods to EndpointServer will
+// result in compilation errors.
+type UnsafeEndpointServer interface {
+	mustEmbedUnimplementedEndpointServer()
+}
+
+func RegisterEndpointServer(s grpc.ServiceRegistrar, srv EndpointServer) {
+	s.RegisterService(&Endpoint_ServiceDesc, srv)
+}
+
+func _Endpoint_GetClearNetAddress_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(EndpointRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(EndpointServer).GetClearNetAddress(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: "/job.Endpoint/GetClearNetAddress",
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(EndpointServer).GetClearNetAddress(ctx, req.(*EndpointRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+// Endpoint_ServiceDesc is the grpc.ServiceDesc for Endpoint service.
+// It's only intended for direct use with grpc.RegisterService,
+// and not to be introspected or modified (even as a copy)
+var Endpoint_ServiceDesc = grpc.ServiceDesc{
+	ServiceName: "job.Endpoint",
+	HandlerType: (*EndpointServer)(nil),
+	Methods: []grpc.MethodDesc{
+		{
+			MethodName: "GetClearNetAddress",
+			Handler:    _Endpoint_GetClearNetAddress_Handler,
+		},
+	},
+	Streams:  []grpc.StreamDesc{},
+	Metadata: "job.proto",
+}
+
 // TransactionClient is the client API for Transaction service.
 //
 // For semantics around ctx use and closing/ending streaming RPCs, please refer to https://pkg.go.dev/google.golang.org/grpc/?tab=doc#ClientConn.NewStream.

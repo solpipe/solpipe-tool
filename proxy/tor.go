@@ -13,10 +13,6 @@ import (
 	log "github.com/sirupsen/logrus"
 )
 
-type ServerConfiguration struct {
-	//Port uint16 `json:"port"`
-}
-
 //go:embed files/torrc
 var torrC []byte
 
@@ -88,9 +84,17 @@ func SetupTor(ctx context.Context, isClient bool) (torMgr *tor.Tor, err error) {
 	if err != nil {
 		return
 	}
-
+	go loopKillTor(ctx, torMgr)
 	return
 }
+
+func loopKillTor(ctx context.Context, torMgr *tor.Tor) {
+	<-ctx.Done()
+	if torMgr != nil {
+		torMgr.Close()
+	}
+}
+
 func loopDeleteFile(ctx context.Context, fp string) {
 	<-ctx.Done()
 	os.Remove(fp)

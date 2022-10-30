@@ -62,6 +62,7 @@ func createProgramAllResult() *ProgramAllResult {
 	ans.PeriodRing = make(map[string]*PeriodGroup)
 	ans.BidList = make(map[string]*BidGroup)
 	ans.Stake = ll.CreateGeneric[*StakeGroup]()
+	ans.StakeReceipt = ll.CreateGeneric[*StakerReceiptGroup]()
 	ans.Receipt = ll.CreateGeneric[*ReceiptGroup]()
 	ans.Payout = ll.CreateGeneric[*PayoutWithData]()
 	return ans
@@ -156,7 +157,7 @@ func FetchProgramAll(ctx context.Context, rpcClient *sgorpc.Client, version vrs.
 							IsOpen: true,
 						})
 					}
-				case cba.StakerManagerDiscriminator:
+				case cba.StakerReceiptDiscriminator:
 					x := new(cba.StakerReceipt)
 					err = c.Decode(x)
 					if err == nil {
@@ -240,6 +241,8 @@ func SubscribeProgramAll(
 	ans.PeriodRingC = in.periodRing.ReqC
 	in.stakeManager = dssub.CreateSubHome[StakeGroup]()
 	ans.StakerManagerC = in.stakeManager.ReqC
+	in.stakeReceipt = dssub.CreateSubHome[StakerReceiptGroup]()
+	ans.StakerReceiptC = in.stakeReceipt.ReqC
 	in.receipt = dssub.CreateSubHome[ReceiptGroup]()
 	ans.ReceiptC = in.receipt.ReqC
 	in.payout = dssub.CreateSubHome[PayoutWithData]()
@@ -323,6 +326,10 @@ out:
 			in.stakeManager.Delete(id)
 		case r := <-in.stakeManager.ReqC:
 			in.stakeManager.Receive(r)
+		case id := <-in.stakeReceipt.DeleteC: // stake
+			in.stakeReceipt.Delete(id)
+		case r := <-in.stakeReceipt.ReqC:
+			in.stakeReceipt.Receive(r)
 		case id := <-in.receipt.DeleteC: // receipt
 			in.receipt.Delete(id)
 		case r := <-in.receipt.ReqC:

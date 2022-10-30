@@ -7,15 +7,15 @@ import (
 	"testing"
 	"time"
 
+	sgo "github.com/SolmateDev/solana-go"
+	sgorpc "github.com/SolmateDev/solana-go/rpc"
+	"github.com/joho/godotenv"
+	log "github.com/sirupsen/logrus"
 	cba "github.com/solpipe/cba"
 	ap "github.com/solpipe/solpipe-tool/agent/pipeline"
 	"github.com/solpipe/solpipe-tool/state"
 	pipe "github.com/solpipe/solpipe-tool/state/pipeline"
 	sle "github.com/solpipe/solpipe-tool/test/single"
-	sgo "github.com/SolmateDev/solana-go"
-	sgorpc "github.com/SolmateDev/solana-go/rpc"
-	"github.com/joho/godotenv"
-	log "github.com/sirupsen/logrus"
 )
 
 func TestSetup(t *testing.T) {
@@ -62,7 +62,8 @@ func TestSetup(t *testing.T) {
 		relayConfig.Admin.PublicKey(),
 		sgorpc.CommitmentFinalized,
 	)
-	if balance.Value == 0 {
+
+	if err != nil || balance.Value == 0 {
 		ctxT, cancelT := context.WithTimeout(ctx, 1*time.Minute)
 		defer cancelT()
 		script, err := sbox.Script(ctxT)

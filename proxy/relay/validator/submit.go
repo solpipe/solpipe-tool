@@ -6,6 +6,7 @@ import (
 
 	sgo "github.com/SolmateDev/solana-go"
 	sgorpc "github.com/SolmateDev/solana-go/rpc"
+	"github.com/solpipe/solpipe-tool/proxy/relay"
 )
 
 type submitInfo struct {
@@ -13,15 +14,24 @@ type submitInfo struct {
 	tx     *sgo.Transaction
 	errorC chan<- error
 	sigC   chan<- sgo.Signature
+	bidder sgo.PublicKey
 }
 
-func (e1 external) Submit(ctx context.Context, sender sgo.PublicKey, tx *sgo.Transaction) (sgo.Signature, error) {
+func (e1 external) Submit(
+	ctx context.Context,
+	sender sgo.PublicKey,
+	tx *sgo.Transaction,
+) (sgo.Signature, error) {
+
+	pubkey, err := relay.GetPeerPubkey(ctx)
+	if err != nil {
+		return sgo.Signature{}, err
+	}
 	doneC := ctx.Done()
 	errorC := make(chan error, 1)
 	sigC := make(chan sgo.Signature, 1)
-	si := &submitInfo{ctx: ctx, tx: tx, errorC: errorC, sigC: sigC}
+	si := &submitInfo{ctx: ctx, tx: tx, errorC: errorC, sigC: sigC, bidder: pubkey}
 
-	var err error
 	var sig sgo.Signature
 
 	select {
