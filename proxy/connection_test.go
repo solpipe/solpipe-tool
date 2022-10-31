@@ -85,6 +85,7 @@ func TestClearNet(t *testing.T) {
 			return
 		}
 		log.Debugf("resp=%+v", resp)
+		cancel()
 	}()
 
 	select {

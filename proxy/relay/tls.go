@@ -2,11 +2,10 @@ package relay
 
 import (
 	"context"
-	"crypto/ed25519"
-	"crypto/x509"
 	"errors"
 
 	sgo "github.com/SolmateDev/solana-go"
+	"github.com/solpipe/solpipe-tool/proxy"
 	"google.golang.org/grpc/credentials"
 	"google.golang.org/grpc/peer"
 )
@@ -23,24 +22,15 @@ func GetPeerPubkey(ctx context.Context) (pubkey sgo.PublicKey, err error) {
 		return
 	}
 	tlsInfo := p.AuthInfo.(credentials.TLSInfo)
-	if len(tlsInfo.State.PeerCertificates) != 1 {
-		err = errors.New("do not have single certificate")
-		return
-	}
-	peerCert := tlsInfo.State.PeerCertificates[0]
-
-	if peerCert.PublicKeyAlgorithm != x509.Ed25519 {
-		err = errors.New("wrong public key algorithm")
-	}
-	var pubkeyPre ed25519.PublicKey
-
-	pubkeyPre, ok = peerCert.PublicKey.(ed25519.PublicKey)
-	if !ok {
-		err = errors.New("failed to get public key")
+	if len(tlsInfo.State.PeerCertificates) != 2 {
+		err = errors.New("do not have sufficient certificates")
 		return
 	}
 
-	pubkey = sgo.PublicKeyFromBytes(pubkeyPre)
+	pubkey, err = proxy.PubkeyFromCaX509(tlsInfo.State.PeerCertificates[1])
+	if err != nil {
+		return
+	}
 
 	return
 }

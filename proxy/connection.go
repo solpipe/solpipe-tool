@@ -121,8 +121,24 @@ func CreateConnectionClearNet(
 			Certificates: []tls.Certificate{*y},
 			VerifyConnection: func(cs tls.ConnectionState) error {
 				log.Debugf("client cs=%+v", cs)
+				chain := cs.PeerCertificates
+				if len(chain) != 2 {
+					return errors.New("bad ca")
+				}
+				// leaf is ephemeral keypair
+				certPool := x509.NewCertPool()
+				certPool.AddCert(chain[1])
+				_, err2 := chain[0].Verify(x509.VerifyOptions{
+					Roots: certPool,
+				})
+				if err2 != nil {
+					return err2
+				}
+
+				if !VerifyCaWithx509(chain[1], destination) {
+					return errors.New("destination pubkey does not match certificate")
+				}
 				return nil
-				//return errors.New("stop me")
 			},
 			InsecureSkipVerify: true,
 			// very ugly hack so that the server will see what root CA to add for this connection

@@ -218,7 +218,33 @@ func VerifyCertificate(cert []byte, pubkey sgo.PublicKey) bool {
 		return false
 	}
 	return sgo.PublicKeyFromBytes(x).Equals(pubkey)
+}
 
+func PubkeyFromCaX509(parsedCertificate *x509.Certificate) (pubkey sgo.PublicKey, err error) {
+	if parsedCertificate.PublicKeyAlgorithm != x509.Ed25519 {
+		err = errors.New("not ed25519")
+		return
+	}
+	derivedPubkey := parsedCertificate.PublicKey
+	x, ok := derivedPubkey.(ed25519.PublicKey)
+	if !ok {
+		err = errors.New("not pubkey")
+		return
+	}
+	pubkey = sgo.PublicKeyFromBytes(x)
+	return
+}
+
+func VerifyCaWithx509(parsedCertificate *x509.Certificate, pubkey sgo.PublicKey) bool {
+	if parsedCertificate.PublicKeyAlgorithm != x509.Ed25519 {
+		return false
+	}
+	derivedPubkey := parsedCertificate.PublicKey
+	x, ok := derivedPubkey.(ed25519.PublicKey)
+	if !ok {
+		return false
+	}
+	return sgo.PublicKeyFromBytes(x).Equals(pubkey)
 }
 
 type ServerConfiguration struct {
