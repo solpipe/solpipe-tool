@@ -1,11 +1,8 @@
 package proxy
 
 import (
-	"bytes"
-	"crypto/ecdsa"
 	"crypto/ed25519"
 	"crypto/rand"
-	"crypto/rsa"
 	"crypto/tls"
 	"crypto/x509"
 	"crypto/x509/pkix"
@@ -19,51 +16,6 @@ import (
 	sgo "github.com/SolmateDev/solana-go"
 	log "github.com/sirupsen/logrus"
 )
-
-/*
-we need to fix this page to get direct tls connections authenticated by Solana TLS keys.
-Otherwise, we can only use TOR.
-*/
-
-//const ED25519_IDENTIFIER: [u32; 4] = [1, 3, 101, 112];
-
-//	func ED25519_IDENTIFIER() [4]uint32 {
-//		return [4]uint32{1, 3, 101, 112}
-//	}
-
-func pemBlockForKey(priv interface{}) (*pem.Block, error) {
-	switch k := priv.(type) {
-	case *rsa.PrivateKey:
-		return &pem.Block{Type: "RSA PRIVATE KEY", Bytes: x509.MarshalPKCS1PrivateKey(k)}, nil
-	case *ecdsa.PrivateKey:
-		b, err := x509.MarshalECPrivateKey(k)
-		if err != nil {
-			return nil, err
-		}
-		return &pem.Block{Type: "EC PRIVATE KEY", Bytes: b}, nil
-	case ed25519.PrivateKey:
-		b, err := x509.MarshalPKCS8PrivateKey(k)
-		if err != nil {
-			return nil, err
-		}
-		return &pem.Block{Type: "PRIVATE KEY", Bytes: b, Headers: nil}, nil
-	default:
-		return nil, errors.New("unknown format")
-	}
-}
-
-type TlsForServer struct {
-	Private     []byte
-	Certificate []byte
-	Ca          []byte
-}
-
-func (tfs TlsForServer) CertAndKey() (cert tls.Certificate, err error) {
-	//return cert, nil
-	//os.Stderr.WriteString(string(tfs.Certificate) + "\n")
-	//os.Stderr.WriteString(string(tfs.Private) + "\n")
-	return tls.X509KeyPair(tfs.Certificate, tfs.Private)
-}
 
 func generateCa(key sgo.PrivateKey) ([]byte, *ed25519.PrivateKey, error) {
 	caPrivKey := ed25519.PrivateKey(key)
@@ -144,31 +96,6 @@ func generateEphemeralCert(
 		}
 	}
 	return certBytes, &certPrivKey, nil
-}
-
-func serializePrivateKeyToPEM(priv *ed25519.PrivateKey) ([]byte, error) {
-	if priv == nil {
-		return nil, errors.New("no key")
-	}
-	keyOut := &bytes.Buffer{}
-	o1, err := pemBlockForKey(priv)
-	if err != nil {
-		return nil, err
-	}
-	err = pem.Encode(keyOut, o1)
-	if err != nil {
-		return nil, err
-	}
-	return keyOut.Bytes(), nil
-}
-
-func serializeCertDerToPem(certDer []byte) []byte {
-	certPEM := new(bytes.Buffer)
-	pem.Encode(certPEM, &pem.Block{
-		Type:  "CERTIFICATE",
-		Bytes: certDer,
-	})
-	return certPEM.Bytes()
 }
 
 func NewSelfSignedTlsCertificateChainServer(
@@ -258,17 +185,4 @@ func (sc ServerConfiguration) dns_string() []string {
 		ans[i] = fmt.Sprintf("%s:%d", sc.Host[i], sc.Port)
 	}
 	return ans
-}
-
-// use inside the TlsConfig Verify Peer Certificate argument
-func verify(destination sgo.PublicKey, rawCerts [][]byte, verifiedChains [][]*x509.Certificate) error {
-	ans := false
-out:
-	for i := 0; i < len(rawCerts); i++ {
-		ans = VerifyCertificate(rawCerts[i], destination)
-		if ans {
-			break out
-		}
-	}
-	return nil
 }

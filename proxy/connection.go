@@ -138,21 +138,18 @@ func getTlsConfig(cert *tls.Certificate, destination sgo.PublicKey) *tls.Config 
 			// leaf is ephemeral keypair
 			certPool := x509.NewCertPool()
 			certPool.AddCert(chain[1])
-			_, err2 := chain[0].Verify(x509.VerifyOptions{
+			_, err := chain[0].Verify(x509.VerifyOptions{
 				Roots: certPool,
 			})
-			if err2 != nil {
-				return err2
+			if err != nil {
+				return err
 			}
-
 			if !VerifyCaWithx509(chain[1], destination) {
 				return errors.New("destination pubkey does not match certificate")
 			}
 			return nil
 		},
 		InsecureSkipVerify: true,
-		// very ugly hack so that the server will see what root CA to add for this connection
-		//ServerName: string(serializeCertDerToPem(y.Certificate[1])),
-		ServerName: destination.String(),
+		ServerName:         destination.String(),
 	}
 }

@@ -15,12 +15,94 @@ import (
 	"google.golang.org/grpc"
 )
 
+func TestClearNet(t *testing.T) {
+	log.SetLevel(log.DebugLevel)
+	ctx, cancel := context.WithCancel(context.Background())
+	t.Cleanup(func() {
+		cancel()
+	})
+	pipeline, err := sgo.NewRandomPrivateKey()
+	if err != nil {
+		t.Fatal(err)
+	}
+	bidder, err := sgo.NewRandomPrivateKey()
+	if err != nil {
+		t.Fatal(err)
+	}
+	port := uint16(50051)
+	address := fmt.Sprintf("127.0.0.1:%d", port)
+	errorC := make(chan error, 1)
+
+	{
+		var l net.Listener
+		innerListener, err := proxy.CreateListenerLocal(
+			ctx,
+			fmt.Sprintf("0.0.0.0:%d", port),
+			[]string{address},
+		)
+		if err != nil {
+			t.Fatal(err)
+		}
+
+		var s *grpc.Server
+		s, err = proxy.CreateListener(
+			ctx,
+			pipeline,
+		)
+		if err != nil {
+			t.Fatal(err)
+		}
+
+		attach(ctx, s)
+		l = innerListener.Listener
+		go loopListenClose(ctx, l)
+		go loopListen(errorC, l, s)
+
+	}
+
+	go func() {
+		var conn *grpc.ClientConn
+		conn, err = proxy.CreateConnectionClearNet(
+			ctx,
+			pipeline.PublicKey(),
+			address,
+			bidder,
+		)
+		if err != nil {
+			errorC <- err
+			return
+		}
+		client := pbj.NewEndpointClient(conn)
+		//time.Sleep(10 * time.Minute)
+		resp, err := client.GetClearNetAddress(ctx, &pbj.EndpointRequest{
+			Certificate: []byte{},
+			Pubkey:      []byte{},
+			Nonce:       []byte{},
+			Signature:   []byte{},
+		})
+		if err != nil {
+			errorC <- err
+			return
+		}
+		log.Debugf("resp=%+v", resp)
+		cancel()
+	}()
+
+	select {
+	case <-ctx.Done():
+	case err = <-errorC:
+		if err != nil {
+			t.Fatal(err)
+		}
+	}
+}
+
 func TestTor(t *testing.T) {
 	log.SetLevel(log.DebugLevel)
 	ctx, cancel := context.WithCancel(context.Background())
 	t.Cleanup(func() {
 		cancel()
-		time.Sleep(30 * time.Second)
+		time.Sleep(60 * time.Second)
 	})
 	{
 		closeListener, err := net.Listen("tcp", ":3003")
@@ -67,7 +149,6 @@ func TestTor(t *testing.T) {
 		s, err = proxy.CreateListener(
 			ctx,
 			pipeline,
-			innerListener,
 		)
 		if err != nil {
 			t.Fatal(err)
@@ -103,89 +184,6 @@ func TestTor(t *testing.T) {
 		time.Sleep(2 * time.Minute)
 		client := pbj.NewEndpointClient(conn)
 		log.Debug("starting client")
-		//time.Sleep(10 * time.Minute)
-		resp, err := client.GetClearNetAddress(ctx, &pbj.EndpointRequest{
-			Certificate: []byte{},
-			Pubkey:      []byte{},
-			Nonce:       []byte{},
-			Signature:   []byte{},
-		})
-		if err != nil {
-			errorC <- err
-			return
-		}
-		log.Debugf("resp=%+v", resp)
-		cancel()
-	}()
-
-	select {
-	case <-ctx.Done():
-	case err = <-errorC:
-		if err != nil {
-			t.Fatal(err)
-		}
-	}
-}
-
-func TestClearNet(t *testing.T) {
-	log.SetLevel(log.DebugLevel)
-	ctx, cancel := context.WithCancel(context.Background())
-	t.Cleanup(func() {
-		cancel()
-	})
-	pipeline, err := sgo.NewRandomPrivateKey()
-	if err != nil {
-		t.Fatal(err)
-	}
-	bidder, err := sgo.NewRandomPrivateKey()
-	if err != nil {
-		t.Fatal(err)
-	}
-	port := uint16(50051)
-	address := fmt.Sprintf("127.0.0.1:%d", port)
-	errorC := make(chan error, 1)
-
-	{
-		var l net.Listener
-		innerListener, err := proxy.CreateListenerLocal(
-			ctx,
-			fmt.Sprintf("0.0.0.0:%d", port),
-			[]string{address},
-		)
-		if err != nil {
-			t.Fatal(err)
-		}
-
-		var s *grpc.Server
-		s, err = proxy.CreateListener(
-			ctx,
-			pipeline,
-			innerListener,
-		)
-		if err != nil {
-			t.Fatal(err)
-		}
-
-		attach(ctx, s)
-		l = innerListener.Listener
-		go loopListenClose(ctx, l)
-		go loopListen(errorC, l, s)
-
-	}
-
-	go func() {
-		var conn *grpc.ClientConn
-		conn, err = proxy.CreateConnectionClearNet(
-			ctx,
-			pipeline.PublicKey(),
-			address,
-			bidder,
-		)
-		if err != nil {
-			errorC <- err
-			return
-		}
-		client := pbj.NewEndpointClient(conn)
 		//time.Sleep(10 * time.Minute)
 		resp, err := client.GetClearNetAddress(ctx, &pbj.EndpointRequest{
 			Certificate: []byte{},

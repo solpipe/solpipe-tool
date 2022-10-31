@@ -23,25 +23,18 @@ import (
 func CreateListener(
 	ctx context.Context,
 	admin sgo.PrivateKey,
-	innerListener *ListenerInfo,
 ) (s *grpc.Server, err error) {
-
-	if innerListener == nil {
-		err = errors.New("no listener")
-		return
-	}
 
 	var y *tls.Certificate
 	y, err = NewSelfSignedTlsCertificateChainServer(
 		admin,
-		innerListener.Addresses,
+		[]string{"blank"},
 		time.Now().Add(7*24*time.Hour),
 	)
 	if err != nil {
 		grpc.WithReturnConnectionError()
 	}
 
-	//locker := sync.RWMutex{}
 	verifyConnection := func(cs tls.ConnectionState) error {
 		log.Debugf("server cs=%+v", cs)
 
@@ -58,9 +51,7 @@ func CreateListener(
 		if err2 != nil {
 			return err2
 		}
-
 		return nil
-		//return errors.New("server stop me")
 	}
 
 	config := &tls.Config{
@@ -113,10 +104,6 @@ func CreateListenerTor(
 		return
 	}
 	var onion *tor.OnionService
-	log.Debugf("+++++attempting to listen on tor onion address for listener admin=%s", admin.PublicKey().String())
-
-	//ctxC, cancel := context.WithTimeout(ctx, 1*time.Minute)
-	//defer cancel()
 	onion, err = t.Listen(
 		ctx,
 		&tor.ListenConf{
@@ -124,7 +111,6 @@ func CreateListenerTor(
 			RemotePorts: []int{util.DEFAULT_PROXY_PORT},
 			LocalPort:   0,
 			Key:         priv,
-			//NonAnonymous: true,
 		},
 	)
 	if err != nil {
@@ -132,12 +118,11 @@ func CreateListenerTor(
 	}
 	li = new(ListenerInfo)
 	li.Listener = onion
-	// Check in the future
+
 	if onion.ID != address {
 		err = fmt.Errorf("bad onion address; \n%s\n%s", onion.ID, address)
 		return
 	}
-	log.Debugf("++++listener admin=%s listening on onion=%s.onion:%d", admin.PublicKey().String(), onion.ID, util.DEFAULT_PROXY_PORT)
 	li.Addresses = []string{fmt.Sprintf("%s.onion:%d", onion.ID, util.DEFAULT_PROXY_PORT)}
 	return
 }
