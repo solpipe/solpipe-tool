@@ -7,16 +7,22 @@ import (
 	"net/http"
 	"strings"
 
+	sgo "github.com/SolmateDev/solana-go"
+	sgorpc "github.com/SolmateDev/solana-go/rpc"
+	"github.com/SolmateDev/solana-go/rpc/jsonrpc"
+	sgows "github.com/SolmateDev/solana-go/rpc/ws"
 	"github.com/solpipe/solpipe-tool/script"
 	"github.com/solpipe/solpipe-tool/state/controller"
 	ntk "github.com/solpipe/solpipe-tool/state/network"
 	rtr "github.com/solpipe/solpipe-tool/state/router"
 	vrs "github.com/solpipe/solpipe-tool/state/version"
-	sgo "github.com/SolmateDev/solana-go"
-	sgorpc "github.com/SolmateDev/solana-go/rpc"
-	"github.com/SolmateDev/solana-go/rpc/jsonrpc"
-	sgows "github.com/SolmateDev/solana-go/rpc/ws"
 )
+
+type ClearNetListenConfig struct {
+	Port uint16
+	Ipv4 net.IP
+	Ipv6 net.IP
+}
 
 type Configuration struct {
 	Version        vrs.CbaVersion
@@ -25,6 +31,7 @@ type Configuration struct {
 	wsUrl          string
 	headers        http.Header
 	AdminListenUrl string
+	ClearNet       *ClearNetListenConfig
 }
 
 // http headers are copied
@@ -35,12 +42,11 @@ func CreateConfiguration(
 	wsUrl string,
 	headers http.Header,
 	adminListenUrl string,
+	clearNet *ClearNetListenConfig,
 ) Configuration {
 	h := http.Header{}
-	if headers != nil {
-		for k, v := range headers {
-			h[k] = v
-		}
+	for k, v := range headers {
+		h[k] = v
 	}
 	return Configuration{
 		Version:        version,
@@ -49,6 +55,7 @@ func CreateConfiguration(
 		wsUrl:          wsUrl,
 		headers:        h,
 		AdminListenUrl: adminListenUrl,
+		ClearNet:       clearNet,
 	}
 }
 

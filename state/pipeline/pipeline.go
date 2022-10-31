@@ -5,6 +5,9 @@ import (
 	"errors"
 	"fmt"
 
+	sgo "github.com/SolmateDev/solana-go"
+	sgorpc "github.com/SolmateDev/solana-go/rpc"
+	sgows "github.com/SolmateDev/solana-go/rpc/ws"
 	cba "github.com/solpipe/cba"
 	ll "github.com/solpipe/solpipe-tool/ds/list"
 	dssub "github.com/solpipe/solpipe-tool/ds/sub"
@@ -12,9 +15,6 @@ import (
 	"github.com/solpipe/solpipe-tool/state"
 	"github.com/solpipe/solpipe-tool/state/slot"
 	"github.com/solpipe/solpipe-tool/state/sub"
-	sgo "github.com/SolmateDev/solana-go"
-	sgorpc "github.com/SolmateDev/solana-go/rpc"
-	sgows "github.com/SolmateDev/solana-go/rpc/ws"
 )
 
 type Rate struct {

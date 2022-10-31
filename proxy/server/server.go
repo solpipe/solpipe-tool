@@ -4,11 +4,11 @@ import (
 	"context"
 	"errors"
 
+	sgo "github.com/SolmateDev/solana-go"
+	log "github.com/sirupsen/logrus"
 	pbj "github.com/solpipe/solpipe-tool/proto/job"
 	"github.com/solpipe/solpipe-tool/proxy/relay"
 	rtr "github.com/solpipe/solpipe-tool/state/router"
-	sgo "github.com/SolmateDev/solana-go"
-	log "github.com/sirupsen/logrus"
 	"google.golang.org/grpc"
 )
 
@@ -30,6 +30,7 @@ func Attach(
 	router rtr.Router,
 	admin sgo.PrivateKey,
 	relay relay.Relay,
+	clearNetConfig *relay.ClearNetListenConfig,
 ) error {
 	ctx2, cancel := context.WithCancel(ctx)
 	log.Debugf("creating tor server with key=%s", admin.PublicKey().String())
@@ -44,6 +45,12 @@ func Attach(
 		relay:     relay,
 	}
 	pbj.RegisterTransactionServer(s, e1)
+	if clearNetConfig != nil {
+		pbj.RegisterEndpointServer(s, endpointExternal{
+			clearNetConfig: *clearNetConfig,
+		})
+	}
+
 	return nil
 }
 
@@ -62,4 +69,29 @@ func (e1 external) send_cb(
 	case e1.internalC <- cb:
 		return nil
 	}
+}
+
+type endpointExternal struct {
+	pbj.UnimplementedEndpointServer
+	clearNetConfig relay.ClearNetListenConfig
+}
+
+func (e1 endpointExternal) GetClearNetAddress(
+	ctx context.Context,
+	req *pbj.EndpointRequest,
+) (resp *pbj.EndpointResponse, err error) {
+	resp = new(pbj.EndpointResponse)
+	resp.Address = new(pbj.Address)
+	if e1.clearNetConfig.Ipv4 != nil {
+		resp.Address.Ipv4 = e1.clearNetConfig.Ipv4.String()
+	} else {
+		resp.Address.Ipv4 = ""
+	}
+	if e1.clearNetConfig.Ipv6 != nil {
+		resp.Address.Ipv6 = e1.clearNetConfig.Ipv6.String()
+	} else {
+		resp.Address.Ipv6 = ""
+	}
+	resp.Address.Port = uint32(e1.clearNetConfig.Port)
+	return
 }

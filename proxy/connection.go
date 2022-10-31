@@ -12,36 +12,11 @@ import (
 	sgo "github.com/SolmateDev/solana-go"
 	"github.com/cretz/bine/tor"
 	log "github.com/sirupsen/logrus"
-	pipe "github.com/solpipe/solpipe-tool/state/pipeline"
+	pbj "github.com/solpipe/solpipe-tool/proto/job"
 	"github.com/solpipe/solpipe-tool/util"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials"
 )
-
-func CreateConnectionToPipelineTor(
-	ctx context.Context,
-	pipeline pipe.Pipeline,
-	t1 *tor.Tor,
-) (conn *grpc.ClientConn, err error) {
-	if t1 == nil {
-		err = errors.New("non-tor connections are not supported")
-		return
-	}
-	log.Debugf("connecting over tor to pipeline=%s", pipeline.Id.String())
-	var dialer *tor.Dialer
-	dialer, err = t1.Dialer(ctx, nil)
-	if err != nil {
-		return
-	}
-	ctxC, cancel := context.WithTimeout(ctx, 1*time.Minute)
-	defer cancel()
-	conn, err = pipeline.Dial(ctxC, dialer)
-	if err != nil {
-		return
-	}
-	go loopCloseConnection(ctx, conn)
-	return
-}
 
 func loopCloseConnection(ctx context.Context, conn *grpc.ClientConn) {
 	<-ctx.Done()
@@ -152,4 +127,72 @@ func getTlsConfig(cert *tls.Certificate, destination sgo.PublicKey) *tls.Config 
 		InsecureSkipVerify: true,
 		ServerName:         destination.String(),
 	}
+}
+
+// connect via tor first, then see if there is a clear net connection
+func CreateConnectionTorClearIfAvailable(
+	ctx context.Context,
+	destination sgo.PublicKey, // must be admin of Pipeline or Validator
+	admin sgo.PrivateKey,
+	torMgr *tor.Tor,
+) (conn *grpc.ClientConn, err error) {
+	c, err := CreateConnectionTor(ctx, destination, admin, torMgr)
+	if err != nil {
+		return nil, err
+	}
+
+	resp, err := pbj.NewEndpointClient(c).GetClearNetAddress(ctx, &pbj.EndpointRequest{})
+	if err != nil {
+		// we are stuck with tor since there is no clear net endpoint
+		return c, nil
+	}
+	if resp == nil {
+		log.Debug("no response")
+		return c, nil
+	}
+	if resp.Address == nil {
+		log.Debug("no response")
+		return c, nil
+	}
+	if len(resp.Address.Ipv4) == 0 && len(resp.Address.Ipv6) == 0 {
+		log.Debug("blank ipv4 and ipv6")
+		return c, nil
+	}
+
+	// try ipv6
+	if 0 < len(resp.Address.Ipv6) {
+		newC, err := CreateConnectionClearNet(
+			ctx,
+			destination,
+			fmt.Sprintf("%s:%d", resp.Address.Ipv6, resp.Address.Port),
+			admin,
+		)
+		if err == nil {
+			_, err = pbj.NewEndpointClient(newC).GetClearNetAddress(ctx, &pbj.EndpointRequest{})
+			if err == nil {
+				c.Close()
+				return newC, nil
+			}
+		} else {
+			log.Debug(err)
+		}
+	}
+	{
+		newC, err := CreateConnectionClearNet(
+			ctx,
+			destination,
+			fmt.Sprintf("%s:%d", resp.Address.Ipv4, resp.Address.Port),
+			admin,
+		)
+		if err == nil {
+			_, err = pbj.NewEndpointClient(newC).GetClearNetAddress(ctx, &pbj.EndpointRequest{})
+			if err == nil {
+				c.Close()
+				return newC, nil
+			}
+		} else {
+			log.Debug(err)
+		}
+	}
+	return c, nil
 }

@@ -3,14 +3,14 @@ package main
 import (
 	"errors"
 
+	sgo "github.com/SolmateDev/solana-go"
+	sgorpc "github.com/SolmateDev/solana-go/rpc"
+	bin "github.com/gagliardetto/binary"
 	bdr "github.com/solpipe/solpipe-tool/agent/bidder"
 	"github.com/solpipe/solpipe-tool/proxy/relay"
 	ctr "github.com/solpipe/solpipe-tool/state/controller"
 	ntk "github.com/solpipe/solpipe-tool/state/network"
 	rtr "github.com/solpipe/solpipe-tool/state/router"
-	sgo "github.com/SolmateDev/solana-go"
-	sgorpc "github.com/SolmateDev/solana-go/rpc"
-	bin "github.com/gagliardetto/binary"
 
 	sgotkn2 "github.com/SolmateDev/solana-go/programs/token"
 )
@@ -47,6 +47,7 @@ func (r *BidderAgent) Run(kongCtx *CLIContext) error {
 		kongCtx.Clients.WsUrl,
 		kongCtx.Clients.Headers.Clone(),
 		"",
+		nil,
 	)
 
 	rpcClient := relayConfig.Rpc()

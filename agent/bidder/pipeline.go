@@ -63,7 +63,7 @@ func (in *internal) on_pipeline(p pipe.Pipeline) {
 	pi := &pipelineInfo{p: p, status: nil, pleaseConnectC: pleaseConnectC, lastDuration: 0}
 	in.pipelines[p.Id.String()] = pi
 	pleaseConnectC <- struct{}{}
-	go loopPipelineConnection(in.ctx, pleaseConnectC, in.connC, p, in.tor)
+	go loopPipelineConnection(in.ctx, pleaseConnectC, in.connC, p, in.bidder, in.tor)
 	go loopBidUpdate(in.ctx, p, in.errorC, in.bidListC)
 	go loopPeriodUpdate(in.ctx, p, in.errorC, in.periodRingC)
 	go loopUpdateRelativeStake(in.ctx, in.errorC, in.updateChangeActiveStakeC, p)
@@ -136,28 +136,49 @@ type pipelineConnectionStatus struct {
 	err  error
 }
 
-// connect in a separate goroutine as this takes quite some time
+// connecting in a separate goroutine as this takes quite some time
 func loopPipelineConnection(
 	ctx context.Context,
 	pleaseConnectC <-chan struct{},
 	statusC chan<- pipelineConnectionStatus,
 	p pipe.Pipeline,
+	bidderKey sgo.PrivateKey,
 	t1 *tor.Tor,
 ) {
 	doneC := ctx.Done()
 	var conn *grpc.ClientConn
 	var err error
 	id := p.Id
+	dataSub := p.OnData()
+	defer dataSub.Unsubscribe()
+	data, err := p.Data()
+	if err != nil {
+		statusC <- pipelineConnectionStatus{
+			id:  p.Id,
+			err: err,
+		}
+		return
+	}
+	admin := data.Admin
 
 out:
 	for {
 		select {
+		case err = <-dataSub.ErrorC:
+			break out
+		case x := <-dataSub.StreamC:
+			admin = x.Admin
 		case <-doneC:
 			break out
 		case <-pleaseConnectC:
 			ctxC, cancel := context.WithTimeout(ctx, 3*time.Minute)
 			defer cancel()
-			conn, err = proxy.CreateConnectionToPipelineTor(ctxC, p, t1)
+			conn, err = proxy.CreateConnectionTorClearIfAvailable(
+				ctxC,
+				admin,
+				bidderKey,
+				t1,
+			)
 			if err != nil {
 				log.Debugf("failed to connect to pipeline=%s with err: %s", p.Id.String(), err.Error())
 			} else {

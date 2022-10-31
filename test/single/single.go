@@ -4,14 +4,15 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"net"
 	"net/http"
 	"os"
 
+	sgo "github.com/SolmateDev/solana-go"
 	cba "github.com/solpipe/cba"
 	"github.com/solpipe/solpipe-tool/proxy/relay"
 	"github.com/solpipe/solpipe-tool/script"
 	vrs "github.com/solpipe/solpipe-tool/state/version"
-	sgo "github.com/SolmateDev/solana-go"
 )
 
 type SingleSandbox struct {
@@ -22,9 +23,11 @@ type SingleSandbox struct {
 	MintAuthority           sgo.PrivateKey
 	Validator               sgo.PrivateKey
 	ValidatorAdmin          sgo.PrivateKey
+	ValidatorClearNet       *relay.ClearNetListenConfig
 	Vote                    sgo.PrivateKey
 	Pipeline                sgo.PrivateKey // needed to get the pipeline Id via PublicKey()
 	PipelineAdmin           sgo.PrivateKey
+	PipelineClearNet        *relay.ClearNetListenConfig
 	Bidder                  []sgo.PrivateKey
 	BidderConfigFilePath    []string
 	Cranker                 sgo.PrivateKey
@@ -42,6 +45,7 @@ func (s *SingleSandbox) CrankerConfig() relay.Configuration {
 		s.wsUrl,
 		http.Header{},
 		"",
+		nil,
 	)
 }
 
@@ -56,6 +60,7 @@ func (s *SingleSandbox) BidderConfig(i int) (relay.Configuration, error) {
 		s.wsUrl,
 		http.Header{},
 		"",
+		nil,
 	), nil
 }
 
@@ -67,6 +72,7 @@ func (s *SingleSandbox) PipelineConfig() relay.Configuration {
 		s.wsUrl,
 		http.Header{},
 		s.pipelineAdminListenUrl,
+		s.PipelineClearNet,
 	)
 }
 func (s *SingleSandbox) ValidatorConfig() relay.Configuration {
@@ -77,6 +83,7 @@ func (s *SingleSandbox) ValidatorConfig() relay.Configuration {
 		s.wsUrl,
 		http.Header{},
 		s.validatorAdminListenUrl,
+		s.ValidatorClearNet,
 	)
 }
 
@@ -174,6 +181,17 @@ func Load(ctx context.Context) (*SingleSandbox, error) {
 	ans.rpcUrl = "http://127.0.0.1:8899"
 	ans.wsUrl = "ws://127.0.0.1:8900"
 	ans.Version = vrs.VERSION_1
+
+	ans.PipelineClearNet = &relay.ClearNetListenConfig{
+		Port: 50051,
+		Ipv4: net.IPv4(127, 0, 0, 1),
+		Ipv6: nil,
+	}
+	ans.ValidatorClearNet = &relay.ClearNetListenConfig{
+		Port: 50052,
+		Ipv4: net.IPv4(127, 0, 0, 1),
+		Ipv6: nil,
+	}
 	return ans, nil
 }
 

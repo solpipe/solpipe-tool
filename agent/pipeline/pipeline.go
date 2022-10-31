@@ -4,6 +4,7 @@ package pipeline
 import (
 	"context"
 	"errors"
+	"fmt"
 	"net"
 
 	"github.com/cretz/bine/tor"
@@ -33,6 +34,7 @@ func Create(
 	router rtr.Router,
 	pipeline pipe.Pipeline,
 ) (Agent, error) {
+
 	var err error
 	controller := router.Controller
 	ctx, cancel := context.WithCancel(ctxOutside)
@@ -62,7 +64,6 @@ func Create(
 	errorC := make(chan error, 5)
 	config := args.Program
 
-	grpcMainServer := grpc.NewServer()
 	grpcAdminServer := grpc.NewServer()
 	tpsUpdateErrorC := make(chan error, 1)
 	torMgr, err := proxy.SetupTor(ctx, false)
@@ -73,16 +74,48 @@ func Create(
 	go loopCloseTor(ctx, torMgr)
 
 	// listen on the tor onion address
-	torListener, err := proxy.CreateListenerDeprecated(
+	var grpcServerTor *grpc.Server
+	var grpcServerClearNet *grpc.Server
+	var torLi *proxy.ListenerInfo
+	var clearLi *proxy.ListenerInfo
+	grpcServerTor, err = proxy.CreateListener(
+		ctx,
+		args.Admin(),
+	)
+	if err != nil {
+		cancel()
+		return Agent{}, err
+	}
+	torLi, err = proxy.CreateListenerTor(
 		ctx,
 		args.Relay.Admin,
-		&proxy.ServerConfiguration{},
 		torMgr,
 	)
 	if err != nil {
 		cancel()
 		return Agent{}, err
 	}
+	if args.Relay.ClearNet != nil {
+		grpcServerClearNet, err = proxy.CreateListener(
+			ctx,
+			args.Admin(),
+		)
+		if err != nil {
+			cancel()
+			return Agent{}, err
+		}
+		clearLi, err = proxy.CreateListenerClearNet(
+			ctx,
+			fmt.Sprintf(":%d", args.Relay.ClearNet.Port),
+			[]string{"this part is not relavent"},
+		)
+		if err != nil {
+			cancel()
+			return Agent{}, err
+		}
+
+	}
+
 	go loopStopOnError(ctx, cancel, tpsUpdateErrorC)
 	rpcClient := args.Relay.Rpc()
 	wsClient, err := args.Relay.Ws(ctx)
@@ -117,33 +150,59 @@ func Create(
 			}
 		}()
 	}
-
+	pipelineRelay, err := pxypipe.Create(
+		ctx,
+		*args.Relay,
+		router,
+		pipeline,
+	)
+	// handle tor listener
 	{
 
-		pipelineRelay, err := pxypipe.Create(
+		if err != nil {
+			cancel()
+			return Agent{}, err
+		}
+
+		err = pxysvr.Attach(
 			ctx,
-			*args.Relay,
+			grpcServerTor,
 			router,
-			pipeline,
+			args.Admin(),
+			pipelineRelay,
+			args.Relay.ClearNet,
 		)
 		if err != nil {
 			cancel()
 			return Agent{}, err
 		}
-		err = pxysvr.Attach(ctx, grpcMainServer, router, args.Admin(), pipelineRelay)
+		go loopClose(ctx, torLi.Listener)
+		reflection.Register(grpcServerTor)
+		go loopListen(grpcServerTor, torLi.Listener, errorC)
+	}
+	// handle clearnet
+	if grpcServerClearNet != nil {
+		log.Debug("setting up clear net listener")
 		if err != nil {
 			cancel()
 			return Agent{}, err
 		}
+		err = pxysvr.Attach(
+			ctx,
+			grpcServerClearNet,
+			router,
+			args.Admin(),
+			pipelineRelay,
+			args.Relay.ClearNet,
+		)
+		if err != nil {
+			cancel()
+			return Agent{}, err
+		}
+		go loopClose(ctx, clearLi.Listener)
+		reflection.Register(grpcServerClearNet)
+		go loopListen(grpcServerClearNet, clearLi.Listener, errorC)
 	}
-	if err != nil {
-		errorC <- err
-		return Agent{}, err
-	}
-
-	go loopClose(ctx, torListener)
-	reflection.Register(grpcMainServer)
-	go loopListen(grpcMainServer, torListener, errorC)
 
 	go loopClose(ctx, adminListener)
 	reflection.Register(grpcAdminServer)

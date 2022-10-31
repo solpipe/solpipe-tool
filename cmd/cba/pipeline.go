@@ -7,13 +7,13 @@ import (
 	"strconv"
 	"strings"
 
+	sgo "github.com/SolmateDev/solana-go"
+	log "github.com/sirupsen/logrus"
 	cba "github.com/solpipe/cba"
 	ap "github.com/solpipe/solpipe-tool/agent/pipeline"
 	"github.com/solpipe/solpipe-tool/proxy/relay"
 	"github.com/solpipe/solpipe-tool/state"
 	pipe "github.com/solpipe/solpipe-tool/state/pipeline"
-	sgo "github.com/SolmateDev/solana-go"
-	log "github.com/sirupsen/logrus"
 )
 
 type Pipeline struct {
@@ -84,6 +84,7 @@ func (r *PipelineAgent) Run(kongCtx *CLIContext) error {
 		kongCtx.Clients.WsUrl,
 		kongCtx.Clients.Headers.Clone(),
 		r.AdminUrl,
+		nil,
 	)
 	pipelineId, err := sgo.PublicKeyFromBase58(r.PipelineId)
 	if err != nil {
@@ -158,6 +159,7 @@ func (r *PipelineStatus) Run(kongCtx *CLIContext) error {
 		kongCtx.Clients.WsUrl,
 		kongCtx.Clients.Headers.Clone(),
 		"",
+		nil,
 	)
 	pipelineId, err := sgo.PublicKeyFromBase58(r.PipelineId)
 	if err != nil {

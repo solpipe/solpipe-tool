@@ -5,9 +5,9 @@ import (
 	"strconv"
 	"strings"
 
+	sgo "github.com/SolmateDev/solana-go"
 	"github.com/solpipe/solpipe-tool/proxy/relay"
 	"github.com/solpipe/solpipe-tool/state"
-	sgo "github.com/SolmateDev/solana-go"
 )
 
 type ConfigRate state.Rate
@@ -80,6 +80,7 @@ func (r *Validator) Run(kongCtx *CLIContext) error {
 		kongCtx.Clients.WsUrl,
 		kongCtx.Clients.Headers.Clone(),
 		"tcp://localhost:44332",
+		nil,
 	)
 
 	router, err := relayConfig.Router(ctx)

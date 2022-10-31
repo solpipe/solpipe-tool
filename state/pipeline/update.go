@@ -7,13 +7,13 @@ import (
 	log "github.com/sirupsen/logrus"
 	cba "github.com/solpipe/cba"
 	ll "github.com/solpipe/solpipe-tool/ds/list"
-	sub2 "github.com/solpipe/solpipe-tool/ds/sub"
+	dssub "github.com/solpipe/solpipe-tool/ds/sub"
 	pyt "github.com/solpipe/solpipe-tool/state/payout"
 	val "github.com/solpipe/solpipe-tool/state/validator"
 )
 
 type validatorStakeSub struct {
-	sub    sub2.Subscription[val.StakeStatus]
+	sub    dssub.Subscription[val.StakeStatus]
 	status *val.StakeStatus
 	start  uint64
 	finish uint64
@@ -274,16 +274,21 @@ func loopDeletePayout(ctx context.Context, finishC chan<- payoutFinish, errorC c
 
 }
 
+// get the current admin
+func (e1 Pipeline) OnData() dssub.Subscription[cba.Pipeline] {
+	return dssub.SubscriptionRequest(e1.updatePipelineC, func(p cba.Pipeline) bool { return true })
+}
+
 // get the currently active payout
-func (e1 Pipeline) OnPayout() sub2.Subscription[PayoutWithData] {
-	return sub2.SubscriptionRequest(e1.updatePayoutC, func(p PayoutWithData) bool { return true })
+func (e1 Pipeline) OnPayout() dssub.Subscription[PayoutWithData] {
+	return dssub.SubscriptionRequest(e1.updatePayoutC, func(p PayoutWithData) bool { return true })
 }
 
 // get alerted when a new period has been appended
 // The payout and period change together.
-func (e1 Pipeline) OnPeriod() sub2.Subscription[cba.PeriodRing] {
+func (e1 Pipeline) OnPeriod() dssub.Subscription[cba.PeriodRing] {
 
-	return sub2.SubscriptionRequest(e1.updatePeriodRingC, func(p cba.PeriodRing) bool { return true })
+	return dssub.SubscriptionRequest(e1.updatePeriodRingC, func(p cba.PeriodRing) bool { return true })
 }
 
 func (in *internal) on_period(ring cba.PeriodRing) {

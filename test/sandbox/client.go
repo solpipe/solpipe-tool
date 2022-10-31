@@ -9,15 +9,15 @@ import (
 	"os"
 	"time"
 
+	sgo "github.com/SolmateDev/solana-go"
+	sgorpc "github.com/SolmateDev/solana-go/rpc"
+	sgows "github.com/SolmateDev/solana-go/rpc/ws"
 	pbt "github.com/solpipe/solpipe-tool/proto/test"
 	"github.com/solpipe/solpipe-tool/proxy/relay"
 	ctr "github.com/solpipe/solpipe-tool/state/controller"
 	ntk "github.com/solpipe/solpipe-tool/state/network"
 	rtr "github.com/solpipe/solpipe-tool/state/router"
 	vrs "github.com/solpipe/solpipe-tool/state/version"
-	sgo "github.com/SolmateDev/solana-go"
-	sgorpc "github.com/SolmateDev/solana-go/rpc"
-	sgows "github.com/SolmateDev/solana-go/rpc/ws"
 	"google.golang.org/grpc"
 )
 
@@ -175,6 +175,7 @@ func (e1 *TestChild) RelayConfig(admin sgo.PrivateKey) relay.Configuration {
 		e1.WsUrl,
 		e1.Headers.Clone(),
 		e1.AdminListenUrl,
+		nil,
 	)
 }
 

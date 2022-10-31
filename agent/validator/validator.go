@@ -3,6 +3,7 @@ package validator
 import (
 	"context"
 	"errors"
+	"fmt"
 	"net"
 	"time"
 
@@ -126,7 +127,7 @@ func loopListener(
 		return
 	}
 	agentC <- a
-	return
+
 }
 
 func Create(
@@ -153,11 +154,55 @@ func Create(
 		cancel()
 		return
 	}
-	mainListener, err := proxy.CreateListenerDeprecated(ctx2, config.Admin, nil, t1)
+
+	var grpcServerTor *grpc.Server
+	var grpcServerClearNet *grpc.Server
+	var torLi *proxy.ListenerInfo
+	var clearLi *proxy.ListenerInfo
+	grpcServerTor, err = proxy.CreateListener(
+		ctx,
+		config.Admin,
+	)
 	if err != nil {
 		cancel()
-		return
+		return Agent{}, err
 	}
+	torMgr, err := proxy.SetupTor(ctx, false)
+	if err != nil {
+		cancel()
+		return Agent{}, err
+	}
+	torLi, err = proxy.CreateListenerTor(
+		ctx,
+		config.Admin,
+		torMgr,
+	)
+	if err != nil {
+		cancel()
+		return Agent{}, err
+	}
+	if config.ClearNet != nil {
+		grpcServerClearNet, err = proxy.CreateListener(
+			ctx,
+			config.Admin,
+		)
+		if err != nil {
+			cancel()
+			return Agent{}, err
+		}
+
+		clearLi, err = proxy.CreateListenerClearNet(
+			ctx,
+			fmt.Sprintf(":%d", config.ClearNet.Port),
+			[]string{"this part is not relavent"},
+		)
+		if err != nil {
+			cancel()
+			return Agent{}, err
+		}
+
+	}
+
 	rpcClient := config.Rpc()
 	wsClient, err := config.Ws(ctx2)
 	if err != nil {
@@ -165,8 +210,7 @@ func Create(
 		return
 	}
 	//rpcClient *sgorpc.Client, wsClient *sgows.Client
-	grpcMainServer := grpc.NewServer()
-	grpcAdminServer := grpc.NewServer()
+
 	script, err := config.ScriptBuilder(ctx)
 	if err != nil {
 		cancel()
@@ -183,18 +227,31 @@ func Create(
 		return
 	}
 
-	// server to process Transaction Submissions
-	err = pxysvr.Attach(ctx, grpcMainServer, router, config.Admin, relay)
-	if err != nil {
-		cancel()
-		return
-	}
-	serverErrorC := make(chan error, 2)
 	internalC := make(chan func(*internal), 10)
+	serverErrorC := make(chan error, 4)
+	// handle tor listener
+	{
+		err = pxysvr.Attach(ctx, grpcServerTor, router, config.Admin, relay, config.ClearNet)
+		if err != nil {
+			cancel()
+			return
+		}
 
-	reflection.Register(grpcMainServer)
-	go loopGrpcListen(ctx2, mainListener, grpcMainServer, serverErrorC)
-	go loopGrpcShutdown(ctx2, t1, mainListener, grpcMainServer)
+		reflection.Register(grpcServerTor)
+		go loopGrpcListen(ctx2, torLi.Listener, grpcServerTor, serverErrorC)
+		go loopGrpcShutdown(ctx2, t1, torLi.Listener, grpcServerTor)
+	}
+	if grpcServerClearNet != nil {
+		err = pxysvr.Attach(ctx, grpcServerClearNet, router, config.Admin, relay, config.ClearNet)
+		if err != nil {
+			cancel()
+			return
+		}
+
+		reflection.Register(grpcServerClearNet)
+		go loopGrpcListen(ctx2, clearLi.Listener, grpcServerClearNet, serverErrorC)
+		go loopGrpcShutdown(ctx2, t1, clearLi.Listener, grpcServerClearNet)
+	}
 
 	go loopInternal(
 		ctx2,
@@ -217,7 +274,7 @@ func Create(
 		Vote:       data.Vote,
 		Validator:  validator,
 	}
-
+	grpcAdminServer := grpc.NewServer()
 	err = agent.AttachAdmin(grpcAdminServer)
 	if err != nil {
 		cancel()

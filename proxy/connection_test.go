@@ -35,7 +35,7 @@ func TestClearNet(t *testing.T) {
 
 	{
 		var l net.Listener
-		innerListener, err := proxy.CreateListenerLocal(
+		innerListener, err := proxy.CreateListenerClearNet(
 			ctx,
 			fmt.Sprintf("0.0.0.0:%d", port),
 			[]string{address},

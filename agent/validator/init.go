@@ -6,12 +6,12 @@ import (
 	"net/http"
 	"time"
 
+	sgo "github.com/SolmateDev/solana-go"
+	sgorpc "github.com/SolmateDev/solana-go/rpc"
 	"github.com/solpipe/solpipe-tool/proxy/relay"
 	"github.com/solpipe/solpipe-tool/script"
 	rtr "github.com/solpipe/solpipe-tool/state/router"
 	vrs "github.com/solpipe/solpipe-tool/state/version"
-	sgo "github.com/SolmateDev/solana-go"
-	sgorpc "github.com/SolmateDev/solana-go/rpc"
 )
 
 type InitializationArg struct {
@@ -28,6 +28,7 @@ type InitializationArg struct {
 }
 
 func (args *InitializationArg) RelayConfig() relay.Configuration {
+
 	return relay.CreateConfiguration(
 		args.Version,
 		args.Admin,
@@ -35,6 +36,7 @@ func (args *InitializationArg) RelayConfig() relay.Configuration {
 		args.WsUrl,
 		args.Headers,
 		args.AdminListenUrl,
+		nil,
 	)
 }
 

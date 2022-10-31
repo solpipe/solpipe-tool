@@ -6,6 +6,8 @@ import (
 	"testing"
 	"time"
 
+	sgo "github.com/SolmateDev/solana-go"
+	log "github.com/sirupsen/logrus"
 	ak "github.com/solpipe/solpipe-tool/agent/cranker"
 	"github.com/solpipe/solpipe-tool/proxy/relay"
 	ctr "github.com/solpipe/solpipe-tool/state/controller"
@@ -13,8 +15,6 @@ import (
 	rtr "github.com/solpipe/solpipe-tool/state/router"
 	"github.com/solpipe/solpipe-tool/state/sub"
 	"github.com/solpipe/solpipe-tool/test/sandbox"
-	sgo "github.com/SolmateDev/solana-go"
-	log "github.com/sirupsen/logrus"
 )
 
 func TestCranker(t *testing.T) {
@@ -41,6 +41,7 @@ func TestCranker(t *testing.T) {
 		child.WsUrl,
 		http.Header{},
 		"",
+		nil,
 	)
 
 	all, err := sub.FetchProgramAll(ctx, child.Rpc, child.Version)

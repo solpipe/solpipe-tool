@@ -6,10 +6,10 @@ import (
 	"strconv"
 	"strings"
 
+	sgo "github.com/SolmateDev/solana-go"
 	"github.com/solpipe/solpipe-tool/proxy/relay"
 	"github.com/solpipe/solpipe-tool/state"
 	ctr "github.com/solpipe/solpipe-tool/state/controller"
-	sgo "github.com/SolmateDev/solana-go"
 )
 
 type Controller struct {
@@ -36,6 +36,7 @@ func (r *ControllerStatus) Run(kongCtx *CLIContext) error {
 		kongCtx.Clients.WsUrl,
 		kongCtx.Clients.Headers.Clone(),
 		"",
+		nil,
 	)
 
 	rpcClient := relayConfig.Rpc()
@@ -115,6 +116,7 @@ func (r *ControllerCreate) Run(kongCtx *CLIContext) error {
 		kongCtx.Clients.WsUrl,
 		kongCtx.Clients.Headers.Clone(),
 		"",
+		nil,
 	)
 	s1, err := relayConfig.ScriptBuilder(ctx)
 	if err != nil {

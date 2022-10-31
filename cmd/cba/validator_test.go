@@ -7,6 +7,9 @@ import (
 	"testing"
 	"time"
 
+	sgo "github.com/SolmateDev/solana-go"
+	"github.com/cretz/bine/tor"
+	log "github.com/sirupsen/logrus"
 	agentVal "github.com/solpipe/solpipe-tool/agent/validator"
 	valadmin "github.com/solpipe/solpipe-tool/agent/validator/admin"
 	pbt "github.com/solpipe/solpipe-tool/proto/test"
@@ -15,9 +18,6 @@ import (
 	rtr "github.com/solpipe/solpipe-tool/state/router"
 	"github.com/solpipe/solpipe-tool/test/sandbox"
 	"github.com/solpipe/solpipe-tool/util"
-	sgo "github.com/SolmateDev/solana-go"
-	"github.com/cretz/bine/tor"
-	log "github.com/sirupsen/logrus"
 )
 
 func TestValidator(t *testing.T) {
@@ -169,14 +169,6 @@ func TestValidator(t *testing.T) {
 }
 
 func dialPipeline(ctx context.Context, pipeline pipe.Pipeline, torMgr *tor.Tor) (err error) {
-	dialer, err := torMgr.Dialer(ctx, nil)
-	if err != nil {
-		return
-	}
-	_, err = pipeline.Dial(ctx, dialer)
-	if err != nil {
-		return
-	}
 
 	err = errors.New("not implemented yet")
 	return

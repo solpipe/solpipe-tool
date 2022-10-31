@@ -1,13 +1,13 @@
 package main
 
 import (
+	sgo "github.com/SolmateDev/solana-go"
+	log "github.com/sirupsen/logrus"
 	ckr "github.com/solpipe/solpipe-tool/agent/cranker"
 	"github.com/solpipe/solpipe-tool/proxy/relay"
 	ctr "github.com/solpipe/solpipe-tool/state/controller"
 	ntk "github.com/solpipe/solpipe-tool/state/network"
 	rtr "github.com/solpipe/solpipe-tool/state/router"
-	sgo "github.com/SolmateDev/solana-go"
-	log "github.com/sirupsen/logrus"
 )
 
 type Cranker struct {
@@ -32,6 +32,7 @@ func (r *Cranker) Run(kongCtx *CLIContext) error {
 		string(kongCtx.Clients.WsUrl),
 		kongCtx.Clients.Headers.Clone(),
 		"",
+		nil,
 	)
 
 	rpcClient := relayConfig.Rpc()
