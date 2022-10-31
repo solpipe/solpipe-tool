@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"net"
 	"testing"
+	"time"
 
 	sgo "github.com/SolmateDev/solana-go"
 	log "github.com/sirupsen/logrus"
@@ -13,6 +14,118 @@ import (
 	"github.com/solpipe/solpipe-tool/proxy/relay"
 	"google.golang.org/grpc"
 )
+
+func TestTor(t *testing.T) {
+	log.SetLevel(log.DebugLevel)
+	ctx, cancel := context.WithCancel(context.Background())
+	t.Cleanup(func() {
+		cancel()
+		time.Sleep(30 * time.Second)
+	})
+	{
+		closeListener, err := net.Listen("tcp", ":3003")
+		if err != nil {
+			return
+		}
+		cancelCopy := cancel
+		go func() {
+			closeListener.Accept()
+			cancelCopy()
+		}()
+		doneC := ctx.Done()
+		go func() {
+			<-doneC
+			closeListener.Close()
+		}()
+	}
+	pipeline, err := sgo.NewRandomPrivateKey()
+	if err != nil {
+		t.Fatal(err)
+	}
+	bidder, err := sgo.NewRandomPrivateKey()
+	if err != nil {
+		t.Fatal(err)
+	}
+	errorC := make(chan error, 1)
+
+	{
+		torMgr, err := proxy.SetupTor(ctx, false)
+		if err != nil {
+			t.Fatal(err)
+		}
+
+		innerListener, err := proxy.CreateListenerTor(
+			ctx,
+			pipeline,
+			torMgr,
+		)
+		if err != nil {
+			t.Fatal(err)
+		}
+
+		var s *grpc.Server
+		s, err = proxy.CreateListener(
+			ctx,
+			pipeline,
+			innerListener,
+		)
+		if err != nil {
+			t.Fatal(err)
+		}
+
+		attach(ctx, s)
+
+		go loopListenClose(ctx, innerListener.Listener)
+		go loopListen(errorC, innerListener.Listener, s)
+
+	}
+
+	go func() {
+		torMgr, err := proxy.SetupTor(ctx, false)
+		if err != nil {
+			errorC <- err
+			return
+		}
+		time.Sleep(2 * time.Minute)
+		var conn *grpc.ClientConn
+		log.Debug("connecting to tor")
+		conn, err = proxy.CreateConnectionTor(
+			ctx,
+			pipeline.PublicKey(),
+			bidder,
+			torMgr,
+		)
+		if err != nil {
+			errorC <- err
+			return
+		}
+
+		time.Sleep(2 * time.Minute)
+		client := pbj.NewEndpointClient(conn)
+		log.Debug("starting client")
+		//time.Sleep(10 * time.Minute)
+		resp, err := client.GetClearNetAddress(ctx, &pbj.EndpointRequest{
+			Certificate: []byte{},
+			Pubkey:      []byte{},
+			Nonce:       []byte{},
+			Signature:   []byte{},
+		})
+		if err != nil {
+			errorC <- err
+			return
+		}
+		log.Debugf("resp=%+v", resp)
+		cancel()
+	}()
+
+	select {
+	case <-ctx.Done():
+	case err = <-errorC:
+		if err != nil {
+			t.Fatal(err)
+		}
+	}
+}
 
 func TestClearNet(t *testing.T) {
 	log.SetLevel(log.DebugLevel)

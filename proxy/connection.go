@@ -77,19 +77,14 @@ func CreateConnectionTor(
 	if err != nil {
 		return
 	}
-	conifg := &tls.Config{
-		Certificates: []tls.Certificate{*y},
-		VerifyPeerCertificate: func(rawCerts [][]byte, verifiedChains [][]*x509.Certificate) error {
-			return verify(destination, rawCerts, verifiedChains)
-		},
-	}
 
 	// the onion address goes here
 	return grpc.DialContext(
 		ctx,
 		fmt.Sprintf("%s.onion:%d", onionID, util.DEFAULT_PROXY_PORT),
-		grpc.WithBlock(),
-		grpc.WithTransportCredentials(credentials.NewTLS(conifg)),
+		grpc.WithTransportCredentials(credentials.NewTLS(getTlsConfig(
+			y, destination,
+		))),
 		grpc.WithContextDialer(func(ctxInside context.Context, addr string) (net.Conn, error) {
 			return dialer.DialContext(ctxInside, "tcp", addr)
 		}),
@@ -117,34 +112,9 @@ func CreateConnectionClearNet(
 		ctxC,
 		destinationUrl,
 		//grpc.WithTransportCredentials(insecure.NewCredentials()),
-		grpc.WithTransportCredentials(credentials.NewTLS(&tls.Config{
-			Certificates: []tls.Certificate{*y},
-			VerifyConnection: func(cs tls.ConnectionState) error {
-				log.Debugf("client cs=%+v", cs)
-				chain := cs.PeerCertificates
-				if len(chain) != 2 {
-					return errors.New("bad ca")
-				}
-				// leaf is ephemeral keypair
-				certPool := x509.NewCertPool()
-				certPool.AddCert(chain[1])
-				_, err2 := chain[0].Verify(x509.VerifyOptions{
-					Roots: certPool,
-				})
-				if err2 != nil {
-					return err2
-				}
-
-				if !VerifyCaWithx509(chain[1], destination) {
-					return errors.New("destination pubkey does not match certificate")
-				}
-				return nil
-			},
-			InsecureSkipVerify: true,
-			// very ugly hack so that the server will see what root CA to add for this connection
-			//ServerName: string(serializeCertDerToPem(y.Certificate[1])),
-			ServerName: destination.String(),
-		}),
+		grpc.WithTransportCredentials(credentials.NewTLS(getTlsConfig(
+			y, destination,
+		)),
 		),
 		//grpc.WithBlock(),
 	)
@@ -154,4 +124,35 @@ func CreateConnectionClearNet(
 
 	go loopCloseConnection(ctx, conn)
 	return
+}
+
+func getTlsConfig(cert *tls.Certificate, destination sgo.PublicKey) *tls.Config {
+	return &tls.Config{
+		Certificates: []tls.Certificate{*cert},
+		VerifyConnection: func(cs tls.ConnectionState) error {
+			log.Debugf("client cs=%+v", cs)
+			chain := cs.PeerCertificates
+			if len(chain) != 2 {
+				return errors.New("bad ca")
+			}
+			// leaf is ephemeral keypair
+			certPool := x509.NewCertPool()
+			certPool.AddCert(chain[1])
+			_, err2 := chain[0].Verify(x509.VerifyOptions{
+				Roots: certPool,
+			})
+			if err2 != nil {
+				return err2
+			}
+
+			if !VerifyCaWithx509(chain[1], destination) {
+				return errors.New("destination pubkey does not match certificate")
+			}
+			return nil
+		},
+		InsecureSkipVerify: true,
+		// very ugly hack so that the server will see what root CA to add for this connection
+		//ServerName: string(serializeCertDerToPem(y.Certificate[1])),
+		ServerName: destination.String(),
+	}
 }
