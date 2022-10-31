@@ -1,13 +1,6 @@
 package proxy_test
 
-import (
-	"testing"
-	"time"
-
-	sgo "github.com/SolmateDev/solana-go"
-	"github.com/solpipe/solpipe-tool/proxy"
-)
-
+/*
 func TestTls(t *testing.T) {
 
 	key1, err := sgo.NewRandomPrivateKey()
@@ -31,3 +24,4 @@ func TestTls(t *testing.T) {
 	}
 
 }
+*/

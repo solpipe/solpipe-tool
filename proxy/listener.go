@@ -16,50 +16,69 @@ import (
 	"github.com/cretz/bine/tor"
 	log "github.com/sirupsen/logrus"
 	"github.com/solpipe/solpipe-tool/util"
+	"google.golang.org/grpc"
+	"google.golang.org/grpc/credentials"
 )
 
 func CreateListener(
 	ctx context.Context,
 	admin sgo.PrivateKey,
 	innerListener *ListenerInfo,
-) (l net.Listener, err error) {
+) (s *grpc.Server, err error) {
 
 	if innerListener == nil {
 		err = errors.New("no listener")
 		return
 	}
 
-	var x *TlsForServer
-	x, err = NewSelfSignedTlsCertificateChainServer(
+	var y *tls.Certificate
+	y, err = NewSelfSignedTlsCertificateChainServer(
 		admin,
 		innerListener.Addresses,
 		time.Now().Add(7*24*time.Hour),
 	)
 	if err != nil {
-		return nil, err
-	}
-	var y tls.Certificate
-	y, err = x.CertAndKey()
-	if err != nil {
-		return nil, err
+		grpc.WithReturnConnectionError()
 	}
 
-	l = tls.NewListener(
-		innerListener.Listener,
-		&tls.Config{
-			Certificates: []tls.Certificate{y},
-			VerifyPeerCertificate: func(rawCerts [][]byte, verifiedChains [][]*x509.Certificate) error {
-				// return always true
-				// we assume that the self-signed certificates have valid signatures
-				// and that the PublicKey will return a valid public key
-				return nil
-			},
-			VerifyConnection: func(cs tls.ConnectionState) error {
-				log.Debugf("cs=%+v", cs)
-				return nil
-			},
-			ClientAuth: tls.RequireAnyClientCert,
-		},
+	//locker := sync.RWMutex{}
+	verifyConnection := func(cs tls.ConnectionState) error {
+		log.Debugf("server cs=%+v", cs)
+
+		chain := cs.PeerCertificates
+		if len(chain) != 2 {
+			return errors.New("bad ca")
+		}
+		// leaf is ephemeral keypair
+		certPool := x509.NewCertPool()
+		certPool.AddCert(chain[1])
+		_, err2 := chain[0].Verify(x509.VerifyOptions{
+			Roots: certPool,
+		})
+		if err2 != nil {
+			return err2
+		}
+
+		return nil
+		//return errors.New("server stop me")
+	}
+
+	config := &tls.Config{
+		Certificates:     []tls.Certificate{*y},
+		VerifyConnection: verifyConnection,
+		ClientAuth:       tls.RequireAnyClientCert,
+	}
+
+	s = grpc.NewServer(
+		grpc.Creds(credentials.NewTLS(config)),
+		grpc.UnaryInterceptor(func(ctx2 context.Context, req interface{}, info *grpc.UnaryServerInfo, handler grpc.UnaryHandler) (resp interface{}, err error) {
+			log.Debugf("server unary=%+v", info)
+			return handler(ctx2, req)
+		}),
+		grpc.StreamInterceptor(func(srv interface{}, ss grpc.ServerStream, info *grpc.StreamServerInfo, handler grpc.StreamHandler) error {
+			log.Debugf("server stream=%+v", info)
+			return handler(srv, ss)
+		}),
 	)
 
 	return
@@ -135,8 +154,8 @@ func CreateListenerDeprecated(
 			err = errors.New("no config")
 			return
 		}
-		var x *TlsForServer
-		x, err = NewSelfSignedTlsCertificateChainServer(
+		var y *tls.Certificate
+		y, err = NewSelfSignedTlsCertificateChainServer(
 			admin,
 			config.dns_string(),
 			time.Now().Add(7*24*time.Hour),
@@ -144,14 +163,9 @@ func CreateListenerDeprecated(
 		if err != nil {
 			return nil, err
 		}
-		var y tls.Certificate
-		y, err = x.CertAndKey()
-		if err != nil {
-			return nil, err
-		}
 
 		return tls.Listen("tcp", fmt.Sprintf("0.0.0.0:%d", config.Port), &tls.Config{
-			Certificates: []tls.Certificate{y},
+			Certificates: []tls.Certificate{*y},
 		})
 		//l, err = net.Listen("tcp", fmt.Sprintf("0.0.0.0:%d", config.Port))
 	} else {

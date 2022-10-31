@@ -15,6 +15,7 @@ import (
 )
 
 func TestClearNet(t *testing.T) {
+	log.SetLevel(log.DebugLevel)
 	ctx, cancel := context.WithCancel(context.Background())
 	t.Cleanup(func() {
 		cancel()
@@ -42,7 +43,8 @@ func TestClearNet(t *testing.T) {
 			t.Fatal(err)
 		}
 
-		l, err = proxy.CreateListener(
+		var s *grpc.Server
+		s, err = proxy.CreateListener(
 			ctx,
 			pipeline,
 			innerListener,
@@ -50,9 +52,9 @@ func TestClearNet(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		s := grpc.NewServer()
-		attach(ctx, s)
 
+		attach(ctx, s)
+		l = innerListener.Listener
 		go loopListenClose(ctx, l)
 		go loopListen(errorC, l, s)
 
@@ -71,6 +73,7 @@ func TestClearNet(t *testing.T) {
 			return
 		}
 		client := pbj.NewEndpointClient(conn)
+		//time.Sleep(10 * time.Minute)
 		resp, err := client.GetClearNetAddress(ctx, &pbj.EndpointRequest{
 			Certificate: []byte{},
 			Pubkey:      []byte{},
@@ -117,6 +120,7 @@ func attach(ctx context.Context, s *grpc.Server) error {
 
 func (e1 external) GetClearNetAddress(ctx context.Context, req *pbj.EndpointRequest) (resp *pbj.EndpointResponse, err error) {
 	log.Debug("where am I stuck?")
+	log.Debugf("ctx=%+v", ctx)
 	pubkey, err := relay.GetPeerPubkey(ctx)
 	if err != nil {
 		return

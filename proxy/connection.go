@@ -68,13 +68,17 @@ func CreateConnectionTor(
 	}
 	log.Debugf("from client; destination=%s onion id=%s.onion:%d", destination.String(), onionID, util.DEFAULT_PROXY_PORT)
 
-	var clientCert *tls.Certificate
-	clientCert, err = createClientCert(admin)
+	var y *tls.Certificate
+	y, err = NewSelfSignedTlsCertificateChainServer(
+		admin,
+		[]string{"client"},
+		time.Now().Add(7*24*time.Hour),
+	)
 	if err != nil {
 		return
 	}
 	conifg := &tls.Config{
-		Certificates: []tls.Certificate{*clientCert},
+		Certificates: []tls.Certificate{*y},
 		VerifyPeerCertificate: func(rawCerts [][]byte, verifiedChains [][]*x509.Certificate) error {
 			return verify(destination, rawCerts, verifiedChains)
 		},
@@ -102,26 +106,28 @@ func CreateConnectionClearNet(
 	ctxC, cancel := context.WithTimeout(ctx, 1*time.Minute)
 	defer cancel()
 
-	var clientCert *tls.Certificate
-	clientCert, err = createClientCert(admin)
-	if err != nil {
-		return
-	}
+	var y *tls.Certificate
+	y, err = NewSelfSignedTlsCertificateChainServer(
+		admin,
+		[]string{"client"},
+		time.Now().Add(7*24*time.Hour),
+	)
 
 	conn, err = grpc.DialContext(
 		ctxC,
 		destinationUrl,
 		//grpc.WithTransportCredentials(insecure.NewCredentials()),
 		grpc.WithTransportCredentials(credentials.NewTLS(&tls.Config{
-			Certificates: []tls.Certificate{*clientCert},
-			VerifyPeerCertificate: func(rawCerts [][]byte, verifiedChains [][]*x509.Certificate) error {
-				return verify(destination, rawCerts, verifiedChains)
-			},
+			Certificates: []tls.Certificate{*y},
 			VerifyConnection: func(cs tls.ConnectionState) error {
-				log.Debugf("cs=%+v", cs)
+				log.Debugf("client cs=%+v", cs)
 				return nil
+				//return errors.New("stop me")
 			},
-			InsecureSkipVerify: false,
+			InsecureSkipVerify: true,
+			// very ugly hack so that the server will see what root CA to add for this connection
+			//ServerName: string(serializeCertDerToPem(y.Certificate[1])),
+			ServerName: destination.String(),
 		}),
 		),
 		//grpc.WithBlock(),

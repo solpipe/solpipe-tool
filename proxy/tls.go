@@ -13,12 +13,11 @@ import (
 	"errors"
 	"fmt"
 	"math/big"
-	"os"
-	"strings"
+	"net"
 	"time"
 
 	sgo "github.com/SolmateDev/solana-go"
-	"golang.org/x/crypto/ssh"
+	log "github.com/sirupsen/logrus"
 )
 
 /*
@@ -28,9 +27,10 @@ Otherwise, we can only use TOR.
 
 //const ED25519_IDENTIFIER: [u32; 4] = [1, 3, 101, 112];
 
-func ED25519_IDENTIFIER() [4]uint32 {
-	return [4]uint32{1, 3, 101, 112}
-}
+//	func ED25519_IDENTIFIER() [4]uint32 {
+//		return [4]uint32{1, 3, 101, 112}
+//	}
+
 func pemBlockForKey(priv interface{}) (*pem.Block, error) {
 	switch k := priv.(type) {
 	case *rsa.PrivateKey:
@@ -55,76 +55,101 @@ func pemBlockForKey(priv interface{}) (*pem.Block, error) {
 type TlsForServer struct {
 	Private     []byte
 	Certificate []byte
+	Ca          []byte
 }
 
 func (tfs TlsForServer) CertAndKey() (cert tls.Certificate, err error) {
-
-	cert.PrivateKey, err = ssh.ParseRawPrivateKey(tfs.Private)
-	if err != nil {
-		return cert, err
-	}
-	var skippedBlockTypes []string
-	certPEMBlock := tfs.Certificate
-	for {
-		var certDERBlock *pem.Block
-		certDERBlock, certPEMBlock = pem.Decode(certPEMBlock)
-		if certDERBlock == nil {
-			break
-		}
-		if certDERBlock.Type == "CERTIFICATE" {
-			cert.Certificate = append(cert.Certificate, certDERBlock.Bytes)
-		} else {
-			skippedBlockTypes = append(skippedBlockTypes, certDERBlock.Type)
-		}
-	}
-	if len(cert.Certificate) == 0 {
-		if len(skippedBlockTypes) == 0 {
-			return cert, errors.New("tls: failed to find any PEM data in certificate input")
-		}
-		if len(skippedBlockTypes) == 1 && strings.HasSuffix(skippedBlockTypes[0], "PRIVATE KEY") {
-			return cert, errors.New("tls: failed to find certificate PEM data in certificate input, but did find a private key; PEM inputs may have been switched")
-		}
-		return cert, fmt.Errorf("tls: failed to find \"CERTIFICATE\" PEM block in certificate input after skipping PEM blocks of the following types: %v", skippedBlockTypes)
-	}
-
 	//return cert, nil
-	os.Stderr.WriteString(string(tfs.Certificate) + "\n")
-	os.Stderr.WriteString(string(tfs.Private) + "\n")
+	//os.Stderr.WriteString(string(tfs.Certificate) + "\n")
+	//os.Stderr.WriteString(string(tfs.Private) + "\n")
 	return tls.X509KeyPair(tfs.Certificate, tfs.Private)
 }
 
-func NewSelfSignedTlsCertificateChainServer(
-	key sgo.PrivateKey,
-	dnsAddr []string,
-	expire time.Time,
-) (*TlsForServer, error) {
-
-	priv := ed25519.PrivateKey(key)
-	pub := priv.Public()
-	if time.Now().Add(24 * time.Hour).After(expire) {
-		return nil, errors.New("bad expire time")
-	}
-
-	template := x509.Certificate{
-		SerialNumber: big.NewInt(1),
+func generateCa(key sgo.PrivateKey) ([]byte, *ed25519.PrivateKey, error) {
+	caPrivKey := ed25519.PrivateKey(key)
+	ca := &x509.Certificate{
+		SerialNumber: big.NewInt(2019),
 		Subject: pkix.Name{
-			Organization: dnsAddr,
+			Organization:  []string{"Company, INC."},
+			Country:       []string{"US"},
+			Province:      []string{""},
+			Locality:      []string{"San Francisco"},
+			StreetAddress: []string{"Golden Gate Bridge"},
+			PostalCode:    []string{"94016"},
 		},
-		NotBefore:   time.Now(),
-		NotAfter:    expire,
-		KeyUsage:    x509.KeyUsageKeyEncipherment | x509.KeyUsageDigitalSignature,
-		ExtKeyUsage: []x509.ExtKeyUsage{x509.ExtKeyUsageServerAuth},
+		NotBefore:             time.Now(),
+		NotAfter:              time.Now().AddDate(10, 0, 0),
+		IsCA:                  true,
+		ExtKeyUsage:           []x509.ExtKeyUsage{x509.ExtKeyUsageClientAuth, x509.ExtKeyUsageServerAuth},
+		KeyUsage:              x509.KeyUsageDigitalSignature | x509.KeyUsageCertSign,
+		BasicConstraintsValid: true,
 	}
-	derBytes, err := x509.CreateCertificate(rand.Reader, &template, &template, pub, priv)
+	caBytes, err := x509.CreateCertificate(rand.Reader, ca, ca, caPrivKey.Public(), caPrivKey)
 	if err != nil {
-		return nil, err
-	}
-	out := &bytes.Buffer{}
-	err = pem.Encode(out, &pem.Block{Type: NAME_CERTIFICATE, Bytes: derBytes})
-	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 
+	return caBytes, &caPrivKey, nil
+}
+
+func generateEphemeralCert(
+	caBytes []byte,
+	caPrivKey ed25519.PrivateKey,
+) ([]byte, *ed25519.PrivateKey, error) {
+	ca, err := x509.ParseCertificate(caBytes)
+	if err != nil {
+		return nil, nil, err
+	}
+
+	pub, certPrivKey, err := ed25519.GenerateKey(rand.Reader)
+	if err != nil {
+		return nil, nil, err
+	}
+	cert := &x509.Certificate{
+		SerialNumber: big.NewInt(1658),
+		Subject: pkix.Name{
+			Organization:  []string{"Company, INC."},
+			Country:       []string{"US"},
+			Province:      []string{""},
+			Locality:      []string{"San Francisco"},
+			StreetAddress: []string{"Golden Gate Bridge"},
+			PostalCode:    []string{"94016"},
+		},
+		IPAddresses:  []net.IP{net.IPv4(127, 0, 0, 1), net.IPv6loopback},
+		NotBefore:    time.Now(),
+		NotAfter:     time.Now().AddDate(10, 0, 0),
+		SubjectKeyId: []byte{1, 2, 3, 4, 6},
+		ExtKeyUsage:  []x509.ExtKeyUsage{x509.ExtKeyUsageClientAuth, x509.ExtKeyUsageServerAuth},
+		KeyUsage:     x509.KeyUsageDigitalSignature,
+	}
+	certBytes, err := x509.CreateCertificate(rand.Reader, cert, ca, pub, caPrivKey)
+	if err != nil {
+		return nil, nil, err
+	}
+	checkCert, err := x509.ParseCertificate(certBytes)
+	if err != nil {
+		return nil, nil, err
+	}
+	certPool := x509.NewCertPool()
+	certPool.AddCert(ca)
+	chain, err := checkCert.Verify(x509.VerifyOptions{
+		Roots: certPool,
+	})
+	if err != nil {
+		return nil, nil, err
+	}
+	for i := 0; i < len(chain); i++ {
+		for j := 0; j < len(chain[i]); j++ {
+			log.Debugf("(%d,%d)=%+v", i, j, chain[i][j].PublicKey)
+		}
+	}
+	return certBytes, &certPrivKey, nil
+}
+
+func serializePrivateKeyToPEM(priv *ed25519.PrivateKey) ([]byte, error) {
+	if priv == nil {
+		return nil, errors.New("no key")
+	}
 	keyOut := &bytes.Buffer{}
 	o1, err := pemBlockForKey(priv)
 	if err != nil {
@@ -134,12 +159,40 @@ func NewSelfSignedTlsCertificateChainServer(
 	if err != nil {
 		return nil, err
 	}
+	return keyOut.Bytes(), nil
+}
 
-	return &TlsForServer{
-		Private:     keyOut.Bytes(),
-		Certificate: out.Bytes(),
-	}, nil
+func serializeCertDerToPem(certDer []byte) []byte {
+	certPEM := new(bytes.Buffer)
+	pem.Encode(certPEM, &pem.Block{
+		Type:  "CERTIFICATE",
+		Bytes: certDer,
+	})
+	return certPEM.Bytes()
+}
 
+func NewSelfSignedTlsCertificateChainServer(
+	key sgo.PrivateKey,
+	dnsAddr []string,
+	expire time.Time,
+) (*tls.Certificate, error) {
+
+	ca, capriv, err := generateCa(key)
+	if err != nil {
+		return nil, err
+	}
+	cert, priv, err := generateEphemeralCert(ca, *capriv)
+	if err != nil {
+		return nil, err
+	}
+
+	ans := new(tls.Certificate)
+
+	// leaf first
+	ans.Certificate = [][]byte{cert, ca}
+	ans.PrivateKey = *priv
+
+	return ans, nil
 }
 
 const NAME_CERTIFICATE = "CERTIFICATE"
@@ -179,35 +232,6 @@ func (sc ServerConfiguration) dns_string() []string {
 		ans[i] = fmt.Sprintf("%s:%d", sc.Host[i], sc.Port)
 	}
 	return ans
-}
-
-func (sc ServerConfiguration) Tls(admin sgo.PrivateKey) (*TlsForServer, error) {
-	return NewSelfSignedTlsCertificateChainServer(
-		admin,
-		sc.dns_string(),
-		time.Now().Add(36*time.Hour),
-	)
-}
-
-func createClientCert(
-	admin sgo.PrivateKey,
-) (ans *tls.Certificate, err error) {
-
-	var x *TlsForServer
-	x, err = NewSelfSignedTlsCertificateChainServer(
-		admin,
-		[]string{fmt.Sprintf("client.%s", admin.PublicKey())},
-		time.Now().Add(7*24*time.Hour),
-	)
-	if err != nil {
-		return
-	}
-	ans = new(tls.Certificate)
-	*ans, err = x.CertAndKey()
-	if err != nil {
-		return
-	}
-	return
 }
 
 // use inside the TlsConfig Verify Peer Certificate argument
