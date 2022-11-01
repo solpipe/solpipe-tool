@@ -5,18 +5,18 @@ import (
 	"errors"
 	"math/big"
 
-	ct "github.com/solpipe/solpipe-tool/client"
-	"github.com/solpipe/solpipe-tool/proxy"
-	ctr "github.com/solpipe/solpipe-tool/state/controller"
-	ntk "github.com/solpipe/solpipe-tool/state/network"
-	rtr "github.com/solpipe/solpipe-tool/state/router"
-	"github.com/solpipe/solpipe-tool/state/sub"
 	sgo "github.com/SolmateDev/solana-go"
 	sgotkn "github.com/SolmateDev/solana-go/programs/token"
 	sgorpc "github.com/SolmateDev/solana-go/rpc"
 	sgows "github.com/SolmateDev/solana-go/rpc/ws"
 	"github.com/cretz/bine/tor"
 	log "github.com/sirupsen/logrus"
+	ct "github.com/solpipe/solpipe-tool/client"
+	"github.com/solpipe/solpipe-tool/proxy"
+	ctr "github.com/solpipe/solpipe-tool/state/controller"
+	ntk "github.com/solpipe/solpipe-tool/state/network"
+	rtr "github.com/solpipe/solpipe-tool/state/router"
+	"github.com/solpipe/solpipe-tool/state/sub"
 	"google.golang.org/grpc"
 )
 
@@ -54,6 +54,7 @@ type pipelineProxyConnection struct {
 
 func loopInternal(
 	ctx context.Context,
+	cancel context.CancelFunc,
 	internalC <-chan func(*internal),
 	startErrorC chan<- error,
 	configReadErrorC <-chan error,
@@ -64,7 +65,7 @@ func loopInternal(
 	pcVault *sgotkn.Account,
 	router rtr.Router,
 ) {
-
+	defer cancel()
 	var err error
 	doneC := ctx.Done()
 	errorC := make(chan error, 1)

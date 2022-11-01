@@ -91,7 +91,13 @@ func SetupTor(ctx context.Context, isClient bool) (torMgr *tor.Tor, err error) {
 func loopKillTor(ctx context.Context, torMgr *tor.Tor) {
 	<-ctx.Done()
 	if torMgr != nil {
-		torMgr.Close()
+		if torMgr.ProcessCancelFunc != nil {
+			torMgr.Close()
+		} else {
+			log.Debug("no cancel function for tor")
+		}
+	} else {
+		log.Debug("tor mgr is null")
 	}
 }
 

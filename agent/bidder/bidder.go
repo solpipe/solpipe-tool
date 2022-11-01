@@ -3,16 +3,17 @@ package bidder
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"os"
 	"os/signal"
 	"syscall"
 
-	ctr "github.com/solpipe/solpipe-tool/state/controller"
-	rtr "github.com/solpipe/solpipe-tool/state/router"
 	sgo "github.com/SolmateDev/solana-go"
 	sgotkn "github.com/SolmateDev/solana-go/programs/token"
 	sgorpc "github.com/SolmateDev/solana-go/rpc"
 	sgows "github.com/SolmateDev/solana-go/rpc/ws"
+	ctr "github.com/solpipe/solpipe-tool/state/controller"
+	rtr "github.com/solpipe/solpipe-tool/state/router"
 )
 
 type Agent struct {
@@ -57,8 +58,11 @@ func Create(
 	internalC := make(chan func(*internal), 10)
 	startErrorC := make(chan error, 1)
 
+	ctxC, cancel := context.WithCancel(ctx)
+
 	go loopInternal(
-		ctx,
+		ctxC,
+		cancel,
 		internalC,
 		startErrorC,
 		configChannelGroup.ErrorC,
@@ -71,18 +75,29 @@ func Create(
 	)
 
 	return Agent{
-		ctx:        ctx,
+		ctx:        ctxC,
 		internalC:  internalC,
 		controller: router.Controller,
 	}, nil
 }
 
 func (e1 Agent) CloseSignal() <-chan error {
+	doneC := e1.ctx.Done()
 	signalC := make(chan error, 1)
-	e1.internalC <- func(in *internal) {
-		in.closeSignalCList = append(in.closeSignalCList, signalC)
+	err := e1.ctx.Err()
+	if err != nil {
+		signalC <- err
+		return signalC
 	}
-	return signalC
+	select {
+	case <-doneC:
+		signalC <- errors.New("canceled")
+		return signalC
+	case e1.internalC <- func(in *internal) {
+		in.closeSignalCList = append(in.closeSignalCList, signalC)
+	}:
+		return signalC
+	}
 }
 
 type ConfigByHubChannelGroup struct {

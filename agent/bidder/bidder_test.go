@@ -150,8 +150,10 @@ func TestBidder(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	closeC := agent.CloseSignal()
 	t.Cleanup(func() {
-		<-agent.CloseSignal()
+		<-closeC
+		log.Debug("exiting")
 	})
 
 	time.Sleep(10 * time.Minute)

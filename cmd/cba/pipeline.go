@@ -3,6 +3,8 @@ package main
 import (
 	"errors"
 	"fmt"
+	"math"
+	"net"
 	"os"
 	"strconv"
 	"strings"
@@ -30,6 +32,7 @@ func (r *PipelineCreate) Run(kongCtx *CLIContext) error {
 }
 
 type PipelineAgent struct {
+	ClearListenUrl   string        `option name:"clear_listen"  help:"url to which clients can connect without tor"`
 	CrankRate        string        `option name:"crank_rate"  help:"the crank rate in the form NUMERATOR/DENOMINATOR"`
 	DecayRate        string        `option name:"decay_rate"  help:"the decay rate in the form NUMERATOR/DENOMINATOR"`
 	PayoutShare      string        `option name:"payout_share" help:"the payout share in the form NUMERATORDENOMINATOR"`
@@ -110,6 +113,27 @@ func (r *PipelineAgent) Run(kongCtx *CLIContext) error {
 	payoutShare, err := convertRate(r.CrankRate, &state.Rate{N: 95, D: 100})
 	if err != nil {
 		return err
+	}
+
+	if 0 < len(r.ClearListenUrl) {
+		clearConfig := new(relay.ClearNetListenConfig)
+		x := strings.Split(r.ClearListenUrl, ":")
+		if len(x) != 2 {
+			return errors.New("use form HOST:PORT for clear net listen url")
+		}
+		clearConfig.Ipv4 = net.ParseIP(x[0])
+		if clearConfig.Ipv4 == nil {
+			return errors.New("failed to parse ip address")
+		}
+		z, err := strconv.Atoi(x[1])
+		if err != nil {
+			return err
+		}
+		if z < 0 || math.MaxUint16 <= z {
+			return errors.New("port out of range")
+		}
+		clearConfig.Port = uint16(z)
+		pipelineConfig.ClearNet = clearConfig
 	}
 
 	agent, err := ap.Create(
