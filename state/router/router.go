@@ -448,6 +448,10 @@ func (e1 Router) AddBid(list cba.BidList) error {
 	return <-errorC
 }
 
+func (e1 Router) OnValidator() dssub.Subscription[sub.ValidatorGroup] {
+	return dssub.SubscriptionRequest(e1.allGroup.ValidatorC, func(pg sub.ValidatorGroup) bool { return true })
+}
+
 func (e1 Router) AllValidator() ([]val.Validator, error) {
 	finishedC := make(chan int, 1)
 	ansC := make(chan val.Validator, 10)

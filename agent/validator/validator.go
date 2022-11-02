@@ -143,13 +143,13 @@ func Create(
 	}
 	controller := router.Controller
 
-	ctx2, cancel := context.WithCancel(ctx)
-	t1, err := proxy.SetupTor(ctx2, true)
+	ctxC, cancel := context.WithCancel(ctx)
+	t1, err := proxy.SetupTor(ctxC, true)
 	if err != nil {
 		cancel()
 		return
 	}
-	adminListener, err := config.AdminListener()
+	adminListener, err := config.AdminListener(ctxC)
 	if err != nil {
 		cancel()
 		return
@@ -204,7 +204,7 @@ func Create(
 	}
 
 	rpcClient := config.Rpc()
-	wsClient, err := config.Ws(ctx2)
+	wsClient, err := config.Ws(ctxC)
 	if err != nil {
 		cancel()
 		return
@@ -218,43 +218,42 @@ func Create(
 	}
 
 	var relay rly.Relay
-	relay, err = pxyval.Create(ctx, validator, router.Network, rly.Configuration{
-		Version: config.Version,
-		Admin:   config.Admin,
-	})
+	relay, err = pxyval.Create(ctx, validator, router.Network, config)
 	if err != nil {
 		cancel()
 		return
 	}
-
 	internalC := make(chan func(*internal), 10)
 	serverErrorC := make(chan error, 4)
-	// handle tor listener
-	{
-		err = pxysvr.Attach(ctx, grpcServerTor, router, config.Admin, relay, config.ClearNet)
-		if err != nil {
-			cancel()
-			return
-		}
 
-		reflection.Register(grpcServerTor)
-		go loopGrpcListen(ctx2, torLi.Listener, grpcServerTor, serverErrorC)
-		go loopGrpcShutdown(ctx2, t1, torLi.Listener, grpcServerTor)
-	}
+	sList := []*grpc.Server{grpcServerTor}
 	if grpcServerClearNet != nil {
-		err = pxysvr.Attach(ctx, grpcServerClearNet, router, config.Admin, relay, config.ClearNet)
-		if err != nil {
-			cancel()
-			return
-		}
+		sList = append(sList, grpcServerClearNet)
+	}
 
+	err = pxysvr.Attach(
+		ctx,
+		sList,
+		router,
+		config.Admin,
+		relay,
+		config.ClearNet,
+	)
+	if err != nil {
+		cancel()
+		return
+	}
+	reflection.Register(grpcServerTor)
+	go loopGrpcListen(ctxC, torLi.Listener, grpcServerTor, serverErrorC)
+	go loopGrpcShutdown(ctxC, t1, torLi.Listener, grpcServerTor)
+	if grpcServerClearNet != nil {
 		reflection.Register(grpcServerClearNet)
-		go loopGrpcListen(ctx2, clearLi.Listener, grpcServerClearNet, serverErrorC)
-		go loopGrpcShutdown(ctx2, t1, clearLi.Listener, grpcServerClearNet)
+		go loopGrpcListen(ctxC, clearLi.Listener, grpcServerClearNet, serverErrorC)
+		go loopGrpcShutdown(ctxC, t1, clearLi.Listener, grpcServerClearNet)
 	}
 
 	go loopInternal(
-		ctx2,
+		ctxC,
 		cancel,
 		serverErrorC,
 		internalC,
@@ -266,7 +265,7 @@ func Create(
 		validator,
 	)
 	agent = Agent{
-		ctx:        ctx2,
+		ctx:        ctxC,
 		Cancel:     cancel,
 		internalC:  internalC,
 		controller: controller,
@@ -281,8 +280,8 @@ func Create(
 		return
 	}
 	reflection.Register(grpcAdminServer)
-	go loopGrpcListen(ctx2, adminListener, grpcAdminServer, serverErrorC)
-	go loopGrpcShutdown(ctx2, nil, adminListener, grpcAdminServer)
+	go loopGrpcListen(ctxC, adminListener, grpcAdminServer, serverErrorC)
+	go loopGrpcShutdown(ctxC, nil, adminListener, grpcAdminServer)
 
 	return
 }

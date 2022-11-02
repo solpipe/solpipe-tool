@@ -89,7 +89,7 @@ func (r *BidderAgent) Run(kongCtx *CLIContext) error {
 		return err
 	}
 	var userVault *sgotkn2.Account
-
+	var userVaultId sgo.PublicKey
 backout:
 	for i := 0; i < len(x.Value); i++ {
 		userVault = new(sgotkn2.Account)
@@ -98,6 +98,7 @@ backout:
 			return err
 		}
 		if userVault.Mint.Equals(controllerData.PcMint) {
+			userVaultId = x.Value[i].Pubkey
 			break backout
 		}
 	}
@@ -112,6 +113,7 @@ backout:
 		wsClient,
 		configChannelGroup,
 		userKey,
+		userVaultId,
 		userVault,
 		router,
 	)

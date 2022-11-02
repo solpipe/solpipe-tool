@@ -28,7 +28,7 @@ func Create(
 	router rtr.Router,
 	pipeline pipe.Pipeline,
 ) (relay.Relay, error) {
-	network := router.Network
+
 	ctx2, cancel := context.WithCancel(ctx)
 	internalC := make(chan func(*internal), 10)
 	txSubmitC := make(chan requestForSubmitChannel)
@@ -52,7 +52,7 @@ func Create(
 		internalC,
 		txSubmitC,
 		slotHome,
-		network,
+		router,
 		pipeline,
 		config,
 	)
@@ -60,7 +60,7 @@ func Create(
 		ctx:       ctx,
 		internalC: internalC,
 		Cancel:    cancel,
-		network:   network,
+		network:   router.Network,
 		pipeline:  pipeline,
 		txSubmitC: txSubmitC,
 	}

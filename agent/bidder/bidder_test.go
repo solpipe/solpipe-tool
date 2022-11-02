@@ -144,6 +144,7 @@ func TestBidder(t *testing.T) {
 		wsClient,
 		hConfig,
 		relayConfig.Admin,
+		pcVaultId,
 		pcVault,
 		router,
 	)

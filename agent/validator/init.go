@@ -3,7 +3,6 @@ package validator
 import (
 	"context"
 	"errors"
-	"net/http"
 	"time"
 
 	sgo "github.com/SolmateDev/solana-go"
@@ -11,36 +10,18 @@ import (
 	"github.com/solpipe/solpipe-tool/proxy/relay"
 	"github.com/solpipe/solpipe-tool/script"
 	rtr "github.com/solpipe/solpipe-tool/state/router"
-	vrs "github.com/solpipe/solpipe-tool/state/version"
 )
 
 type InitializationArg struct {
-	Version        vrs.CbaVersion
 	Wallet         sgo.PrivateKey
-	Admin          sgo.PrivateKey
 	ControllerId   sgo.PublicKey
 	Vote           sgo.PrivateKey
 	Stake          sgo.PublicKey
-	RpcUrl         string
-	WsUrl          string
 	AdminListenUrl string
-	Headers        http.Header
+	RelayConfig    relay.Configuration
 }
 
-func (args *InitializationArg) RelayConfig() relay.Configuration {
-
-	return relay.CreateConfiguration(
-		args.Version,
-		args.Admin,
-		args.RpcUrl,
-		args.WsUrl,
-		args.Headers,
-		args.AdminListenUrl,
-		nil,
-	)
-}
-
-const VALIDATOR_MEMBER_SIZE = 500
+const VALIDATOR_MEMBER_SIZE = 1500
 
 // Run the AddValidator instruction
 func Initialize(
@@ -54,7 +35,7 @@ func Initialize(
 		err = errors.New("no config")
 		return
 	}
-	config := args.RelayConfig()
+	config := args.RelayConfig
 	rpcClient := config.Rpc()
 	wsClient, err := config.Ws(ctx)
 	if err != nil {
@@ -73,14 +54,23 @@ func Initialize(
 	var adminBalance uint64
 	{
 		var x *sgorpc.GetBalanceResult
-		x, err = rpcClient.GetBalance(ctx, args.Admin.PublicKey(), sgorpc.CommitmentFinalized)
+		x, err = rpcClient.GetBalance(
+			ctx,
+			args.RelayConfig.Admin.PublicKey(),
+			sgorpc.CommitmentFinalized,
+		)
 		if err != nil {
 			return
 		}
 		adminBalance = x.Value
 	}
 
-	s1, err := script.Create(ctx, &script.Configuration{Version: args.Version}, rpcClient, wsClient)
+	s1, err := script.Create(
+		ctx,
+		&script.Configuration{Version: args.RelayConfig.Version},
+		rpcClient,
+		wsClient,
+	)
 	if err != nil {
 		return
 	}
@@ -89,9 +79,14 @@ func Initialize(
 		return
 	}
 	if adminBalance < minRent {
-		s1.Transfer(args.Wallet, args.Admin.PublicKey(), minRent-adminBalance)
+		s1.Transfer(args.Wallet, args.RelayConfig.Admin.PublicKey(), minRent-adminBalance)
 	}
-	_, err = s1.AddValidator(args.ControllerId, args.Vote, args.Stake, args.Admin)
+	_, err = s1.AddValidator(
+		args.ControllerId,
+		args.Vote,
+		args.Stake,
+		args.RelayConfig.Admin,
+	)
 	if err != nil {
 		return
 	}

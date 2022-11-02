@@ -123,13 +123,16 @@ func (in *internal) update_validators(u validatorInsertInfo) {
 
 }
 
-type validatorFeed struct {
-	ctx       context.Context
-	cancel    context.CancelFunc
-	data      cba.ValidatorManager
-	id        sgo.PublicKey
+type validatorConnection struct {
 	connected bool
-	periodC   chan<- [2]uint64 // used to update period from loopInternal
+}
+
+type validatorFeed struct {
+	ctx     context.Context
+	cancel  context.CancelFunc
+	data    cba.ValidatorManager
+	id      sgo.PublicKey
+	periodC chan<- [2]uint64 // used to update period from loopInternal
 }
 
 func (in *internal) createValidatorFeed(
@@ -162,12 +165,11 @@ func (in *internal) createValidatorFeed(
 		vu.Finish,
 	)
 	return &validatorFeed{
-		ctx:       ctx,
-		cancel:    cancel,
-		data:      data,
-		id:        vu.Validator.Id,
-		connected: false,
-		periodC:   periodC,
+		ctx:     ctx,
+		cancel:  cancel,
+		data:    data,
+		id:      vu.Validator.Id,
+		periodC: periodC,
 	}, nil
 }
 
@@ -251,9 +253,10 @@ out:
 				x, present := in.validatorMap[data.Vote.String()]
 				if present {
 					x.connected = true
+					x.client = vi.client
 					errorC <- nil
 				} else {
-					errorC <- errors.New("validator missing!")
+					errorC <- errors.New("validator missing")
 				}
 			}:
 			}
@@ -315,7 +318,14 @@ out:
 	}
 }
 
-func loopValidatorConnect(ctx context.Context, dialer *tor.Dialer, connC chan<- pxyclt.Client, validator val.Validator, admin sgo.PrivateKey, scriptBuidler *script.Script) {
+func loopValidatorConnect(
+	ctx context.Context,
+	dialer *tor.Dialer,
+	connC chan<- pxyclt.Client,
+	validator val.Validator,
+	admin sgo.PrivateKey,
+	scriptBuidler *script.Script,
+) {
 	data, err := validator.Data()
 	if err != nil {
 		log.Error(err)

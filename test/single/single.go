@@ -12,6 +12,7 @@ import (
 	cba "github.com/solpipe/cba"
 	"github.com/solpipe/solpipe-tool/proxy/relay"
 	"github.com/solpipe/solpipe-tool/script"
+	"github.com/solpipe/solpipe-tool/shell"
 	vrs "github.com/solpipe/solpipe-tool/state/version"
 )
 
@@ -23,6 +24,8 @@ type SingleSandbox struct {
 	MintAuthority           sgo.PrivateKey
 	Validator               sgo.PrivateKey
 	ValidatorAdmin          sgo.PrivateKey
+	Stake                   sgo.PrivateKey
+	StakerAdmin             sgo.PrivateKey
 	ValidatorClearNet       *relay.ClearNetListenConfig
 	Vote                    sgo.PrivateKey
 	Pipeline                sgo.PrivateKey // needed to get the pipeline Id via PublicKey()
@@ -87,6 +90,18 @@ func (s *SingleSandbox) ValidatorConfig() relay.Configuration {
 	)
 }
 
+func (s *SingleSandbox) StakerConfig() relay.Configuration {
+	return relay.CreateConfiguration(
+		s.Version,
+		s.StakerAdmin,
+		s.rpcUrl,
+		s.wsUrl,
+		http.Header{},
+		":60061",
+		nil,
+	)
+}
+
 func (s *SingleSandbox) Script(ctx context.Context) (*script.Script, error) {
 	pc := s.PipelineConfig()
 	rpcClient := pc.Rpc()
@@ -131,6 +146,14 @@ func Load(ctx context.Context) (*SingleSandbox, error) {
 		return nil, err
 	}
 	ans.ValidatorAdmin, err = sgo.PrivateKeyFromSolanaKeygenFile(fp + "/validator-admin.json")
+	if err != nil {
+		return nil, err
+	}
+	ans.Stake, err = sgo.PrivateKeyFromSolanaKeygenFile(fp + "/stake.json")
+	if err != nil {
+		return nil, err
+	}
+	ans.StakerAdmin, err = sgo.PrivateKeyFromSolanaKeygenFile(fp + "/stake-admin.json")
 	if err != nil {
 		return nil, err
 	}
@@ -193,6 +216,10 @@ func Load(ctx context.Context) (*SingleSandbox, error) {
 		Ipv6: nil,
 	}
 	return ans, nil
+}
+
+func (s *SingleSandbox) ShellSolana() (shell.Solana, error) {
+	return shell.CreateSolana(s.rpcUrl)
 }
 
 func loopDelete(ctx context.Context, fp string) {

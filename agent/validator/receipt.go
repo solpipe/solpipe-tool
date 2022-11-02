@@ -4,12 +4,13 @@ import (
 	"context"
 	"errors"
 
+	sgo "github.com/SolmateDev/solana-go"
+	log "github.com/sirupsen/logrus"
 	cba "github.com/solpipe/cba"
 	pyt "github.com/solpipe/solpipe-tool/state/payout"
 	pipe "github.com/solpipe/solpipe-tool/state/pipeline"
 	rpt "github.com/solpipe/solpipe-tool/state/receipt"
 	"github.com/solpipe/solpipe-tool/state/slot"
-	sgo "github.com/SolmateDev/solana-go"
 )
 
 // listen for a receipt.
@@ -89,6 +90,9 @@ out2:
 		}
 	}
 	// TODO: validator claim payment
+	if err != nil {
+		log.Debug(err)
+	}
 }
 
 // find out if we need to create a receipt, then wait for a receipt to be created

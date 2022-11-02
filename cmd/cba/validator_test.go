@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"math/rand"
+	"net"
 	"testing"
 	"time"
 
@@ -14,6 +15,7 @@ import (
 	valadmin "github.com/solpipe/solpipe-tool/agent/validator/admin"
 	pbt "github.com/solpipe/solpipe-tool/proto/test"
 	"github.com/solpipe/solpipe-tool/proxy"
+	"github.com/solpipe/solpipe-tool/proxy/relay"
 	pipe "github.com/solpipe/solpipe-tool/state/pipeline"
 	rtr "github.com/solpipe/solpipe-tool/state/router"
 	"github.com/solpipe/solpipe-tool/test/sandbox"
@@ -77,22 +79,31 @@ func TestValidator(t *testing.T) {
 	time.Sleep(1 * time.Minute)
 	t.Logf("slept")
 
+	relayConfig := relay.CreateConfiguration(
+		child.Version,
+		childValidator.Admin,
+		child.RpcUrl,
+		child.WsUrl,
+		child.Headers.Clone(),
+		child.AdminListenUrl,
+		&relay.ClearNetListenConfig{
+			Port: 50059,
+			Ipv4: net.IPv4(127, 0, 0, 1),
+			Ipv6: nil,
+		},
+	)
 	var agentListener agentVal.ListenResult
 	agentListener, err = agentVal.Initialize(
 		ctx,
 		router,
 		5*time.Minute,
 		&agentVal.InitializationArg{
-			Version:        child.Version,
+			RelayConfig:    relayConfig,
 			Wallet:         wallet,
-			Admin:          childValidator.Admin,
 			ControllerId:   child.Controller().Id(),
 			Vote:           childValidator.Vote,
 			Stake:          stake.PublicKey(),
-			RpcUrl:         child.RpcUrl,
-			WsUrl:          child.WsUrl,
 			AdminListenUrl: child.AdminListenUrl,
-			Headers:        child.Headers.Clone(),
 		},
 	)
 	if err != nil {

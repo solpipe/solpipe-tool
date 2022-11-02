@@ -52,6 +52,7 @@ func Create(
 	wsClient *sgows.Client,
 	configChannelGroup ConfigByHubChannelGroup,
 	bidder sgo.PrivateKey,
+	pcVaultId sgo.PublicKey,
 	pcVault *sgotkn.Account,
 	router rtr.Router,
 ) (Agent, error) {
@@ -70,6 +71,7 @@ func Create(
 		rpcClient,
 		wsClient,
 		bidder,
+		pcVaultId,
 		pcVault,
 		router,
 	)

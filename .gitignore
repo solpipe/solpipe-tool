@@ -3,3 +3,4 @@ bin
 localconfig
 .env
 .DS_Store
+target

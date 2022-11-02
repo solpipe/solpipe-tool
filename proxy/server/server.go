@@ -26,7 +26,7 @@ type external struct {
 // Handle the shutdown of the grpc connection separately.
 func Attach(
 	ctx context.Context,
-	s *grpc.Server,
+	sList []*grpc.Server,
 	router rtr.Router,
 	admin sgo.PrivateKey,
 	relay relay.Relay,
@@ -44,11 +44,14 @@ func Attach(
 		admin:     admin,
 		relay:     relay,
 	}
-	pbj.RegisterTransactionServer(s, e1)
-	if clearNetConfig != nil {
-		pbj.RegisterEndpointServer(s, endpointExternal{
-			clearNetConfig: *clearNetConfig,
-		})
+	for i := 0; i < len(sList); i++ {
+		s := sList[i]
+		pbj.RegisterTransactionServer(s, e1)
+		if clearNetConfig != nil {
+			pbj.RegisterEndpointServer(s, endpointExternal{
+				clearNetConfig: *clearNetConfig,
+			})
+		}
 	}
 
 	return nil

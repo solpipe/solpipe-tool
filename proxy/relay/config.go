@@ -5,6 +5,7 @@ import (
 	"errors"
 	"net"
 	"net/http"
+	"os"
 	"strings"
 
 	sgo "github.com/SolmateDev/solana-go"
@@ -100,13 +101,32 @@ func (config Configuration) ScriptBuilder(ctx context.Context) (*script.Script, 
 	return script.Create(ctx, &script.Configuration{Version: config.Version}, config.Rpc(), wsClient)
 }
 
-func (config Configuration) AdminListener() (net.Listener, error) {
+func (config Configuration) AdminListener(ctx context.Context) (l net.Listener, err error) {
+
 	if strings.HasPrefix(config.AdminListenUrl, "tcp") {
-		return net.Listen("tcp", config.AdminListenUrl[len("tcp://"):])
+		l, err = net.Listen("tcp", config.AdminListenUrl[len("tcp://"):])
+		if err != nil {
+			return
+		}
+		go loopCloseListener(ctx, l, "")
+		return
 	} else if strings.HasPrefix(config.AdminListenUrl, "unix") {
-		return net.Listen("unix", config.AdminListenUrl[len("unix://"):])
+		l, err = net.Listen("unix", config.AdminListenUrl[len("unix://"):])
+		if err != nil {
+			return
+		}
+		go loopCloseListener(ctx, l, config.AdminListenUrl[len("unix://"):])
+		return
 	} else {
 		return nil, errors.New("url must be in form of tcp://HOST:PORT or unix:///my/file/path")
+	}
+}
+
+func loopCloseListener(ctx context.Context, l net.Listener, fp string) {
+	<-ctx.Done()
+	l.Close()
+	if 0 < len(fp) {
+		os.Remove(fp)
 	}
 }
 

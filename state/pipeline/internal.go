@@ -5,19 +5,18 @@ import (
 	"math/big"
 	"time"
 
+	sgo "github.com/SolmateDev/solana-go"
+	log "github.com/sirupsen/logrus"
 	cba "github.com/solpipe/cba"
 	ll "github.com/solpipe/solpipe-tool/ds/list"
 	dssub "github.com/solpipe/solpipe-tool/ds/sub"
 	pyt "github.com/solpipe/solpipe-tool/state/payout"
 	"github.com/solpipe/solpipe-tool/state/sub"
 	val "github.com/solpipe/solpipe-tool/state/validator"
-	sgo "github.com/SolmateDev/solana-go"
-	log "github.com/sirupsen/logrus"
 )
 
 type internal struct {
 	ctx               context.Context
-	cancel            context.CancelFunc
 	errorC            chan<- error
 	finishPayoutC     chan<- payoutFinish
 	id                sgo.PublicKey
@@ -112,7 +111,7 @@ out:
 		select {
 		case u := <-updateValidatorStakeC:
 			// we must account for a situation in which
-			// prior receipt accoutn closes after
+			// prior receipt account closes after
 			// the next receipt account is created
 			// and we cannot delete a validator from an expiring receipt
 			// after adding a validator from an new receipt

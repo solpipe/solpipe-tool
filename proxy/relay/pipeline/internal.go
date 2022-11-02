@@ -3,14 +3,15 @@ package pipeline
 import (
 	"context"
 
+	sgo "github.com/SolmateDev/solana-go"
+	"github.com/cretz/bine/tor"
+	log "github.com/sirupsen/logrus"
 	"github.com/solpipe/solpipe-tool/ds/sub"
 	"github.com/solpipe/solpipe-tool/proxy/relay"
 	ntk "github.com/solpipe/solpipe-tool/state/network"
 	pipe "github.com/solpipe/solpipe-tool/state/pipeline"
+	rtr "github.com/solpipe/solpipe-tool/state/router"
 	"github.com/solpipe/solpipe-tool/state/slot"
-	sgo "github.com/SolmateDev/solana-go"
-	"github.com/cretz/bine/tor"
-	log "github.com/sirupsen/logrus"
 )
 
 type internal struct {
@@ -51,13 +52,13 @@ func loopInternal(
 	internalC <-chan func(*internal),
 	requestForSubmitChannelC <-chan requestForSubmitChannel,
 	slotHome slot.SlotHome,
-	network ntk.Network,
+	router rtr.Router,
 	pipeline pipe.Pipeline,
 	config relay.Configuration,
 ) {
 	defer cancel()
 	var err error
-
+	network := router.Network
 	doneC := ctx.Done()
 	errorC := make(chan error, 1)
 	pipelineTpsC := make(chan float64, 10)

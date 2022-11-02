@@ -39,76 +39,16 @@ func (e1 Pipeline) UpdateValidatorByVote(v val.Validator, start uint64, finish u
 	}
 }
 
-func (e1 Pipeline) loopUpdateValidatorByVote(v val.Validator, start uint64, finish uint64) {
-
-	d, err := v.Data()
-	if err != nil {
-		return
-	}
-	slotSub := e1.slotSub.OnSlot()
-	defer slotSub.Unsubscribe()
-	vote := d.Vote
-	sub := v.OnStake()
-	defer sub.Unsubscribe()
-	presentC := make(chan bool, 1)
-	errorC2 := make(chan chan<- error, 1)
-	e1.internalC <- func(in *internal) {
-		in.on_validator(d, presentC)
-		errorC2 <- in.errorC
-	}
-	if <-presentC {
-
-		<-errorC2
-		return
-	}
-	errorC := <-errorC2
-	doneC := e1.ctx.Done()
-	slot := uint64(0)
-out:
-	for {
-		select {
-		case <-doneC:
-			break out
-		case err = <-slotSub.ErrorC:
-			break out
-		case slot = <-slotSub.StreamC:
-			if slot != 0 && finish <= slot {
-				e1.updateValidatorStakeC <- validatorStakeUpdate{
-					vote: vote,
-					status: val.StakeStatus{
-						Activated: 0,
-						Total:     0,
-					},
-					start:  start,
-					finish: finish,
-				}
-			}
-		case err = <-sub.ErrorC:
-			break out
-		case s := <-sub.StreamC:
-			e1.updateValidatorStakeC <- validatorStakeUpdate{
-				vote:   vote,
-				status: s,
-				start:  start,
-				finish: finish,
-			}
-		}
-	}
-	if err != nil {
-		errorC <- err
-	}
-}
-
 func (in *internal) on_validator(d cba.ValidatorManager, presentC chan<- bool) {
-	x, present := in.validatorStakeSub[d.Vote.String()]
+	_, present := in.validatorStakeSub[d.Vote.String()]
 	presentC <- present
 	if present {
 		return
 	}
-	x = &validatorStakeSub{
+
+	in.validatorStakeSub[d.Vote.String()] = &validatorStakeSub{
 		status: nil,
 	}
-	in.validatorStakeSub[d.Vote.String()] = x
 }
 
 // If you get IsOpen=true, then router will call e1.Close() for us. Do not close Pipeline here.

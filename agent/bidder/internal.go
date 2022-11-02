@@ -10,6 +10,7 @@ import (
 	sgorpc "github.com/SolmateDev/solana-go/rpc"
 	sgows "github.com/SolmateDev/solana-go/rpc/ws"
 	"github.com/cretz/bine/tor"
+	bin "github.com/gagliardetto/binary"
 	log "github.com/sirupsen/logrus"
 	ct "github.com/solpipe/solpipe-tool/client"
 	"github.com/solpipe/solpipe-tool/proxy"
@@ -40,7 +41,9 @@ type internal struct {
 	proxyConn                map[string]*ct.Client
 	updateConnC              chan<- pipelineProxyConnection
 	bidder                   sgo.PrivateKey
+	pcVaultId                sgo.PublicKey
 	pcVault                  *sgotkn.Account // the token account storing funds used to bid for bandwidth
+	pcVaultSub               *sgows.AccountSubscription
 	router                   rtr.Router
 	connC                    chan<- pipelineConnectionStatus
 	periodRingC              chan<- periodUpdate
@@ -62,6 +65,7 @@ func loopInternal(
 	rpcClient *sgorpc.Client,
 	wsClient *sgows.Client,
 	bidder sgo.PrivateKey,
+	pcVaultId sgo.PublicKey,
 	pcVault *sgotkn.Account,
 	router rtr.Router,
 ) {
@@ -83,6 +87,7 @@ func loopInternal(
 	in.controller = router.Controller
 	in.pipelines = make(map[string]*pipelineInfo)
 	in.bidder = bidder
+	in.pcVaultId = pcVaultId
 	in.pcVault = pcVault
 	in.activeStake = big.NewInt(0)
 	in.totalStake = big.NewInt(1)
@@ -109,12 +114,27 @@ func loopInternal(
 	if err != nil {
 		return
 	}
+
 	var present bool
 out:
 	for {
 		select {
 		case <-doneC:
 			break out
+		case err = <-in.pcVaultSub.RecvErr():
+			break out
+		case d := <-in.pcVaultSub.RecvStream():
+			x, ok := d.(*sgows.AccountResult)
+			if !ok {
+				err = errors.New("bad account result")
+				break out
+			}
+			in.pcVault = new(sgotkn.Account)
+			err = bin.UnmarshalBorsh(in.pcVault, x.Value.Data.GetBinary())
+			if err != nil {
+				break out
+			}
+			log.Debug("bidder balance in pc vault is %d", in.pcVault.Amount)
 		case err = <-netstatSub.ErrorC:
 			break out
 		case x := <-netstatSub.StreamC:
@@ -164,6 +184,11 @@ func (in *internal) init() error {
 	if err != nil {
 		return err
 	}
+	in.pcVaultSub, err = in.ws.AccountSubscribe(in.pcVaultId, sgorpc.CommitmentFinalized)
+	if err != nil {
+		return err
+	}
+
 	var present bool
 	for _, p := range list {
 		_, present = in.pipelines[p.Id.String()]
@@ -176,6 +201,7 @@ func (in *internal) init() error {
 
 func (in *internal) finish(err error) {
 	log.Debug(err)
+	in.pcVaultSub.Unsubscribe()
 	for i := 0; i < len(in.closeSignalCList); i++ {
 		in.closeSignalCList[i] <- err
 	}

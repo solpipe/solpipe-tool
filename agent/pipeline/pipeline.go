@@ -55,7 +55,7 @@ func Create(
 		return Agent{}, err
 	}
 
-	adminListener, err := args.Relay.AdminListener()
+	adminListener, err := args.Relay.AdminListener(ctx)
 	if err != nil {
 		cancel()
 		return Agent{}, err
@@ -156,51 +156,40 @@ func Create(
 		router,
 		pipeline,
 	)
-	// handle tor listener
-	{
-
-		if err != nil {
-			cancel()
-			return Agent{}, err
-		}
-
-		err = pxysvr.Attach(
-			ctx,
-			grpcServerTor,
-			router,
-			args.Admin(),
-			pipelineRelay,
-			args.Relay.ClearNet,
-		)
-		if err != nil {
-			cancel()
-			return Agent{}, err
-		}
-		go loopClose(ctx, torLi.Listener)
-		reflection.Register(grpcServerTor)
-		go loopListen(grpcServerTor, torLi.Listener, errorC)
+	if err != nil {
+		cancel()
+		return Agent{}, err
 	}
-	// handle clearnet
+
+	// register grpc for tor, then clear net (order does not matter)
+	// we can only have one instance of the proxy server
+	sList := []*grpc.Server{grpcServerTor}
 	if grpcServerClearNet != nil {
-		log.Debug("setting up clear net listener")
-		if err != nil {
-			cancel()
-			return Agent{}, err
-		}
-		err = pxysvr.Attach(
-			ctx,
-			grpcServerClearNet,
-			router,
-			args.Admin(),
-			pipelineRelay,
-			args.Relay.ClearNet,
-		)
-		if err != nil {
-			cancel()
-			return Agent{}, err
-		}
+		sList = append(sList, grpcServerClearNet)
+
+	}
+
+	err = pxysvr.Attach(
+		ctx,
+		sList,
+		router,
+		args.Admin(),
+		pipelineRelay,
+		args.Relay.ClearNet, // will be nil if there is no clear net
+	)
+	if err != nil {
+		cancel()
+		return Agent{}, err
+	}
+	for i := 0; i < len(sList); i++ {
+		reflection.Register(sList[i])
+	}
+
+	// handle tor listener
+	go loopClose(ctx, torLi.Listener)
+	go loopListen(grpcServerTor, torLi.Listener, errorC)
+	if grpcServerClearNet != nil {
 		go loopClose(ctx, clearLi.Listener)
-		reflection.Register(grpcServerClearNet)
 		go loopListen(grpcServerClearNet, clearLi.Listener, errorC)
 	}
 
@@ -245,7 +234,6 @@ func (s Agent) Close() {
 	}
 	s.cancel()
 	<-doneC
-	return
 }
 func loopStopOnError(ctx context.Context, cancel context.CancelFunc, errorC <-chan error) {
 	doneC := ctx.Done()
