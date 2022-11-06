@@ -4,11 +4,11 @@ import (
 	"context"
 	"time"
 
+	sgo "github.com/SolmateDev/solana-go"
+	log "github.com/sirupsen/logrus"
 	cba "github.com/solpipe/cba"
 	"github.com/solpipe/solpipe-tool/ds/sub"
 	"github.com/solpipe/solpipe-tool/state/slot"
-	sgo "github.com/SolmateDev/solana-go"
-	log "github.com/sirupsen/logrus"
 )
 
 // used to add a bidder
@@ -76,15 +76,24 @@ out:
 }
 
 // update/insert bidder from loopInsertDeleteBidder()
-func (in *internal) update_bidders(bi bidderInsertInfo) {
+func (in *internal) insert_bidders(bi bidderInsertInfo) {
 	bf, present := in.bidderMap[bi.bid.User.String()]
 	if present {
 		select {
 		case <-bf.ctx.Done():
-		case bf.periodC <- [2]uint64{bi.payout.Period.Start, bi.payout.Period.Start + bi.payout.Period.Length}:
+		case bf.periodC <- [2]uint64{
+			bi.payout.Period.Start,
+			bi.payout.Period.Start + bi.payout.Period.Length,
+		}:
 		}
 	} else {
-		in.bidderMap[bi.bid.User.String()] = in.createBidderFeed(bi.periodC, bi.payout, bi.bid, in.pipelineTpsHome.ReqC, in.txCforBidder)
+		in.bidderMap[bi.bid.User.String()] = in.createBidderFeed(
+			bi.periodC,
+			bi.payout,
+			bi.bid,
+			in.pipelineTpsHome.ReqC,
+			in.txFromBidderToValidatorC,
+		)
 	}
 
 }
@@ -104,13 +113,13 @@ func (in *internal) createBidderFeed(
 	txFromBidderToValidatorC chan<- submitInfo,
 ) *bidderFeed {
 	ctx2, cancel := context.WithCancel(in.ctx)
-	submitC := make(chan submitInfo) // no buffer
+	txSubmitC := make(chan submitInfo) // no buffer
 	go loopBidderInternal(
 		ctx2,
 		cancel,
 		initPayout,
 		bid,
-		submitC,
+		txSubmitC,
 		pipelineTpsReqC,
 		txFromBidderToValidatorC,
 	)
@@ -119,7 +128,7 @@ func (in *internal) createBidderFeed(
 		ctx:     ctx2,
 		cancel:  cancel,
 		periodC: periodC,
-		submitC: submitC,
+		submitC: txSubmitC,
 	}
 }
 

@@ -15,32 +15,42 @@ type submitInfo struct {
 }
 
 type requestForSubmitChannel struct {
-	sender sgo.PublicKey
-	respC  chan<- chan<- submitInfo
+	sender       sgo.PublicKey
+	respC        chan<- chan<- submitInfo
+	bidderFoundC chan<- bool
 }
 
 // From submit, we want a direct connection to the bidder goroutine.
 // We want to bypass the internal select loop
-func (e1 external) Submit(ctx context.Context, sender sgo.PublicKey, tx *sgo.Transaction) (sgo.Signature, error) {
+func (e1 external) Submit(
+	ctx context.Context,
+	sender sgo.PublicKey,
+	tx *sgo.Transaction,
+) (sgo.Signature, error) {
 	doneC := ctx.Done()
 	var sig sgo.Signature
 	var err error
-
+	bidderFoundC := make(chan bool, 1)
 	respC := make(chan chan<- submitInfo, 1)
 	select {
 	case <-doneC:
 		return sig, errors.New("canceled")
-	case e1.txSubmitC <- requestForSubmitChannel{
-		sender: sender,
-		respC:  respC,
+	case e1.requestTxSubmitChannelC <- requestForSubmitChannel{
+		sender:       sender,
+		respC:        respC,
+		bidderFoundC: bidderFoundC,
 	}:
 	}
 	var submitC chan<- submitInfo
 	select {
 	case <-doneC:
 		return sig, errors.New("canceled")
-	case submitC = <-respC:
+	case bidderHasBeenFound := <-bidderFoundC:
+		if !bidderHasBeenFound {
+			return sig, errors.New("bidder not found")
+		}
 	}
+	submitC = <-respC
 
 	sigC := make(chan sgo.Signature, 1)
 	errorC := make(chan error, 1)

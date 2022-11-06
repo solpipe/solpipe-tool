@@ -22,7 +22,6 @@ func (e1 external) Submit(
 	sender sgo.PublicKey,
 	tx *sgo.Transaction,
 ) (sgo.Signature, error) {
-
 	pubkey, err := relay.GetPeerPubkey(ctx)
 	if err != nil {
 		return sgo.Signature{}, err

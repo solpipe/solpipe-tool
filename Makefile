@@ -1,4 +1,7 @@
+MAKE := make
+
 all: clean build
+
 .PHONY: all cba proxy
 
 cba: ./cmd/cba/main.go

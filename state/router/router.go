@@ -378,7 +378,7 @@ func (e1 Router) PipelineById(id sgo.PublicKey) (pipe.Pipeline, error) {
 	}
 }
 
-func (e1 Router) Validator(id sgo.PublicKey) (val.Validator, error) {
+func (e1 Router) ValidatorById(id sgo.PublicKey) (val.Validator, error) {
 	var err error
 	err = e1.ctx.Err()
 	if err != nil {

@@ -136,14 +136,18 @@ func CreateConnectionTorClearIfAvailable(
 	admin sgo.PrivateKey,
 	torMgr *tor.Tor,
 ) (conn *grpc.ClientConn, err error) {
+	log.Debug("attempting tor connection")
 	c, err := CreateConnectionTor(ctx, destination, admin, torMgr)
 	if err != nil {
+		log.Debug("tor connection failed: %s", err.Error())
 		return nil, err
 	}
 
+	log.Debug("tor connection successful, checking if clear net address exists")
 	resp, err := pbj.NewEndpointClient(c).GetClearNetAddress(ctx, &pbj.EndpointRequest{})
 	if err != nil {
 		// we are stuck with tor since there is no clear net endpoint
+		log.Debug("no clear net address exists")
 		return c, nil
 	}
 	if resp == nil {
@@ -161,6 +165,7 @@ func CreateConnectionTorClearIfAvailable(
 
 	// try ipv6
 	if 0 < len(resp.Address.Ipv6) {
+		log.Debug("attempting to ipv6 clear-net-connect to %s:%d", resp.Address.Ipv6, resp.Address.Port)
 		newC, err := CreateConnectionClearNet(
 			ctx,
 			destination,
@@ -171,13 +176,16 @@ func CreateConnectionTorClearIfAvailable(
 			_, err = pbj.NewEndpointClient(newC).GetClearNetAddress(ctx, &pbj.EndpointRequest{})
 			if err == nil {
 				c.Close()
+				log.Debug("returning clear-net connection")
 				return newC, nil
 			}
+			log.Debug("failed to make request check")
 		} else {
-			log.Debug(err)
+			log.Debugf("failed to do clear-net connection: %s", err.Error())
 		}
 	}
 	{
+		log.Debug("attempting to ipv4 clear-net-connect to %s:%d", resp.Address.Ipv4, resp.Address.Port)
 		newC, err := CreateConnectionClearNet(
 			ctx,
 			destination,

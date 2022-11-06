@@ -4,9 +4,9 @@ import (
 	"context"
 	"errors"
 
+	sgo "github.com/SolmateDev/solana-go"
 	pbj "github.com/solpipe/solpipe-tool/proto/job"
 	spt "github.com/solpipe/solpipe-tool/script"
-	sgo "github.com/SolmateDev/solana-go"
 	"google.golang.org/grpc"
 )
 
@@ -81,6 +81,15 @@ func Create(
 	}
 
 	return c, nil
+}
+
+func (e1 Client) Sender() sgo.PublicKey {
+	return e1.sender.PublicKey()
+}
+
+// either bidder->pipeline (=receiver) or pipeline->validator (=receiver)
+func (e1 Client) Receiver() sgo.PublicKey {
+	return e1.receiver
 }
 
 func (e1 Client) send_cb(ctx context.Context, cb func(in *internal)) error {

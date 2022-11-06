@@ -3,6 +3,7 @@ package pipeline
 import (
 	"context"
 
+	log "github.com/sirupsen/logrus"
 	pbj "github.com/solpipe/solpipe-tool/proto/job"
 	"github.com/solpipe/solpipe-tool/proxy"
 	"github.com/solpipe/solpipe-tool/proxy/relay"
@@ -13,12 +14,12 @@ import (
 
 type external struct {
 	pbj.UnimplementedTransactionServer
-	ctx       context.Context
-	internalC chan<- func(*internal)
-	Cancel    context.CancelFunc
-	network   ntk.Network
-	pipeline  pipe.Pipeline
-	txSubmitC chan<- requestForSubmitChannel
+	ctx                     context.Context
+	internalC               chan<- func(*internal)
+	Cancel                  context.CancelFunc
+	network                 ntk.Network
+	pipeline                pipe.Pipeline
+	requestTxSubmitChannelC chan<- requestForSubmitChannel
 }
 
 // Submit transactions from bidders and relay those transactions to validators.
@@ -28,7 +29,7 @@ func Create(
 	router rtr.Router,
 	pipeline pipe.Pipeline,
 ) (relay.Relay, error) {
-
+	log.Debugf("starting relay for pipeline=%s", pipeline.Id.String())
 	ctx2, cancel := context.WithCancel(ctx)
 	internalC := make(chan func(*internal), 10)
 	txSubmitC := make(chan requestForSubmitChannel)
@@ -57,12 +58,12 @@ func Create(
 		config,
 	)
 	e1 := external{
-		ctx:       ctx,
-		internalC: internalC,
-		Cancel:    cancel,
-		network:   router.Network,
-		pipeline:  pipeline,
-		txSubmitC: txSubmitC,
+		ctx:                     ctx,
+		internalC:               internalC,
+		Cancel:                  cancel,
+		network:                 router.Network,
+		pipeline:                pipeline,
+		requestTxSubmitChannelC: txSubmitC,
 	}
 	return e1, nil
 }

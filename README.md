@@ -70,7 +70,7 @@ make all
 ### Airdrop
 
 ```bash
-cba-tools airdrop --rpc=http://localhost:8899 --ws=ws://localhost:8900 -d EA4d44kdDaCWNcuBjepk8fyRp4WnccGgd1TrseDzcmtY -a 4.5598 -v
+solpipe airdrop --rpc=http://localhost:8899 --ws=ws://localhost:8900 -d EA4d44kdDaCWNcuBjepk8fyRp4WnccGgd1TrseDzcmtY -a 4.5598 -v
 ```
 
 ### Mint
@@ -78,9 +78,9 @@ cba-tools airdrop --rpc=http://localhost:8899 --ws=ws://localhost:8900 -d EA4d44
 ```bash
 solana-keygen new -o ./tmp/mint.json
 solana-keygen new -o ./tmp/authority.json
-cba-tools airdrop --rpc=http://localhost:8899 --ws=ws://localhost:8900 -d $(solana-keygen pubkey ./tmp/mint.json) -a 0.1 -v
-cba-tools airdrop --rpc=http://localhost:8899 --ws=ws://localhost:8900 -d $(solana-keygen pubkey ./tmp/authority.json) -a 0.1 -v
-cba-tools mint --rpc=http://localhost:8899 --ws=ws://localhost:8900 --payer=./tmp/mint.json --authority=./tmp/mint.json -d 2 -o ./tmp/mint-usdc.json -v
+solpipe airdrop --rpc=http://localhost:8899 --ws=ws://localhost:8900 -d $(solana-keygen pubkey ./tmp/mint.json) -a 0.1 -v
+solpipe airdrop --rpc=http://localhost:8899 --ws=ws://localhost:8900 -d $(solana-keygen pubkey ./tmp/authority.json) -a 0.1 -v
+solpipe mint --rpc=http://localhost:8899 --ws=ws://localhost:8900 --payer=./tmp/mint.json --authority=./tmp/mint.json -d 2 -o ./tmp/mint-usdc.json -v
 < ./tmp/mint-usdc.json  jq '.id' | sed 's/\"//g'
 ```
 * `-o` is optional in the last command
@@ -89,23 +89,23 @@ cba-tools mint --rpc=http://localhost:8899 --ws=ws://localhost:8900 --payer=./tm
 
 ```bash
 solana-keygen new -o ./tmp/bidder.json
-cba-tools airdrop --rpc=http://localhost:8899 --ws=ws://localhost:8900 -d $(solana-keygen pubkey ./tmp/bidder.json) -a 0.1 -v
-cba-tools issue --rpc=http://localhost:8899 --ws=ws://localhost:8900 --payer=./tmp/bidder.json --mint=./tmp/mint-usdc.json --owner=$(solana-keygen pubkey ./tmp/bidder.json) -a 1000 -v 
+solpipe airdrop --rpc=http://localhost:8899 --ws=ws://localhost:8900 -d $(solana-keygen pubkey ./tmp/bidder.json) -a 0.1 -v
+solpipe issue --rpc=http://localhost:8899 --ws=ws://localhost:8900 --payer=./tmp/bidder.json --mint=./tmp/mint-usdc.json --owner=$(solana-keygen pubkey ./tmp/bidder.json) -a 1000 -v 
 ```
 
 Check the new balance with:
 
 ```bash
-cba-tools balance --rpc=http://localhost:8899 --ws=ws://localhost:8900  --mint=$(< ./tmp/mint-usdc.json  jq '.id' | sed 's/\"//g') --owner=$(solana-keygen pubkey ./tmp/bidder.json)  -v
+solpipe balance --rpc=http://localhost:8899 --ws=ws://localhost:8900  --mint=$(< ./tmp/mint-usdc.json  jq '.id' | sed 's/\"//g') --owner=$(solana-keygen pubkey ./tmp/bidder.json)  -v
 ```
 
 ## Create accounts
 
 ```bash
-cba-tools airdrop --rpc=http://localhost:8899 --ws=ws://localhost:8900 -d $(solana-keygen pubkey ./tmp/controller-admin.json) -a 100 -v
-cba-tools airdrop --rpc=http://localhost:8899 --ws=ws://localhost:8900 -d $(solana-keygen pubkey ./tmp/mint.json) -a 100 -v
-cba-tools airdrop --rpc=http://localhost:8899 --ws=ws://localhost:8900 -d $(solana-keygen pubkey ./tmp/validator.json) -a 100 -v
-cba-tools airdrop --rpc=http://localhost:8899 --ws=ws://localhost:8900 -d $(solana-keygen pubkey ./tmp/validator-admin.json) -a 100 -v
+solpipe airdrop --rpc=http://localhost:8899 --ws=ws://localhost:8900 -d $(solana-keygen pubkey ./tmp/controller-admin.json) -a 100 -v
+solpipe airdrop --rpc=http://localhost:8899 --ws=ws://localhost:8900 -d $(solana-keygen pubkey ./tmp/mint.json) -a 100 -v
+solpipe airdrop --rpc=http://localhost:8899 --ws=ws://localhost:8900 -d $(solana-keygen pubkey ./tmp/validator.json) -a 100 -v
+solpipe airdrop --rpc=http://localhost:8899 --ws=ws://localhost:8900 -d $(solana-keygen pubkey ./tmp/validator-admin.json) -a 100 -v
 ```
 
 
