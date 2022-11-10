@@ -1,4 +1,4 @@
-# Testing Solpipe
+# Developing for Solpipe
 
 We have to spin up a test validator and run Go tests against said validators.
 

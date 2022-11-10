@@ -4,10 +4,11 @@
 # Run Agent
 
 
+
 ## Example Usage
 
 ```bash
-cba-client --verbose  \
+solpipe --verbose  \
    --rpc=http://localhost:8899 \
    --ws=ws://localhost:8900  \
    pipeline agent \
@@ -24,7 +25,7 @@ cba-client --verbose  \
 ## Man page
 
 ```
-Usage: cba-client pipeline agent <id> <admin>
+Usage: solpipe pipeline agent <id> <admin>
 
 run a Pipeline Agent
 
@@ -59,14 +60,17 @@ Flags:
 ## Example
 
 ```bash
-cba-client   --rpc=http://localhost:8899    --ws=ws://localhost:8900    --verbose  pipeline status 2Tb48kmdnsnRKcuHDb5iVjeKvZbLrS7U3rxnMf9t2rC7
+solpipe --verbose \
+  --rpc=http://localhost:8899  \
+  --ws=ws://localhost:8900  \
+  pipeline status 2Tb48kmdnsnRKcuHDb5iVjeKvZbLrS7U3rxnMf9t2rC7
 ```
 
 ## Man Page
 
 
 ```
-Usage: cba-client pipeline status <id>
+Usage: solpipe pipeline status <id>
 
 Print the admin, token balance of the controller
 
