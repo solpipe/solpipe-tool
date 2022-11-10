@@ -5,13 +5,13 @@ import (
 	"os"
 	"testing"
 
-	cba "github.com/solpipe/cba"
-	"github.com/solpipe/solpipe-tool/util"
 	"github.com/joho/godotenv"
 	log "github.com/sirupsen/logrus"
+	cba "github.com/solpipe/cba"
+	"github.com/solpipe/solpipe-tool/util"
 )
 
-func TestTop(t *testing.T) {
+func TestIntegrationMultipleValidators(t *testing.T) {
 	var err error
 	err = godotenv.Load("../../.env")
 	if err != nil {
