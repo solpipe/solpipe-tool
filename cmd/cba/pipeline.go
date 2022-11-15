@@ -1,6 +1,7 @@
 package main
 
 import (
+	"encoding/json"
 	"errors"
 	"fmt"
 	"math"
@@ -20,15 +21,214 @@ import (
 
 type Pipeline struct {
 	Create PipelineCreate `cmd name:"create" help:"create a pipeline"`
+	Update PipelineUpdate `cmd name:"update" help:"change the settings on a pipeline"`
 	Agent  PipelineAgent  `cmd name:"agent" help:"run a Pipeline Agent"`
 	Status PipelineStatus `cmd name:"status" help:"Print the admin, token balance of the controller"`
 }
 
 type PipelineCreate struct {
+	Payer       string `name:"payer" short:"p" help:"the account paying SOL fees"`
+	PipelineKey string `arg name:"pipeline" help:"the Pipeline ID private key"`
+	AdminKey    string `arg name:"admin" short:"a" help:"the account with administrative privileges"`
+	CrankFee    string `arg name:"crank" help:"set the fee that the controller earns from Validator revenue."`
+	DecayRate   string `arg name:"decay"  help:"set the fee that the controller earns from Validator revenue."`
+	PayoutShare string `arg name:"payout"  help:"set the fee that the controller earns from Validator revenue."`
+	Allotment   uint16 `arg name:"allotment" help:"allotment"`
 }
 
 func (r *PipelineCreate) Run(kongCtx *CLIContext) error {
-	return errors.New("not implemented yet")
+	ctx := kongCtx.Ctx
+	if kongCtx.Clients == nil {
+		return errors.New("no rpc or ws client")
+	}
+	payer, err := sgo.PrivateKeyFromBase58(r.Payer)
+	if err != nil {
+		payer, err = sgo.PrivateKeyFromSolanaKeygenFile(r.Payer)
+		if err != nil {
+			return err
+		}
+	}
+	log.Debugf("payer=%s", payer.PublicKey().String())
+
+	admin, err := readPrivateKey(r.AdminKey)
+	if err != nil {
+		return err
+	}
+
+	var pipeline sgo.PrivateKey
+	pipeline, err = sgo.PrivateKeyFromBase58(r.PipelineKey)
+	if err != nil {
+		pipeline, err = sgo.PrivateKeyFromSolanaKeygenFile(r.PipelineKey)
+		if err != nil {
+			return err
+		}
+	}
+
+	crankerFee, err := readRate(r.CrankFee)
+	if err != nil {
+		return err
+	}
+
+	decayRate, err := readRate(r.DecayRate)
+	if err != nil {
+		return err
+	}
+
+	payoutShare, err := readRate(r.PayoutShare)
+	if err != nil {
+		return err
+	}
+
+	log.Debugf("admin=%s", admin.PublicKey().String())
+	relayConfig := relay.CreateConfiguration(
+		kongCtx.Clients.Version,
+		admin,
+		kongCtx.Clients.RpcUrl,
+		kongCtx.Clients.WsUrl,
+		kongCtx.Clients.Headers.Clone(),
+		DEFAULT_VALIDATOR_ADMIN_SOCKET, // this line is irrelevant
+		nil,
+	)
+	router, err := relayConfig.Router(ctx)
+	if err != nil {
+		return err
+	}
+
+	s1, err := relayConfig.ScriptBuilder(ctx)
+	if err != nil {
+		return err
+	}
+	err = s1.SetTx(payer)
+	if err != nil {
+		return err
+	}
+
+	_, err = s1.AddPipelineDirect(
+		pipeline,
+		router.Controller,
+		payer,
+		admin,
+		*crankerFee,
+		r.Allotment,
+		*decayRate,
+		*payoutShare,
+	)
+	if err != nil {
+		return err
+	}
+
+	err = s1.FinishTx(true)
+	if err != nil {
+		return err
+	}
+	ans := new(PipelineCreateResponse)
+	ans.Pipeline = pipeline.PublicKey().String()
+	err = json.NewEncoder(os.Stdout).Encode(ans)
+	if err != nil {
+		return err
+	}
+	return nil
+}
+
+type PipelineCreateResponse struct {
+	Pipeline string `json:"pipeline"`
+}
+
+type PipelineUpdate struct {
+	Payer       string `name:"payer" short:"p" help:"the account paying SOL fees"`
+	PipelineId  string `arg name:"pipeline" help:"the Pipeline ID public key"`
+	AdminKey    string `arg name:"admin" short:"a" help:"the account with administrative privileges"`
+	CrankFee    string `arg name:"crank" help:"set the fee that the controller earns from Validator revenue."`
+	DecayRate   string `arg name:"decay"  help:"set the fee that the controller earns from Validator revenue."`
+	PayoutShare string `arg name:"payout"  help:"set the fee that the controller earns from Validator revenue."`
+	Allotment   uint16 `arg name:"allotment" help:"allotment"`
+}
+
+func (r *PipelineUpdate) Run(kongCtx *CLIContext) error {
+	ctx := kongCtx.Ctx
+	if kongCtx.Clients == nil {
+		return errors.New("no rpc or ws client")
+	}
+	payer, err := sgo.PrivateKeyFromBase58(r.Payer)
+	if err != nil {
+		payer, err = sgo.PrivateKeyFromSolanaKeygenFile(r.Payer)
+		if err != nil {
+			return err
+		}
+	}
+	log.Debugf("payer=%s", payer.PublicKey().String())
+
+	admin, err := sgo.PrivateKeyFromBase58(r.AdminKey)
+	if err != nil {
+		admin, err = sgo.PrivateKeyFromSolanaKeygenFile(r.AdminKey)
+		if err != nil {
+			return err
+		}
+	}
+
+	pipeline, err := sgo.PublicKeyFromBase58(r.PipelineId)
+	if err != nil {
+		return err
+	}
+
+	crankerFee, err := readRate(r.CrankFee)
+	if err != nil {
+		return err
+	}
+
+	decayRate, err := readRate(r.DecayRate)
+	if err != nil {
+		return err
+	}
+
+	payoutShare, err := readRate(r.PayoutShare)
+	if err != nil {
+		return err
+	}
+
+	log.Debugf("admin=%s", admin.PublicKey().String())
+	relayConfig := relay.CreateConfiguration(
+		kongCtx.Clients.Version,
+		admin,
+		kongCtx.Clients.RpcUrl,
+		kongCtx.Clients.WsUrl,
+		kongCtx.Clients.Headers.Clone(),
+		DEFAULT_VALIDATOR_ADMIN_SOCKET, // this line is irrelevant
+		nil,
+	)
+	router, err := relayConfig.Router(ctx)
+	if err != nil {
+		return err
+	}
+
+	s1, err := relayConfig.ScriptBuilder(ctx)
+	if err != nil {
+		return err
+	}
+	err = s1.SetTx(payer)
+	if err != nil {
+		return err
+	}
+
+	err = s1.UpdatePipeline(
+		router.Controller.Id(),
+		pipeline,
+		admin,
+		*crankerFee,
+		r.Allotment,
+		*decayRate,
+		*payoutShare,
+	)
+	if err != nil {
+		return err
+	}
+
+	err = s1.FinishTx(true)
+	if err != nil {
+		return err
+	}
+
+	return nil
 }
 
 type PipelineAgent struct {

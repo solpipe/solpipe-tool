@@ -10,6 +10,9 @@ import (
 	"testing"
 	"time"
 
+	sgo "github.com/SolmateDev/solana-go"
+	sgorpc "github.com/SolmateDev/solana-go/rpc"
+	log "github.com/sirupsen/logrus"
 	cba "github.com/solpipe/cba"
 	"github.com/solpipe/solpipe-tool/script"
 	"github.com/solpipe/solpipe-tool/state"
@@ -17,9 +20,6 @@ import (
 	"github.com/solpipe/solpipe-tool/test/people"
 	"github.com/solpipe/solpipe-tool/test/sandbox"
 	"github.com/solpipe/solpipe-tool/util"
-	sgo "github.com/SolmateDev/solana-go"
-	sgorpc "github.com/SolmateDev/solana-go/rpc"
-	log "github.com/sirupsen/logrus"
 )
 
 func TestController(t *testing.T) {

@@ -7,13 +7,16 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
+	"strconv"
+	"strings"
 	"syscall"
 
-	cba "github.com/solpipe/cba"
-	vrs "github.com/solpipe/solpipe-tool/state/version"
 	sgo "github.com/SolmateDev/solana-go"
 	"github.com/alecthomas/kong"
 	log "github.com/sirupsen/logrus"
+	cba "github.com/solpipe/cba"
+	"github.com/solpipe/solpipe-tool/state"
+	vrs "github.com/solpipe/solpipe-tool/state/version"
 )
 
 type CLIContext struct {
@@ -124,4 +127,35 @@ func loopSignal(ctx context.Context, cancel context.CancelFunc, signalC <-chan o
 	case s := <-signalC:
 		os.Stderr.WriteString(fmt.Sprintf("%s\n", s.String()))
 	}
+}
+
+func readRate(rate string) (*state.Rate, error) {
+	ans := new(state.Rate)
+	var err error
+	x := strings.Split(rate, "/")
+	if len(x) != 2 {
+		return nil, errors.New("fee is not of form numerator/denominator")
+	}
+	ans.N, err = strconv.ParseUint(x[0], 10, 64)
+	if err != nil {
+		return nil, err
+	}
+	ans.D, err = strconv.ParseUint(x[1], 10, 64)
+	if err != nil {
+		return nil, err
+	}
+	return ans, nil
+}
+
+// argument is either file name or private key in base58
+func readPrivateKey(input string) (ans sgo.PrivateKey, err error) {
+
+	ans, err = sgo.PrivateKeyFromBase58(input)
+	if err != nil {
+		ans, err = sgo.PrivateKeyFromSolanaKeygenFile(input)
+		if err != nil {
+			return
+		}
+	}
+	return
 }

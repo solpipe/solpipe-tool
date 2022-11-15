@@ -8,7 +8,7 @@ Events to care about:
 1. Let pipeline agent connect to us over TOR.
 
 
-```
+```bash
 solpipe --verbose  \
    --rpc=http://localhost:8899 \
    --ws=ws://localhost:8900  \

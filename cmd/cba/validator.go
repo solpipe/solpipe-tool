@@ -20,9 +20,9 @@ type Validator struct {
 
 type ValidatorCreate struct {
 	Payer    string `name:"payer" help:"The private key that owns the SOL to pay the transaction fees."`
-	VoteKey  string `name:"vote" help:"The vote account for the validator."`
-	StakeKey string `name:"stake" help:"Pick one stake account as a sample."`
-	AdminKey string `name:"admin" help:"The admin key used to administrate the validator pipeline."`
+	VoteKey  string `arg name:"vote" help:"The vote account for the validator."`
+	AdminKey string `arg name:"admin" help:"The admin key used to administrate the validator pipeline."`
+	StakeKey string `arg name:"stake" help:"Pick one stake account as a sample."`
 }
 
 func (r *ValidatorCreate) Run(kongCtx *CLIContext) error {

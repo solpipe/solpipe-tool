@@ -5,12 +5,12 @@ import (
 	"testing"
 	"time"
 
-	cba "github.com/solpipe/cba"
-	"github.com/solpipe/solpipe-tool/state"
-	sle "github.com/solpipe/solpipe-tool/test/single"
 	sgo "github.com/SolmateDev/solana-go"
 	sgorpc "github.com/SolmateDev/solana-go/rpc"
 	"github.com/joho/godotenv"
+	cba "github.com/solpipe/cba"
+	"github.com/solpipe/solpipe-tool/state"
+	sle "github.com/solpipe/solpipe-tool/test/single"
 )
 
 func TestController(t *testing.T) {
@@ -65,6 +65,7 @@ func TestController(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
+
 		err = script.CreateController(
 			sbox.ControllerAdmin,
 			sbox.ControllerAdmin,
@@ -79,6 +80,7 @@ func TestController(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
+		time.Sleep(60 * time.Second)
 		balance, err := relayConfig.Rpc().GetBalance(
 			ctxT,
 			relayConfig.Admin.PublicKey(),

@@ -62,10 +62,10 @@ func (r *ControllerStatus) Run(kongCtx *CLIContext) error {
 
 type ControllerCreate struct {
 	Payer   string `name:"payer" short:"p" help:"the account paying SOL fees"`
-	Admin   string `name:"admin" short:"a" help:"the account with administrative privileges"`
+	Admin   string `arg name:"admin" short:"a" help:"the account with administrative privileges"`
 	Cranker string `option name:"cranker" help:"who is allowed to crank"`
-	Mint    string `name:"mint" short:"m" help:"the mint of the token account to which fees are paid to and by validators"`
-	Fee     string `name:"fee" short:"f" help:"set the fee that the controller earns from Validator revenue."`
+	Mint    string `arg name:"mint" short:"m" help:"the mint of the token account to which fees are paid to and by validators"`
+	Fee     string `arg name:"fee" short:"f" help:"set the fee that the controller earns from Validator revenue."`
 }
 
 func (r *ControllerCreate) Run(kongCtx *CLIContext) error {

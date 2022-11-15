@@ -217,6 +217,7 @@ func loopCloseFromError(ctx context.Context, cancel context.CancelFunc, errorC <
 
 func loopCloseTor(ctx context.Context, t *tor.Tor) {
 	<-ctx.Done()
+	// TODO: tor library panics on close
 	t.Close()
 }
 
