@@ -45,6 +45,7 @@ var cli struct {
 	Controller   Controller   `cmd name:"controller" help:"Manage the controller"`
 	Pipeline     Pipeline     `cmd name:"pipeline" help:"Run a JSON RPC send_tx proxy"`
 	Validator    Validator    `cmd name:"validator" help:"Run a JSON RPC send_tx proxy"`
+	Web          Web          `cmd name:"web" help:"Run a web server allowing state updates over HTTP and Websockets"`
 }
 
 // PROGRAM_ID_CBA=2nV2HN9eaaoyk4WmiiEtUShup9hVQ21rNawfor9qoqam

@@ -143,3 +143,15 @@ solpipe --verbose  \
    $(solana-keygen pubkey ./localconfig/single/pipeline.json) \
   ./localconfig/single/pipeline-admin.json
 ```
+
+
+## Terminal 5 - Website
+
+```bash
+solpipe --verbose  \
+   --rpc=http://localhost:8899 \
+   --ws=ws://localhost:8900  \
+   web \
+   --frontend=http://localhost:3001 \
+   4001
+```
