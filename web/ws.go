@@ -83,7 +83,7 @@ out:
 		case <-clientDoneC:
 			break out
 		case slot := <-slotSub.StreamC:
-			log.Debugf("slot=%d", slot)
+			//log.Debugf("slot=%d", slot)
 			err = writeConn(conn, TYPE_SLOT, &SlotTick{
 				Time: time.Now(),
 				Slot: slot,
