@@ -9,11 +9,6 @@ import (
 
 func (e1 external) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 
-	if r.Header.Get("Upgrade") == "websocket" {
-		log.Debug("serving websocket")
-		e1.ws_server_http(w, r)
-		return
-	}
 	log.Debugf("serving url=%s", r.URL.String())
 	// Implement route forwarding
 	switch r.URL.String() {
@@ -23,6 +18,13 @@ func (e1 external) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	case "/health/liveness":
 		log.Debug("liveness")
 		e1.liveness(w)
+	case "/ws":
+		if r.Header.Get("Upgrade") == "websocket" {
+			log.Debug("serving websocket")
+			e1.ws_server_http(w, r)
+		} else {
+			w.WriteHeader(http.StatusBadRequest)
+		}
 	default:
 		e1.proxy_front(w, r)
 	}

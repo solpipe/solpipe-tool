@@ -34,7 +34,7 @@ func Create(
 	router rtr.Router,
 	pipeline pipe.Pipeline,
 ) (Agent, error) {
-
+	log.Debug("creating pipeline agent")
 	var err error
 	controller := router.Controller
 	ctx, cancel := context.WithCancel(ctxOutside)

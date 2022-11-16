@@ -2,6 +2,7 @@ package slot
 
 import (
 	"context"
+	"time"
 
 	sgows "github.com/SolmateDev/solana-go/rpc/ws"
 	"github.com/google/uuid"
@@ -71,6 +72,8 @@ func loopSlot(
 	closeC := sub.CloseSignal()
 	defer sub.Unsubscribe()
 
+	log.Debug("preparing slot stream")
+	time.Sleep(5 * time.Second)
 out:
 	for {
 		select {
@@ -79,16 +82,16 @@ out:
 			if !ok {
 				break out
 			}
-			//if x.Slot%10 == 0 {
-			//	log.Debugf("(%s)slot____=%d; sub count=%d", id.String(), x.Slot, home.SubscriberCount())
-			//}
+			if x.Slot%10 == 0 {
+				log.Debugf("(%s)slot____=%d; sub count=%d", id.String(), x.Slot, home.SubscriberCount())
+			}
 			home.Broadcast(x.Slot)
 		case <-closeC:
 			break out
 		case <-doneC:
 			break out
 		case rC := <-reqC:
-			//log.Debugf("slot subscription (%s)  %d", id.String(), home.SubscriberCount())
+			log.Debugf("slot subscription (%s)  %d", id.String(), home.SubscriberCount())
 			home.Receive(rC)
 		case id := <-deleteC:
 			home.Delete(id)

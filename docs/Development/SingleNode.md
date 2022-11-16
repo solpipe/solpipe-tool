@@ -155,3 +155,19 @@ solpipe --verbose  \
    --frontend=http://localhost:3001 \
    4001
 ```
+
+
+## Terminal 6 - Adjustments
+
+### Adjust Pipeline
+
+```bash
+solpipe --verbose \
+  --rpc=http://localhost:8899 \
+  --ws=ws://localhost:8900  \
+  pipeline update \
+  $(solana-keygen pubkey ./localconfig/single/pipeline.json) \
+  --payer=./localconfig/single/faucet.json \
+  ./localconfig/single/pipeline-admin.json \
+  1/100 1/10 1/3 100
+```
