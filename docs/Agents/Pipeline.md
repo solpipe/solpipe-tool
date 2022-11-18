@@ -16,11 +16,12 @@ solpipe --verbose  \
    --decay_rate=1/100 \
    --payout_share=95/100 \
    --clear_listen=1.1.1.1:50051 \
-   --admin_url="unix:///tmp/pipeline.socket" \
+   --admin_url="tcp://127.0.0.1:30051" \
   2Tb48kmdnsnRKcuHDb5iVjeKvZbLrS7U3rxnMf9t2rC7 \
   ./localconfig/single/pipeline-admin.json
 ```
 * let clients connect via clear net at 1.1.1.1:50051.
+* `admin_url="unix:///tmp/pipeline.socket"` is also possible 
 
 ## Man page
 

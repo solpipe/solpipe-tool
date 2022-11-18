@@ -5,17 +5,17 @@ import (
 	"errors"
 	"fmt"
 
-	cba "github.com/solpipe/cba"
-	sub2 "github.com/solpipe/solpipe-tool/ds/sub"
-	"github.com/solpipe/solpipe-tool/state/slot"
-	"github.com/solpipe/solpipe-tool/state/sub"
-	vrs "github.com/solpipe/solpipe-tool/state/version"
 	sgo "github.com/SolmateDev/solana-go"
 	sgotkn "github.com/SolmateDev/solana-go/programs/token"
 	sgorpc "github.com/SolmateDev/solana-go/rpc"
 	sgows "github.com/SolmateDev/solana-go/rpc/ws"
 	bin "github.com/gagliardetto/binary"
 	log "github.com/sirupsen/logrus"
+	cba "github.com/solpipe/cba"
+	sub2 "github.com/solpipe/solpipe-tool/ds/sub"
+	"github.com/solpipe/solpipe-tool/state/slot"
+	"github.com/solpipe/solpipe-tool/state/sub"
+	vrs "github.com/solpipe/solpipe-tool/state/version"
 )
 
 type Controller struct {
@@ -76,7 +76,7 @@ func CreateController(ctx context.Context, rpcClient *sgorpc.Client, wsClient *s
 	log.Infof("controller id 2 =%s", controllerId.String())
 	data := all.Controller
 
-	subSlot, err := slot.SubscribeSlot(ctx, wsClient)
+	subSlot, err := slot.SubscribeSlot(ctx, rpcClient, wsClient)
 	if err != nil {
 		return Controller{}, err
 	}

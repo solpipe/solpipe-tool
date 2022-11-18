@@ -5,11 +5,11 @@ import (
 	"errors"
 	"fmt"
 
+	sgo "github.com/SolmateDev/solana-go"
 	cba "github.com/solpipe/cba"
 	sub2 "github.com/solpipe/solpipe-tool/ds/sub"
 	rpt "github.com/solpipe/solpipe-tool/state/receipt"
 	"github.com/solpipe/solpipe-tool/state/sub"
-	sgo "github.com/SolmateDev/solana-go"
 )
 
 const PAYOUT_CLOSE_DELAY = uint64(100)
@@ -55,13 +55,13 @@ func (e1 Payout) OnClose() <-chan struct{} {
 }
 
 func (e1 Payout) CloseSignal() <-chan error {
-	doneC := e1.ctx.Done()
 	signalC := make(chan error, 1)
 	err := e1.ctx.Err()
 	if err != nil {
 		signalC <- err
 		return signalC
 	}
+	doneC := e1.ctx.Done()
 	select {
 	case <-doneC:
 		err = errors.New("canceled")

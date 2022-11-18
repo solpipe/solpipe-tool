@@ -7,7 +7,7 @@ replace github.com/solpipe/cba => ../cba
 replace github.com/SolmateDev/go-rust-translator => ../tpu-client/go
 
 require (
-	github.com/SolmateDev/solana-go v1.5.1-custom
+	github.com/SolmateDev/solana-go v1.7.1-custom
 	github.com/cretz/bine v0.2.0
 	github.com/sirupsen/logrus v1.9.0
 	github.com/solpipe/cba v0.0.0-20221026080648-419c0aae4907
@@ -16,6 +16,7 @@ require (
 
 require (
 	github.com/golang/protobuf v1.5.2 // indirect
+	github.com/improbable-eng/grpc-web v0.15.0 // indirect
 	github.com/streamingfast/logging v0.0.0-20220813175024-b4fbb0e893df // indirect
 	golang.org/x/net v0.1.0 // indirect
 	golang.org/x/text v0.4.0 // indirect

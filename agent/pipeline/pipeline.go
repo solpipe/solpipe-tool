@@ -123,8 +123,9 @@ func Create(
 		cancel()
 		return Agent{}, err
 	}
+
 	var signalC <-chan error
-	err, signalC = admin.Attach(
+	signalC, err = admin.Attach(
 		ctx,
 		grpcAdminServer,
 		router,

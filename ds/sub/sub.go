@@ -1,5 +1,11 @@
 package sub
 
+import (
+	"errors"
+
+	log "github.com/sirupsen/logrus"
+)
+
 type Subscription[T any] struct {
 	id      int
 	deleteC chan<- int
@@ -50,9 +56,16 @@ func (sh *SubHome[T]) SubscriberCount() int {
 }
 
 func (sh *SubHome[T]) Broadcast(value T) {
-	for _, v := range sh.subs {
+	for id, v := range sh.subs {
 		if v.filter(value) {
-			v.streamC <- value
+			select {
+			case v.streamC <- value:
+			default:
+				log.Debug("subscription timed out")
+				// errorC guaranteed to have 1 empty space
+				v.errorC <- errors.New("queue is full")
+				delete(sh.subs, id)
+			}
 		}
 	}
 }

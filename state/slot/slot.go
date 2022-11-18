@@ -4,6 +4,7 @@ import (
 	"context"
 	"time"
 
+	sgorpc "github.com/SolmateDev/solana-go/rpc"
 	sgows "github.com/SolmateDev/solana-go/rpc/ws"
 	"github.com/google/uuid"
 	log "github.com/sirupsen/logrus"
@@ -16,9 +17,9 @@ type SlotHome struct {
 	ctx  context.Context
 }
 
-func SubscribeSlot(ctxOutside context.Context, wsClient *sgows.Client) (SlotHome, error) {
+func SubscribeSlot(ctxOutside context.Context, rpcClient *sgorpc.Client, wsClient *sgows.Client) (SlotHome, error) {
 	ctx, cancel := context.WithCancel(ctxOutside)
-	initC := make(chan error, 1)
+
 	home := dssub.CreateSubHome[uint64]()
 	reqC := home.ReqC
 	var err error
@@ -27,12 +28,13 @@ func SubscribeSlot(ctxOutside context.Context, wsClient *sgows.Client) (SlotHome
 		cancel()
 		return SlotHome{}, err
 	}
-
-	go loopSlot(ctx, initC, home, wsClient, cancel, id)
-	err = <-initC
+	sub, err := wsClient.SlotSubscribe()
 	if err != nil {
+		cancel()
 		return SlotHome{}, err
 	}
+	go loopSlot(ctx, home, rpcClient, sub, cancel, id)
+
 	//log.Debugf("creating slot subber id=%s", id.String())
 	return SlotHome{
 		reqC: reqC, ctx: ctx, id: id,
@@ -50,9 +52,9 @@ func (sh SlotHome) CloseSignal() <-chan struct{} {
 // carry websocket client into this goroutine to prevent it from going out of memory and killing the subscriptions
 func loopSlot(
 	ctx context.Context,
-	initErrorC chan<- error,
 	home *dssub.SubHome[uint64],
-	wsClient *sgows.Client,
+	rpcClient *sgorpc.Client,
+	sub *sgows.SlotSubscription,
 	cancel context.CancelFunc,
 	id uuid.UUID,
 ) {
@@ -62,18 +64,17 @@ func loopSlot(
 	reqC := home.ReqC
 	deleteC := home.DeleteC
 
-	sub, err := wsClient.SlotSubscribe()
-	initErrorC <- err
-	if err != nil {
-		return
-	}
-
 	streamC := sub.RecvStream()
 	closeC := sub.CloseSignal()
 	defer sub.Unsubscribe()
 
 	log.Debug("preparing slot stream")
 	time.Sleep(5 * time.Second)
+	interval := 3 * time.Second
+	nextC := time.After(interval)
+	var lastSlot uint64
+	lastSlot = 0
+	var slot uint64
 out:
 	for {
 		select {
@@ -82,10 +83,18 @@ out:
 			if !ok {
 				break out
 			}
-			if x.Slot%10 == 0 {
-				log.Debugf("(%s)slot____=%d; sub count=%d", id.String(), x.Slot, home.SubscriberCount())
+			slot = x.Slot
+			sendBroadcat(home, &lastSlot, &slot)
+			lastSlot = slot
+			nextC = time.After(interval)
+		case <-nextC:
+			slot, err = rpcClient.GetSlot(ctx, sgorpc.CommitmentFinalized)
+			if err != nil {
+				break out
 			}
-			home.Broadcast(x.Slot)
+			sendBroadcat(home, &lastSlot, &slot)
+			lastSlot = slot
+			nextC = time.After(interval)
 		case <-closeC:
 			break out
 		case <-doneC:
@@ -98,6 +107,22 @@ out:
 		}
 	}
 
-	log.Debug("exiting slot subscription")
+	log.Debug("++++++++++++++++++++++++++++exiting slot subscription+++++++++++++++++++++++++++")
 	log.Debug(err)
+}
+
+func sendBroadcat(
+	home *dssub.SubHome[uint64],
+	lastSlot *uint64,
+	slot *uint64,
+) {
+	if *slot <= *lastSlot {
+		return
+	}
+	if *slot%10 == 0 {
+		log.Debugf("slot____=%d; sub count=%d", *slot, home.SubscriberCount())
+	}
+	//log.Debugf("slot____=%d; sub count=%d", *slot, home.SubscriberCount())
+	*lastSlot = *slot
+	home.Broadcast(*slot)
 }

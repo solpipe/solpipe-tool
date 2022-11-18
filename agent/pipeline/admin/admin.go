@@ -5,6 +5,10 @@ import (
 	"errors"
 	"io"
 
+	sgo "github.com/SolmateDev/solana-go"
+	sgorpc "github.com/SolmateDev/solana-go/rpc"
+	sgows "github.com/SolmateDev/solana-go/rpc/ws"
+	log "github.com/sirupsen/logrus"
 	"github.com/solpipe/solpipe-tool/ds/sub"
 	pba "github.com/solpipe/solpipe-tool/proto/admin"
 	ctr "github.com/solpipe/solpipe-tool/state/controller"
@@ -12,10 +16,6 @@ import (
 	pipe "github.com/solpipe/solpipe-tool/state/pipeline"
 	rtr "github.com/solpipe/solpipe-tool/state/router"
 	"github.com/solpipe/solpipe-tool/util"
-	sgo "github.com/SolmateDev/solana-go"
-	sgorpc "github.com/SolmateDev/solana-go/rpc"
-	sgows "github.com/SolmateDev/solana-go/rpc/ws"
-	log "github.com/sirupsen/logrus"
 	"google.golang.org/grpc"
 )
 
@@ -37,7 +37,7 @@ func Attach(
 	pipelineId sgo.PublicKey,
 	admin sgo.PrivateKey,
 	initialSettings *pipeline.PipelineSettings,
-) (error, <-chan error) {
+) (<-chan error, error) {
 	log.Debug("creating owner grpc server")
 	signalC := make(chan error, 1)
 	controller := router.Controller
@@ -47,7 +47,7 @@ func Attach(
 	reqLogC := homeLog.ReqC
 	pipeline, err := router.PipelineById(pipelineId)
 	if err != nil {
-		return err, signalC
+		return signalC, err
 	}
 	e1 := Server{
 		ctx:        ctx,
@@ -58,16 +58,16 @@ func Attach(
 	}
 
 	if initialSettings == nil {
-		return errors.New("no initial settings"), signalC
+		return signalC, errors.New("no initial settings")
 	}
 
 	pr, err := pipeline.PeriodRing()
 	if err != nil {
-		return err, signalC
+		return signalC, err
 	}
 	prList, err := util.GetLinkedListFromPeriodRing(&pr)
 	if err != nil {
-		return err, signalC
+		return signalC, err
 	}
 
 	go loopInternal(
@@ -91,7 +91,7 @@ func Attach(
 		in.closeSignalCList = append(in.closeSignalCList, signalC)
 	}
 
-	return nil, signalC
+	return signalC, nil
 }
 
 func (e1 Server) GetPeriod(ctx context.Context, req *pba.Empty) (*pba.PeriodSettings, error) {

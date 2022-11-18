@@ -128,7 +128,7 @@ out:
 	}, nil
 }
 
-func (e1 Pipeline) PeriodRingWithPayout() ([]PayoutWithData, error) {
+func (e1 Pipeline) PayoutWithData() ([]PayoutWithData, error) {
 	doneC := e1.ctx.Done()
 	err := e1.ctx.Err()
 	if err != nil {

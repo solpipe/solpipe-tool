@@ -85,7 +85,7 @@ out:
 		case err = <-periodSub.ErrorC:
 			break out
 		case <-periodSub.StreamC:
-			list, err = pi.pipeline.PeriodRingWithPayout()
+			list, err = pi.pipeline.PayoutWithData()
 			if err != nil {
 				break out
 			}

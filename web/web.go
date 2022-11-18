@@ -39,6 +39,7 @@ func Run(
 			return
 		}
 	}
+
 	e1 := external{
 		ctx:      ctx,
 		healthC:  healthC,

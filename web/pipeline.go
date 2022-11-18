@@ -3,6 +3,7 @@ package web
 import (
 	"context"
 
+	sgo "github.com/SolmateDev/solana-go"
 	pipe "github.com/solpipe/solpipe-tool/state/pipeline"
 	"github.com/solpipe/solpipe-tool/state/sub"
 )
@@ -82,6 +83,47 @@ func (e1 external) ws_on_pipeline(
 	defer bidSub.Unsubscribe()
 
 	var err error
+
+	{
+		data, err := p.Data()
+		if err != nil {
+			loopPipelineFinish(id, pipeOut, errorC, err)
+			return
+		}
+		pipeOut.dataC <- sub.PipelineGroup{
+			Id:     id,
+			Data:   data,
+			IsOpen: true,
+		}
+	}
+	{
+
+		pr, err := p.PeriodRing()
+		if err != nil {
+			loopPipelineFinish(id, pipeOut, errorC, err)
+			return
+		}
+		pipeOut.periodC <- sub.PeriodGroup{
+			Id:     id,
+			Data:   pr,
+			IsOpen: true,
+		}
+	}
+
+	{
+
+		bl, err := p.BidList()
+		if err != nil {
+			loopPipelineFinish(id, pipeOut, errorC, err)
+			return
+		}
+		pipeOut.bidC <- sub.BidGroup{
+			Id:     id,
+			Data:   bl,
+			IsOpen: true,
+		}
+	}
+
 out:
 	for {
 		select {
@@ -116,18 +158,27 @@ out:
 		}
 	}
 	if err != nil {
-		pipeOut.dataC <- sub.PipelineGroup{
-			Id:     id,
-			IsOpen: false,
-		}
-		pipeOut.periodC <- sub.PeriodGroup{
-			Id:     id,
-			IsOpen: false,
-		}
-		pipeOut.bidC <- sub.BidGroup{
-			Id:     id,
-			IsOpen: false,
-		}
-		errorC <- err
+		loopPipelineFinish(id, pipeOut, errorC, err)
 	}
+}
+
+func loopPipelineFinish(
+	id sgo.PublicKey,
+	pipeOut pipelineChannelGroup,
+	errorC chan<- error,
+	err error,
+) {
+	pipeOut.dataC <- sub.PipelineGroup{
+		Id:     id,
+		IsOpen: false,
+	}
+	pipeOut.periodC <- sub.PeriodGroup{
+		Id:     id,
+		IsOpen: false,
+	}
+	pipeOut.bidC <- sub.BidGroup{
+		Id:     id,
+		IsOpen: false,
+	}
+	errorC <- err
 }

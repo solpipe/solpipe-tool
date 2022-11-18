@@ -404,7 +404,7 @@ func (r *PipelineStatus) Run(kongCtx *CLIContext) error {
 	}
 	os.Stdout.WriteString(str + "\n")
 	{
-		list, err := pipeline.PeriodRingWithPayout()
+		list, err := pipeline.PayoutWithData()
 		if err != nil {
 			return err
 		}
