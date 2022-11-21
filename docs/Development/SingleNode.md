@@ -137,11 +137,11 @@ Run the validator agent.
 solpipe --verbose  \
    --rpc=http://localhost:8899 \
    --ws=ws://localhost:8900  \
-   validator agent --help \
-   --clear_listen=127.0.0.1:50051 \
-   --admin_url="unix:///tmp/pipeline.socket" \
-   $(solana-keygen pubkey ./localconfig/single/pipeline.json) \
-  ./localconfig/single/pipeline-admin.json
+   validator agent  \
+   --clear_listen=127.0.0.1:50052 \
+   --admin_url="tcp://127.0.0.1:30052" \
+   $(solana-keygen pubkey ./localconfig/single/vote.json) \
+  ./localconfig/single/validator-admin.json
 ```
 
 
@@ -170,4 +170,13 @@ solpipe --verbose \
   --payer=./localconfig/single/faucet.json \
   ./localconfig/single/pipeline-admin.json \
   1/100 1/10 1/3 100
+```
+
+## Cranker
+
+```bash
+./bin/solpipe --verbose \
+  --rpc=http://localhost:8899 \
+  --ws=ws://localhost:8900 \
+  cranker 10 ./localconfig/single/faucet.json
 ```

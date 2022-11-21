@@ -4,13 +4,14 @@ import (
 	"errors"
 	"math"
 
+	log "github.com/sirupsen/logrus"
 	"github.com/solpipe/solpipe-tool/script"
 	"github.com/solpipe/solpipe-tool/state"
 	pipe "github.com/solpipe/solpipe-tool/state/pipeline"
-	log "github.com/sirupsen/logrus"
 )
 
-func (in *internal) attempt_add_period(start uint64) error {
+func (in *internal) attempt_add_period() error {
+	start := in.next_slot()
 	log.Debugf("attempting to add a period; start=%d; end=%d;", start, start+in.periodSettings.Length-1)
 	if math.MaxUint16 <= in.periodSettings.Withhold {
 		return errors.New("withhold is too large")
@@ -36,7 +37,14 @@ func (in *internal) attempt_add_period(start uint64) error {
 	if err != nil {
 		return err
 	}
-	_, err = s1.AppendPeriod(in.controller, in.pipeline, in.admin, start, in.periodSettings.Length, withhold)
+	_, err = s1.AppendPeriod(
+		in.controller,
+		in.pipeline,
+		in.admin,
+		start,
+		in.periodSettings.Length,
+		withhold,
+	)
 	if err != nil {
 		return err
 	}

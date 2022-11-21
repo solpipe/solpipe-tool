@@ -5,6 +5,10 @@ import (
 	"errors"
 	"os"
 
+	sgo "github.com/SolmateDev/solana-go"
+	sgorpc "github.com/SolmateDev/solana-go/rpc"
+	sgows "github.com/SolmateDev/solana-go/rpc/ws"
+	log "github.com/sirupsen/logrus"
 	cba "github.com/solpipe/cba"
 	"github.com/solpipe/solpipe-tool/ds/list"
 	ll "github.com/solpipe/solpipe-tool/ds/list"
@@ -15,10 +19,6 @@ import (
 	pipe "github.com/solpipe/solpipe-tool/state/pipeline"
 	rtr "github.com/solpipe/solpipe-tool/state/router"
 	slt "github.com/solpipe/solpipe-tool/state/slot"
-	sgo "github.com/SolmateDev/solana-go"
-	sgorpc "github.com/SolmateDev/solana-go/rpc"
-	sgows "github.com/SolmateDev/solana-go/rpc/ws"
-	log "github.com/sirupsen/logrus"
 )
 
 type internal struct {
@@ -139,6 +139,7 @@ out:
 				//log.Debug(result.err)
 				failedAttempts++
 				log.Debugf("failed attempts=%d", failedAttempts)
+				in.calculate_next_attempt_to_add_period(false)
 				//log.Debugf("failed to add period: %+v", result.err)
 			} else {
 				log.Debugf("successfully added period at slot=%d", result.attempt)

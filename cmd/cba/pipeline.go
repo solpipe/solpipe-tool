@@ -243,35 +243,6 @@ type PipelineAgent struct {
 	Admin            string        `arg name:"admin" help:"the Pipeline admin"`
 }
 
-func convertRate(in string, defaultRate *state.Rate) (*state.Rate, error) {
-	var pair [2]uint64
-	var err error
-
-	if 0 < len(in) {
-		split := strings.Split(in, "/")
-		if len(split) != 2 {
-			return nil, errors.New("format not N/D")
-		}
-
-		for i := 0; i < 2; i++ {
-			pair[i], err = strconv.ParseUint(split[i], 10, 8)
-			if err != nil {
-				return nil, err
-			}
-		}
-	}
-
-	if pair[1] == 0 {
-		return defaultRate, nil
-	} else {
-		return &state.Rate{
-			N: pair[0],
-			D: pair[1],
-		}, nil
-	}
-
-}
-
 func (r *PipelineAgent) Run(kongCtx *CLIContext) error {
 
 	ctx := kongCtx.Ctx
@@ -280,7 +251,7 @@ func (r *PipelineAgent) Run(kongCtx *CLIContext) error {
 		return err
 	}
 
-	pipelineConfig := relay.CreateConfiguration(
+	relayConfig := relay.CreateConfiguration(
 		kongCtx.Clients.Version,
 		admin,
 		kongCtx.Clients.RpcUrl,
@@ -293,7 +264,7 @@ func (r *PipelineAgent) Run(kongCtx *CLIContext) error {
 	if err != nil {
 		return err
 	}
-	router, err := pipelineConfig.Router(ctx)
+	router, err := relayConfig.Router(ctx)
 	if err != nil {
 		return err
 	}
@@ -333,17 +304,17 @@ func (r *PipelineAgent) Run(kongCtx *CLIContext) error {
 			return errors.New("port out of range")
 		}
 		clearConfig.Port = uint16(z)
-		pipelineConfig.ClearNet = clearConfig
+		relayConfig.ClearNet = clearConfig
 	}
 
 	agent, err := ap.Create(
 		ctx,
 		&ap.InitializationArg{
-			Relay: &pipelineConfig,
+			Relay: &relayConfig,
 			Program: &ap.Configuration{
 				ProgramIdCba: cba.ProgramID.ToPointer(),
 				Pipeline:     pipeline.Id.ToPointer(),
-				Wallet:       &pipelineConfig.Admin,
+				Wallet:       &relayConfig.Admin,
 				Settings: &pipe.PipelineSettings{
 					CrankFee:    crankFee,
 					DecayRate:   decayRate,

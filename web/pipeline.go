@@ -52,6 +52,7 @@ func (e1 external) ws_pipeline(
 		d, err := list[i].Data()
 		if err != nil {
 			errorC <- err
+			return
 		}
 		pipeOut.dataC <- sub.PipelineGroup{
 			Id:     list[i].Id,

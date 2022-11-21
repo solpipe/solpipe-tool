@@ -10,7 +10,8 @@ import (
 
 type Web struct {
 	Port        uint16 `arg name:"port" help:"the port number to listen on"`
-	FrontendUrl string `option name:"frontend" help:"redirect to a front end web page"`
+	FrontendUrl string `name:"frontend" help:"redirect to a front end web page"`
+	GrpcWebUrl  string `name:"grpc" help:"redirect to grpc web endpoint"`
 }
 
 func (r *Web) Run(kongCtx *CLIContext) error {
@@ -37,6 +38,9 @@ func (r *Web) Run(kongCtx *CLIContext) error {
 		&web.Configuration{
 			ListenUrl:   fmt.Sprintf("0.0.0.0:%d", r.Port),
 			FrontendUrl: r.FrontendUrl,
+			GrpcWebUrl:  r.GrpcWebUrl,
+			RpcUrl:      kongCtx.Clients.RpcUrl,
+			WsUrl:       kongCtx.Clients.WsUrl,
 		},
 		router,
 	)

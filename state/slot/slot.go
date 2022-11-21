@@ -119,7 +119,7 @@ func sendBroadcat(
 	if *slot <= *lastSlot {
 		return
 	}
-	if *slot%10 == 0 {
+	if *slot%500 == 0 {
 		log.Debugf("slot____=%d; sub count=%d", *slot, home.SubscriberCount())
 	}
 	//log.Debugf("slot____=%d; sub count=%d", *slot, home.SubscriberCount())

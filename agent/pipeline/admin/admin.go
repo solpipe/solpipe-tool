@@ -124,9 +124,14 @@ func (e1 Server) GetPeriod(ctx context.Context, req *pba.Empty) (*pba.PeriodSett
 func (e1 Server) SetPeriod(ctx context.Context, req *pba.PeriodSettings) (*pba.PeriodSettings, error) {
 	newSettings := util.CopyPeriodSettings(req)
 	e1.internalC <- func(in *internal) {
-		in.periodSettings = newSettings
+		in.settings_change(newSettings)
 	}
 	return newSettings, nil
+}
+
+func (in *internal) settings_change(newSettings *pba.PeriodSettings) {
+	in.periodSettings = newSettings
+	in.calculate_next_attempt_to_add_period(true)
 }
 
 func (e1 Server) GetLogStream(req *pba.Empty, stream pba.Validator_GetLogStreamServer) error {

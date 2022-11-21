@@ -11,15 +11,21 @@ import (
 )
 
 type external struct {
-	ctx      context.Context
-	healthC  chan func(*healthInternal)
-	router   rtr.Router
-	proxyUrl *url.URL
+	ctx         context.Context
+	healthC     chan func(*healthInternal)
+	router      rtr.Router
+	frontendUrl *url.URL
+	rpcUrl      *url.URL
+	wsUrl       *url.URL
+	grpcWebUrl  *url.URL
 }
 
 type Configuration struct {
 	ListenUrl   string
 	FrontendUrl string
+	RpcUrl      string
+	WsUrl       string
+	GrpcWebUrl  string
 }
 
 func Run(
@@ -40,11 +46,35 @@ func Run(
 		}
 	}
 
+	var rpcUrl *url.URL
+	rpcUrl, err = url.Parse(config.RpcUrl)
+	if err != nil {
+		errorC <- err
+		return
+	}
+
+	var wsUrl *url.URL
+	wsUrl, err = url.Parse(config.WsUrl)
+	if err != nil {
+		errorC <- err
+		return
+	}
+
+	var grpcWebUrl *url.URL
+	grpcWebUrl, err = url.Parse(config.GrpcWebUrl)
+	if err != nil {
+		errorC <- err
+		return
+	}
+
 	e1 := external{
-		ctx:      ctx,
-		healthC:  healthC,
-		router:   router,
-		proxyUrl: proxyUrl,
+		ctx:         ctx,
+		healthC:     healthC,
+		router:      router,
+		frontendUrl: proxyUrl,
+		rpcUrl:      rpcUrl,
+		wsUrl:       wsUrl,
+		grpcWebUrl:  grpcWebUrl,
 	}
 
 	server := &http.Server{

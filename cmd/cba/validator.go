@@ -2,7 +2,11 @@ package main
 
 import (
 	"errors"
+	"math"
+	"net"
 	"os"
+	"strconv"
+	"strings"
 
 	sgo "github.com/SolmateDev/solana-go"
 	log "github.com/sirupsen/logrus"
@@ -94,9 +98,10 @@ func (r *ValidatorCreate) Run(kongCtx *CLIContext) error {
 }
 
 type ValidatorAgent struct {
-	VoteKey        string `name:"vote" help:"The vote account for the validator."`
-	AdminKey       string `name:"admin" help:"The admin key used to administrate the validator."`
+	ClearListenUrl string `option name:"clear_listen"  help:"url to which clients can connect without tor"`
 	AdminListenUrl string `option name:"admin_url" help:"The url on which the admin grpc server listens."`
+	VoteKey        string `arg name:"vote" help:"The vote account for the validator."`
+	AdminKey       string `arg name:"admin" help:"The admin key used to administrate the validator."`
 }
 
 const DEFAULT_VALIDATOR_ADMIN_SOCKET = "unix:///tmp/.validator.socket"
@@ -144,6 +149,27 @@ func (r *ValidatorAgent) Run(kongCtx *CLIContext) error {
 	validator, err := router.ValidatorByVote(vote)
 	if err != nil {
 		return err
+	}
+
+	if 0 < len(r.ClearListenUrl) {
+		clearConfig := new(relay.ClearNetListenConfig)
+		x := strings.Split(r.ClearListenUrl, ":")
+		if len(x) != 2 {
+			return errors.New("use form HOST:PORT for clear net listen url")
+		}
+		clearConfig.Ipv4 = net.ParseIP(x[0])
+		if clearConfig.Ipv4 == nil {
+			return errors.New("failed to parse ip address")
+		}
+		z, err := strconv.Atoi(x[1])
+		if err != nil {
+			return err
+		}
+		if z < 0 || math.MaxUint16 <= z {
+			return errors.New("port out of range")
+		}
+		clearConfig.Port = uint16(z)
+		relayConfig.ClearNet = clearConfig
 	}
 
 	agent, err := valagent.Create(

@@ -1,30 +1,44 @@
 package admin
 
 import (
+	log "github.com/sirupsen/logrus"
 	cba "github.com/solpipe/cba"
 	ll "github.com/solpipe/solpipe-tool/ds/list"
-	log "github.com/sirupsen/logrus"
 )
 
-func (in *internal) calculate_next_attempt_to_add_period(newPeriod bool) {
-
-	nextAttempt := in.slot
+// when is the earliest slot to which a period can be appended
+func (in *internal) next_slot() uint64 {
+	openSlot := in.slot
 	tail, present := in.list.Tail()
 	if present {
-		if in.slot < tail.Period.Start+tail.Period.Length && tail.Period.Start+tail.Period.Length < in.periodSettings.Lookahead {
-			nextAttempt = tail.Period.Start + tail.Period.Length
-			log.Debugf("next attempt by period %d", nextAttempt)
+		if in.slot < tail.Period.Start+tail.Period.Length {
+			openSlot = tail.Period.Start + tail.Period.Length
 		}
 	}
-	if !newPeriod {
-		if nextAttempt < in.lastAddPeriodAttemptToAddPeriod+RETRY_INTERVAL {
-			nextAttempt = in.lastAddPeriodAttemptToAddPeriod + RETRY_INTERVAL
-			log.Debugf("next attempt by retry %d", nextAttempt)
-		}
-	}
+	return openSlot
+}
 
-	log.Debugf("calculate next attempt period (old=%d vs new=%d)", in.nextAttemptToAddPeriod, nextAttempt)
-	in.nextAttemptToAddPeriod = nextAttempt
+// Set this before doing an append-attempt so as to not immediately do another attempt while
+// still waiting for the original attempt to return a result.
+// newPeriod=true means that we ignore the RETRY_INTERVAL
+// either append the new period at the end of the tail period, or at the current slot.
+func (in *internal) calculate_next_attempt_to_add_period(newPeriod bool) {
+
+	var nextAttempt uint64
+	nextSlot := in.next_slot()
+	lookAheadLimit := in.slot + in.periodSettings.Lookahead
+
+	if newPeriod && lookAheadLimit < nextSlot {
+		nextAttempt = in.slot + nextSlot - lookAheadLimit
+	} else if newPeriod {
+		nextAttempt = in.slot
+	} else {
+		nextAttempt = in.lastAddPeriodAttemptToAddPeriod + RETRY_INTERVAL
+	}
+	if in.nextAttemptToAddPeriod != nextAttempt {
+		log.Debugf("next attempt %d", nextAttempt)
+		in.nextAttemptToAddPeriod = nextAttempt
+	}
 }
 
 func (in *internal) on_period(list *ll.Generic[cba.PeriodWithPayout]) {
@@ -47,12 +61,14 @@ const RETRY_INTERVAL = uint64(50)
 func (in *internal) on_slot(slot uint64) {
 	in.slot = slot
 	var err error
-	if in.nextAttemptToAddPeriod <= in.slot {
+	if 0 < in.nextAttemptToAddPeriod && in.nextAttemptToAddPeriod <= in.slot {
 		in.lastAddPeriodAttemptToAddPeriod = in.slot
 		in.calculate_next_attempt_to_add_period(false)
-		err = in.attempt_add_period(in.slot)
+		err = in.attempt_add_period()
 		if err != nil {
 			in.addPeriodResultC <- addPeriodResult{err: err, attempt: in.slot}
 		}
+	} else if in.nextAttemptToAddPeriod == 0 {
+		in.calculate_next_attempt_to_add_period(false)
 	}
 }

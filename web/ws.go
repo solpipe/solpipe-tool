@@ -2,13 +2,17 @@ package web
 
 import (
 	"errors"
+	"io"
 	"net/http"
+	"net/url"
 	"os"
+	"strings"
 	"time"
 
 	"github.com/gorilla/websocket"
 	log "github.com/sirupsen/logrus"
 	cba "github.com/solpipe/cba"
+	rtr "github.com/solpipe/solpipe-tool/state/router"
 )
 
 func getUpgrader() websocket.Upgrader {
@@ -50,6 +54,85 @@ func writeConn(conn *websocket.Conn, typeName string, data interface{}) error {
 	})
 }
 
+func (e1 external) ws_proxy(w http.ResponseWriter, r *http.Request, remote *url.URL) {
+	clientCtx := r.Context()
+	clientDoneC := clientCtx.Done()
+	doneC := e1.ctx.Done()
+
+	var wsRemoteStr string
+	remoteStr := remote.String()
+	if strings.HasPrefix(remoteStr, "http") {
+		wsRemoteStr = "ws" + remoteStr[len("http"):]
+	} else {
+		wsRemoteStr = "wss" + remoteStr[len("https"):]
+	}
+
+	connLocal, err := upgrader.Upgrade(w, r, nil)
+	if err != nil {
+		log.Debug("Error during connection upgradation:", err)
+		return
+	}
+	defer connLocal.Close()
+
+	connRemote, _, err := websocket.DefaultDialer.DialContext(e1.ctx, wsRemoteStr, nil)
+	if err != nil {
+
+		log.Println("Error:", err)
+		return
+	}
+	defer connRemote.Close()
+
+	// local to remote
+	errorC := make(chan error, 2)
+	go loopMessagePass(connLocal, connRemote, errorC)
+	go loopMessagePass(connRemote, connLocal, errorC)
+
+out:
+
+	for {
+		select {
+		case err = <-errorC:
+			break out
+		case <-doneC:
+			break out
+		case <-clientDoneC:
+			break out
+		}
+	}
+
+	if err != nil {
+		log.Debug(err)
+	}
+
+}
+
+func loopMessagePass(a *websocket.Conn, b *websocket.Conn, errorC chan<- error) {
+	var err error
+	var m []byte
+	var msgType int
+out:
+	for {
+		msgType, m, err = a.ReadMessage()
+		if err == io.EOF {
+			err = nil
+			break out
+		} else if err != nil {
+			break out
+		}
+		err = b.WriteMessage(msgType, m)
+		if err == io.EOF {
+			err = nil
+			break out
+		} else if err != nil {
+			break out
+		}
+	}
+	if err != nil {
+		errorC <- err
+	}
+}
+
+// subscribe to pipeline, validator changes
 func (e1 external) ws_server_http(w http.ResponseWriter, r *http.Request) {
 
 	conn, err := upgrader.Upgrade(w, r, nil)
@@ -74,6 +157,11 @@ func (e1 external) ws_server_http(w http.ResponseWriter, r *http.Request) {
 	pipelineSub := e1.router.ObjectOnPipeline()
 	defer pipelineSub.Unsubscribe()
 
+	valOut, valIn := createValidatorPair()
+	go e1.ws_validator(clientCtx, errorC, valOut)
+	valSub := e1.router.ObjectOnValidator(func(vwd rtr.ValidatorWithData) bool { return true })
+	defer valSub.Unsubscribe()
+
 out:
 	for {
 		select {
@@ -81,6 +169,8 @@ out:
 			err = errors.New("server done")
 			break out
 		case <-clientDoneC:
+			break out
+		case err = <-slotSub.ErrorC:
 			break out
 		case slot := <-slotSub.StreamC:
 			//log.Debugf("slot=%d", slot)
@@ -117,6 +207,21 @@ out:
 			}
 		case x := <-pipeIn.periodC:
 			err = writeConn(conn, TYPE_PERIOD, &x)
+			if err != nil {
+				break out
+			}
+		case err = <-valSub.ErrorC:
+			break out
+		case x := <-valSub.StreamC:
+			go e1.ws_on_validator(
+				errorC,
+				clientCtx,
+				x.V,
+				x.Data,
+				valOut,
+			)
+		case d := <-valIn.dataC:
+			err = writeConn(conn, TYPE_VALIDATOR, &d)
 			if err != nil {
 				break out
 			}
