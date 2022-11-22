@@ -10,21 +10,32 @@ import (
 	val "github.com/solpipe/solpipe-tool/state/validator"
 )
 
-type validatorChannelGroup struct {
-	dataC chan<- sub.ValidatorGroup
+type ValidatorWithStake struct {
+	Id   sgo.PublicKey
+	Info val.StakeStatus
 }
+
+type validatorChannelGroup struct {
+	dataC  chan<- sub.ValidatorGroup
+	stakeC chan<- ValidatorWithStake
+}
+
 type validatorChannelGroupInternal struct {
-	dataC <-chan sub.ValidatorGroup
+	dataC  <-chan sub.ValidatorGroup
+	stakeC <-chan ValidatorWithStake
 }
 
 func createValidatorPair() (validatorChannelGroup, validatorChannelGroupInternal) {
 	dataC := make(chan sub.ValidatorGroup)
+	stakeC := make(chan ValidatorWithStake)
 
 	return validatorChannelGroup{
-			dataC: dataC,
+			dataC:  dataC,
+			stakeC: stakeC,
 		},
 		validatorChannelGroupInternal{
-			dataC: dataC,
+			dataC:  dataC,
+			stakeC: stakeC,
 		}
 
 }
@@ -71,11 +82,31 @@ func (e1 external) ws_on_validator(
 	dataSub := v.OnStats()
 	defer dataSub.Unsubscribe()
 
+	stakeSub := v.OnStake()
+	defer stakeSub.Unsubscribe()
 	var err error
+
 	valOut.dataC <- sub.ValidatorGroup{
 		Id:     id,
 		Data:   data,
 		IsOpen: true,
+	}
+
+	{
+		var mystake uint64
+		var totalstake uint64
+		mystake, totalstake, err = v.StakeRatio()
+		if err != nil {
+			loopValidatorFinish(id, valOut, errorC, err)
+			return
+		}
+		valOut.stakeC <- ValidatorWithStake{
+			Id: id,
+			Info: val.StakeStatus{
+				Activated: mystake,
+				Total:     totalstake,
+			},
+		}
 	}
 
 out:
@@ -85,13 +116,32 @@ out:
 			break out
 		case <-doneC:
 			break out
+		case err = <-stakeSub.ErrorC:
+			break out
+		case info := <-stakeSub.StreamC:
+			select {
+			case <-serverDoneC:
+				break out
+			case <-doneC:
+				break out
+			case valOut.stakeC <- ValidatorWithStake{
+				Id:   id,
+				Info: info,
+			}:
+			}
 		case err = <-dataSub.ErrorC:
 			break out
 		case d := <-dataSub.StreamC:
-			valOut.dataC <- sub.ValidatorGroup{
+			select {
+			case <-serverDoneC:
+				break out
+			case <-doneC:
+				break out
+			case valOut.dataC <- sub.ValidatorGroup{
 				Id:     id,
 				Data:   d,
 				IsOpen: true,
+			}:
 			}
 		}
 	}

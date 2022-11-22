@@ -39,12 +39,13 @@ type SlotTick struct {
 }
 
 const (
-	TYPE_SLOT       string = "slot"
-	TYPE_CONTROLLER string = "controller"
-	TYPE_PIPELINE   string = "pipeline"
-	TYPE_PERIOD     string = "period"
-	TYPE_BID        string = "bid"
-	TYPE_VALIDATOR  string = "validator"
+	TYPE_SLOT            string = "slot"
+	TYPE_CONTROLLER      string = "controller"
+	TYPE_PIPELINE        string = "pipeline"
+	TYPE_PERIOD          string = "period"
+	TYPE_BID             string = "bid"
+	TYPE_VALIDATOR       string = "validator"
+	TYPE_VALIDATOR_STAKE string = "validator_stake"
 )
 
 func writeConn(conn *websocket.Conn, typeName string, data interface{}) error {
@@ -220,6 +221,11 @@ out:
 				x.Data,
 				valOut,
 			)
+		case info := <-valIn.stakeC:
+			err = writeConn(conn, TYPE_VALIDATOR_STAKE, &info)
+			if err != nil {
+				break out
+			}
 		case d := <-valIn.dataC:
 			err = writeConn(conn, TYPE_VALIDATOR, &d)
 			if err != nil {

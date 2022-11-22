@@ -30,9 +30,14 @@ func (in *internal) calculate_next_attempt_to_add_period(newPeriod bool) {
 
 	if newPeriod && lookAheadLimit < nextSlot {
 		nextAttempt = in.slot + nextSlot - lookAheadLimit
+		log.Debugf("(slot=%d) next attempt must wait, too far ahead: (attempt=%d,nextSlot=%d,lookaheadlimit=%d)", in.slot, nextAttempt, nextSlot, lookAheadLimit)
 	} else if newPeriod {
 		nextAttempt = in.slot
+		log.Debugf("(slot=%d) next attempt immediate: (attempt=%d,nextSlot=%d,lookaheadlimit=%d)", in.slot, nextAttempt, nextSlot, lookAheadLimit)
 	} else {
+		if nextAttempt != in.lastAddPeriodAttemptToAddPeriod+RETRY_INTERVAL {
+			log.Debugf("(slot=%d) next attempt retry: (attempt=%d,last=%d,retry=%d)", in.slot, nextAttempt, in.lastAddPeriodAttemptToAddPeriod, RETRY_INTERVAL)
+		}
 		nextAttempt = in.lastAddPeriodAttemptToAddPeriod + RETRY_INTERVAL
 	}
 	if in.nextAttemptToAddPeriod != nextAttempt {
