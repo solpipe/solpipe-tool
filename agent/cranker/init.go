@@ -3,11 +3,12 @@ package cranker
 import (
 	"context"
 
+	sgo "github.com/SolmateDev/solana-go"
+	sgotkn "github.com/SolmateDev/solana-go/programs/token"
+	log "github.com/sirupsen/logrus"
 	"github.com/solpipe/solpipe-tool/proxy/relay"
 	"github.com/solpipe/solpipe-tool/script"
 	rtr "github.com/solpipe/solpipe-tool/state/router"
-	sgo "github.com/SolmateDev/solana-go"
-	sgotkn "github.com/SolmateDev/solana-go/programs/token"
 )
 
 func SetupPcVault(
@@ -26,6 +27,7 @@ func SetupPcVault(
 	if err != nil {
 		return nil, err
 	}
+	log.Debugf("token account=%s", id.String())
 	account := new(sgotkn.Account)
 	err = config.Rpc().GetAccountDataBorshInto(ctx, id, account)
 	if err != nil {

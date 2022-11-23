@@ -46,6 +46,8 @@ const (
 	TYPE_BID             string = "bid"
 	TYPE_VALIDATOR       string = "validator"
 	TYPE_VALIDATOR_STAKE string = "validator_stake"
+	TYPE_PAYOUT          string = "payout"
+	TYPE_RECEIPT         string = "receipt"
 )
 
 func writeConn(conn *websocket.Conn, typeName string, data interface{}) error {
@@ -163,6 +165,11 @@ func (e1 external) ws_server_http(w http.ResponseWriter, r *http.Request) {
 	valSub := e1.router.ObjectOnValidator(func(vwd rtr.ValidatorWithData) bool { return true })
 	defer valSub.Unsubscribe()
 
+	pOut, pIn := e1.createPayoutPair(clientCtx)
+	go e1.ws_payout(clientCtx, errorC, pOut)
+	payoutSub := e1.router.ObjectOnPayout()
+	defer payoutSub.Unsubscribe()
+
 out:
 	for {
 		select {
@@ -214,6 +221,7 @@ out:
 		case err = <-valSub.ErrorC:
 			break out
 		case x := <-valSub.StreamC:
+			// covers new validators
 			go e1.ws_on_validator(
 				errorC,
 				clientCtx,
@@ -228,6 +236,26 @@ out:
 			}
 		case d := <-valIn.dataC:
 			err = writeConn(conn, TYPE_VALIDATOR, &d)
+			if err != nil {
+				break out
+			}
+		case err = <-payoutSub.ErrorC:
+			break out
+		case p := <-payoutSub.StreamC:
+			// covers new payouts
+			go e1.ws_on_payout(
+				errorC,
+				clientCtx,
+				p,
+				pOut,
+			)
+		case d := <-pIn.dataC:
+			err = writeConn(conn, TYPE_PAYOUT, &d)
+			if err != nil {
+				break out
+			}
+		case d := <-pIn.receiptC:
+			err = writeConn(conn, TYPE_RECEIPT, &d)
 			if err != nil {
 				break out
 			}

@@ -1,12 +1,13 @@
 package payout
 
 import (
-	cba "github.com/solpipe/cba"
-	sub2 "github.com/solpipe/solpipe-tool/ds/sub"
-	rpt "github.com/solpipe/solpipe-tool/state/receipt"
-	"github.com/solpipe/solpipe-tool/state/sub"
 	sgo "github.com/SolmateDev/solana-go"
 	log "github.com/sirupsen/logrus"
+	cba "github.com/solpipe/cba"
+	dssub "github.com/solpipe/solpipe-tool/ds/sub"
+	rpt "github.com/solpipe/solpipe-tool/state/receipt"
+	"github.com/solpipe/solpipe-tool/state/sub"
+	"github.com/solpipe/solpipe-tool/util"
 )
 
 func (e1 Payout) Update(pwd sub.PayoutWithData) {
@@ -77,13 +78,19 @@ func (in *internal) on_receipt(
 	return false
 }
 
-func (e1 Payout) OnReceipt(validator sgo.PublicKey) sub2.Subscription[rpt.ReceiptWithData] {
-
-	return sub2.SubscriptionRequest(e1.updateReceiptC, func(x rpt.ReceiptWithData) bool {
+// if validator=util.Zero(), then all receipts will be returned
+func (e1 Payout) OnReceipt(validator sgo.PublicKey) dssub.Subscription[rpt.ReceiptWithData] {
+	cb := func(x rpt.ReceiptWithData) bool {
 		if x.Data.Validator.Equals(validator) {
 			return true
 		} else {
 			return false
 		}
-	})
+	}
+	if validator.Equals(util.Zero()) {
+		cb = func(x rpt.ReceiptWithData) bool {
+			return true
+		}
+	}
+	return dssub.SubscriptionRequest(e1.updateReceiptC, cb)
 }

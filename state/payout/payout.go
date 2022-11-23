@@ -6,8 +6,9 @@ import (
 	"fmt"
 
 	sgo "github.com/SolmateDev/solana-go"
+	log "github.com/sirupsen/logrus"
 	cba "github.com/solpipe/cba"
-	sub2 "github.com/solpipe/solpipe-tool/ds/sub"
+	dssub "github.com/solpipe/solpipe-tool/ds/sub"
 	rpt "github.com/solpipe/solpipe-tool/state/receipt"
 	"github.com/solpipe/solpipe-tool/state/sub"
 )
@@ -20,15 +21,15 @@ type Payout struct {
 	internalC      chan<- func(*internal)
 	dataC          chan<- sub.PayoutWithData
 	Id             sgo.PublicKey
-	updatePayoutC  chan sub2.ResponseChannel[cba.Payout]
-	updateReceiptC chan sub2.ResponseChannel[rpt.ReceiptWithData]
+	updatePayoutC  chan dssub.ResponseChannel[cba.Payout]
+	updateReceiptC chan dssub.ResponseChannel[rpt.ReceiptWithData]
 }
 
 func CreatePayout(ctx context.Context, d sub.PayoutWithData) (e1 Payout, err error) {
 	internalC := make(chan func(*internal), 10)
 	dataC := make(chan sub.PayoutWithData, 10)
-	payoutHome := sub2.CreateSubHome[cba.Payout]()
-	receiptHome := sub2.CreateSubHome[rpt.ReceiptWithData]()
+	payoutHome := dssub.CreateSubHome[cba.Payout]()
+	receiptHome := dssub.CreateSubHome[rpt.ReceiptWithData]()
 	updatePayoutC := payoutHome.ReqC
 	updateReceiptC := receiptHome.ReqC
 	ctxC, cancel := context.WithCancel(ctx)
@@ -47,6 +48,7 @@ func CreatePayout(ctx context.Context, d sub.PayoutWithData) (e1 Payout, err err
 }
 
 func (e1 Payout) Close() {
+	log.Debugf("closing payout=%s", e1.Id.String())
 	e1.cancel()
 }
 
@@ -76,8 +78,8 @@ func (e1 Payout) CloseSignal() <-chan error {
 
 }
 
-func (e1 Payout) OnData() sub2.Subscription[cba.Payout] {
-	return sub2.SubscriptionRequest(e1.updatePayoutC, func(x cba.Payout) bool { return true })
+func (e1 Payout) OnData() dssub.Subscription[cba.Payout] {
+	return dssub.SubscriptionRequest(e1.updatePayoutC, func(x cba.Payout) bool { return true })
 }
 
 func (e1 Payout) Data() (ans cba.Payout, err error) {

@@ -2,6 +2,7 @@ package main
 
 import (
 	sgo "github.com/SolmateDev/solana-go"
+	sgorpc "github.com/SolmateDev/solana-go/rpc"
 	log "github.com/sirupsen/logrus"
 	ckr "github.com/solpipe/solpipe-tool/agent/cranker"
 	"github.com/solpipe/solpipe-tool/proxy/relay"
@@ -59,6 +60,39 @@ func (r *Cranker) Run(kongCtx *CLIContext) error {
 
 	if r.BalanceThreshold == 0 {
 		r.BalanceThreshold = 1 * sgo.LAMPORTS_PER_SOL
+	}
+
+	{
+		d, err := router.Controller.Data()
+		if err != nil {
+			return err
+		}
+		address, _, err := sgo.FindAssociatedTokenAddress(crankerKey.PublicKey(), d.PcMint)
+		if err != nil {
+			return err
+		}
+		createNewAccount := false
+		bh, err := rpcClient.GetBalance(ctx, address, sgorpc.CommitmentFinalized)
+		if err != nil {
+			createNewAccount = true
+		} else if bh.Value == 0 {
+			createNewAccount = true
+		}
+		if createNewAccount {
+			log.Debug("creating token account for cranker")
+			s, err := relayConfig.ScriptBuilder(ctx)
+			if err != nil {
+				return err
+			}
+			err = s.CreateTokenAccount(relayConfig.Admin, relayConfig.Admin.PublicKey(), d.PcMint)
+			if err != nil {
+				return err
+			}
+			err = s.FinishTx(true)
+			if err != nil {
+				return err
+			}
+		}
 	}
 
 	cranker, err := ckr.Create(

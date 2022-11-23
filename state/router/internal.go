@@ -57,7 +57,7 @@ func loopInternal(
 	payoutG sub2.Subscription[sub.PayoutWithData],
 	subAll *sub.SubscriptionProgramGroup,
 	all *sub.ProgramAllResult,
-	oa *objSub,
+	oa *objSub, // also contains account deletions
 ) {
 	var err error
 	doneC := ctx.Done()
@@ -144,10 +144,16 @@ out:
 				break out
 			}
 		case id := <-oa.pipelineCloseC:
+			ref, present := in.l_pipeline.byId[id.String()]
+			if present {
+				ref.Close()
+			}
 			delete(in.l_pipeline.byId, id.String())
 		case id := <-oa.payoutCloseC:
 			ref, present := in.l_payout.byId[id.String()]
 			if present {
+				log.Debugf("closing payout=%s", ref.p.Id.String())
+				ref.p.Close()
 				delete(in.l_payout.byId, id.String())
 				x, present := in.l_payout.byPipeline[ref.data.Pipeline.String()]
 				if present {
@@ -157,6 +163,10 @@ out:
 			delete(in.l_payout.receiptWithNoPayout, id.String())
 			delete(in.l_pipeline.payoutWithNoPipeline, id.String())
 		case id := <-oa.receiptCloseC:
+			ref, present := in.l_receipt.byId[id.String()]
+			if present {
+				ref.Close()
+			}
 			delete(in.l_receipt.byId, id.String())
 			delete(in.l_receipt.stakerWithNoReceipt, id.String())
 		case id := <-oa.stakerCloseC:
@@ -164,6 +174,7 @@ out:
 		case id := <-oa.validatorCloseC:
 			ref, present := in.l_validator.byId[id.String()]
 			if present {
+				ref.v.Close()
 				delete(in.l_validator.byId, id.String())
 				delete(in.l_validator.byVote, ref.data.Vote.String())
 			}

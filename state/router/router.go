@@ -181,6 +181,7 @@ out:
 				break out
 			}
 			if x.Value.Lamports == 0 {
+				log.Debugf("account id=%s has lamports=0", id.String())
 				sendDelete = true
 				break out
 			}
