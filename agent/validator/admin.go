@@ -6,10 +6,11 @@ import (
 
 	"google.golang.org/grpc"
 
+	sgo "github.com/SolmateDev/solana-go"
+	log "github.com/sirupsen/logrus"
 	pba "github.com/solpipe/solpipe-tool/proto/admin"
 	pipe "github.com/solpipe/solpipe-tool/state/pipeline"
 	"github.com/solpipe/solpipe-tool/util"
-	sgo "github.com/SolmateDev/solana-go"
 )
 
 type adminExternal struct {
@@ -29,6 +30,7 @@ func (a adminExternal) GetDefault(
 	ctx context.Context,
 	req *pba.Empty,
 ) (*pba.ValidatorSettings, error) {
+	log.Debug("validator get - 1")
 	doneC := ctx.Done()
 	errorC := make(chan error, 1)
 	ansC := make(chan *pba.ValidatorSettings, 1)
@@ -46,9 +48,11 @@ func (a adminExternal) GetDefault(
 		}
 	}:
 	}
+	log.Debug("validator get - 2")
 	if err != nil {
 		return nil, err
 	}
+	log.Debug("validator get - 3")
 	select {
 	case <-doneC:
 		err = errors.New("canceled")
@@ -65,12 +69,15 @@ func (a adminExternal) SetDefault(
 	req *pba.ValidatorSettings,
 ) (*pba.ValidatorSettings, error) {
 
+	log.Debug("validator settings - 1")
 	var err error
 	if len(req.PipelineId) == 0 {
+		log.Debug("validator settings - 2")
 		err = a.pipeline_blank(ctx)
 		if err != nil {
 			return nil, err
 		} else {
+			log.Debug("validator settings - 3")
 			return a.GetDefault(ctx, &pba.Empty{})
 		}
 	}
@@ -83,6 +90,7 @@ func (a adminExternal) SetDefault(
 	if err != nil {
 		return nil, err
 	}
+	log.Debugf("validator settings - 4 - pipeline=%s", pipelineId.String())
 	err = a.pipeline_set(ctx, pipeline)
 	if err != nil {
 		return nil, err
@@ -113,6 +121,7 @@ func (a adminExternal) pipeline_set(ctx context.Context, pipeline pipe.Pipeline)
 
 // Set the pipeline. Set up the listeners.
 func (in *internal) pipeline_set(pipeline pipe.Pipeline) error {
+	log.Debug("validator pipeline set - 1 - id=%s", pipeline.Id.String())
 	var err error
 	if in.hasPipeline {
 		err = in.pipeline_blank()
@@ -133,6 +142,7 @@ func (in *internal) pipeline_set(pipeline pipe.Pipeline) error {
 		in.pipeline,
 		in.validator,
 	)
+	in.settings.PipelineId = pipeline.Id.String()
 
 	// set pipeline
 

@@ -5,7 +5,9 @@ import (
 )
 
 func CopyValidatorSettings(a *pba.ValidatorSettings) *pba.ValidatorSettings {
-	return &pba.ValidatorSettings{}
+	return &pba.ValidatorSettings{
+		PipelineId: a.GetPipelineId(),
+	}
 }
 
 func CopyPeriodSettings(a *pba.PeriodSettings) *pba.PeriodSettings {

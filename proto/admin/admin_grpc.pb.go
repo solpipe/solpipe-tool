@@ -216,6 +216,8 @@ var Validator_ServiceDesc = grpc.ServiceDesc{
 type PipelineClient interface {
 	// get the default period settings
 	GetPeriod(ctx context.Context, in *Empty, opts ...grpc.CallOption) (*PeriodSettings, error)
+	GetRates(ctx context.Context, in *Empty, opts ...grpc.CallOption) (*RateSettings, error)
+	SetRates(ctx context.Context, in *RateSettings, opts ...grpc.CallOption) (*RateSettings, error)
 	SetPeriod(ctx context.Context, in *PeriodSettings, opts ...grpc.CallOption) (*PeriodSettings, error)
 }
 
@@ -230,6 +232,24 @@ func NewPipelineClient(cc grpc.ClientConnInterface) PipelineClient {
 func (c *pipelineClient) GetPeriod(ctx context.Context, in *Empty, opts ...grpc.CallOption) (*PeriodSettings, error) {
 	out := new(PeriodSettings)
 	err := c.cc.Invoke(ctx, "/admin.Pipeline/GetPeriod", in, out, opts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *pipelineClient) GetRates(ctx context.Context, in *Empty, opts ...grpc.CallOption) (*RateSettings, error) {
+	out := new(RateSettings)
+	err := c.cc.Invoke(ctx, "/admin.Pipeline/GetRates", in, out, opts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *pipelineClient) SetRates(ctx context.Context, in *RateSettings, opts ...grpc.CallOption) (*RateSettings, error) {
+	out := new(RateSettings)
+	err := c.cc.Invoke(ctx, "/admin.Pipeline/SetRates", in, out, opts...)
 	if err != nil {
 		return nil, err
 	}
@@ -251,6 +271,8 @@ func (c *pipelineClient) SetPeriod(ctx context.Context, in *PeriodSettings, opts
 type PipelineServer interface {
 	// get the default period settings
 	GetPeriod(context.Context, *Empty) (*PeriodSettings, error)
+	GetRates(context.Context, *Empty) (*RateSettings, error)
+	SetRates(context.Context, *RateSettings) (*RateSettings, error)
 	SetPeriod(context.Context, *PeriodSettings) (*PeriodSettings, error)
 	mustEmbedUnimplementedPipelineServer()
 }
@@ -261,6 +283,12 @@ type UnimplementedPipelineServer struct {
 
 func (UnimplementedPipelineServer) GetPeriod(context.Context, *Empty) (*PeriodSettings, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method GetPeriod not implemented")
+}
+func (UnimplementedPipelineServer) GetRates(context.Context, *Empty) (*RateSettings, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method GetRates not implemented")
+}
+func (UnimplementedPipelineServer) SetRates(context.Context, *RateSettings) (*RateSettings, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method SetRates not implemented")
 }
 func (UnimplementedPipelineServer) SetPeriod(context.Context, *PeriodSettings) (*PeriodSettings, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method SetPeriod not implemented")
@@ -296,6 +324,42 @@ func _Pipeline_GetPeriod_Handler(srv interface{}, ctx context.Context, dec func(
 	return interceptor(ctx, in, info, handler)
 }
 
+func _Pipeline_GetRates_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(Empty)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(PipelineServer).GetRates(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: "/admin.Pipeline/GetRates",
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(PipelineServer).GetRates(ctx, req.(*Empty))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _Pipeline_SetRates_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(RateSettings)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(PipelineServer).SetRates(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: "/admin.Pipeline/SetRates",
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(PipelineServer).SetRates(ctx, req.(*RateSettings))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 func _Pipeline_SetPeriod_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
 	in := new(PeriodSettings)
 	if err := dec(in); err != nil {
@@ -324,6 +388,14 @@ var Pipeline_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "GetPeriod",
 			Handler:    _Pipeline_GetPeriod_Handler,
+		},
+		{
+			MethodName: "GetRates",
+			Handler:    _Pipeline_GetRates_Handler,
+		},
+		{
+			MethodName: "SetRates",
+			Handler:    _Pipeline_SetRates_Handler,
 		},
 		{
 			MethodName: "SetPeriod",

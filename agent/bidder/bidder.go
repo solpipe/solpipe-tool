@@ -31,6 +31,7 @@ type Configuration struct {
 	TargetTPS float64 `json:"target_tps"`
 	// what is the maximum amount the bidder can change the bid to the positive or negative side (range is 1-255 out of 256)
 	MaxDelta float64 `json:"max_delta"`
+	GrpcUrl  string  `json:"grpc_url"`
 }
 
 func ConfigFromFile(filePath string) (*Configuration, error) {
