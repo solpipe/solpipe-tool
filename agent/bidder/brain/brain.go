@@ -2,15 +2,28 @@ package brain
 
 import (
 	"context"
-	"net"
+
+	pbb "github.com/solpipe/solpipe-tool/proto/bid"
+	"github.com/solpipe/solpipe-tool/util"
+	"google.golang.org/grpc"
 )
 
-type external struct {
+type Brain struct {
+	client pbb.BrainClient
+	budget *pbb.TpsBudget
 }
 
-func Run(ctx context.Context, conn net.Conn) error {
+type Configuration struct {
+	Budget *pbb.TpsBudget `json:"budget"`
+}
 
-	e1 := external{}
+// work in a single goroutine
+func Create(ctx context.Context, conn *grpc.ClientConn, filePath string) (*Brain, error) {
+
+	e1 := &Brain{
+		client: pbb.NewBrainClient(conn),
+		budget: util.InitBudget(),
+	}
 
 	return e1, nil
 }

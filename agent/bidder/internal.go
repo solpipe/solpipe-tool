@@ -30,7 +30,6 @@ type internal struct {
 	totalStake               *big.Int
 	allotedTps               *big.Float
 	networkStatus            *ntk.NetworkStatus
-	config                   *Configuration
 	rpc                      *sgorpc.Client
 	ws                       *sgows.Client
 	grpcClient               *ct.Client
@@ -48,6 +47,9 @@ type internal struct {
 	connC                    chan<- pipelineConnectionStatus
 	periodRingC              chan<- periodUpdate
 	bidListC                 chan<- bidUpdate
+	brain                    *brainInfo
+	timeHome                 *timeHome
+	slot                     uint64
 }
 
 type pipelineProxyConnection struct {
@@ -60,14 +62,13 @@ func loopInternal(
 	cancel context.CancelFunc,
 	internalC <-chan func(*internal),
 	startErrorC chan<- error,
-	configReadErrorC <-chan error,
-	configC <-chan Configuration,
 	rpcClient *sgorpc.Client,
 	wsClient *sgows.Client,
 	bidder sgo.PrivateKey,
 	pcVaultId sgo.PublicKey,
 	pcVault *sgotkn.Account,
 	router rtr.Router,
+	bsg *brainSubGroup,
 ) {
 	defer cancel()
 	var err error
@@ -102,12 +103,20 @@ func loopInternal(
 	in.periodRingC = periodRingUpdateC
 	bidListUpdateC := make(chan bidUpdate, 1)
 	in.bidListC = bidListUpdateC
+	in.slot = 0
+
+	// do brain preparation here
+	in.brain = createBrainInfo()
+	defer bsg.Close()
 
 	pipelineSub := router.ObjectOnPipeline()
 	defer pipelineSub.Unsubscribe()
 
 	netstatSub := router.Network.OnNetworkStats()
 	defer netstatSub.Unsubscribe()
+
+	slotSub := router.Controller.SlotHome().OnSlot()
+	defer slotSub.Unsubscribe()
 
 	err = in.init()
 	startErrorC <- err
@@ -121,6 +130,14 @@ out:
 		select {
 		case <-doneC:
 			break out
+		case id := <-bsg.budget.DeleteC:
+			bsg.budget.Delete(id)
+		case req := <-bsg.budget.ReqC:
+			bsg.budget.Receive(req)
+		case id := <-bsg.netstats.DeleteC:
+			bsg.budget.Delete(id)
+		case req := <-bsg.netstats.ReqC:
+			bsg.netstats.Receive(req)
 		case err = <-in.pcVaultSub.RecvErr():
 			break out
 		case d := <-in.pcVaultSub.RecvStream():
@@ -160,15 +177,19 @@ out:
 		case x := <-bidListUpdateC:
 			y, present := in.pipelines[x.id.String()]
 			if present {
-				y.on_bid(x.list)
+				in.timeline_on_bid(y, x.list)
 			}
 		case x := <-periodRingUpdateC:
 			y, present := in.pipelines[x.id.String()]
 			if present {
-				y.on_period(x.ring)
+				in.timeline_on_period(y, x.ring)
 			}
 		case x := <-pipelineConnectionStatusC:
 			in.on_connection_status(x)
+		case err = <-slotSub.ErrorC:
+			break out
+		case in.slot = <-slotSub.StreamC:
+			in.on_slot()
 		}
 	}
 	in.finish(err)
@@ -176,6 +197,8 @@ out:
 
 func (in *internal) init() error {
 	var err error
+	in.init_timeline()
+
 	in.tor, err = proxy.SetupTor(in.ctx, true)
 	if err != nil {
 		return err

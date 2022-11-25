@@ -26,6 +26,7 @@ type bidUpdate struct {
 	list cba.BidList
 }
 
+// pipelineInfo lives in the same goroutine as *internal
 type pipelineInfo struct {
 	p              pipe.Pipeline
 	pleaseConnectC chan<- struct{}
@@ -36,6 +37,7 @@ type pipelineInfo struct {
 	lastDuration   time.Duration
 	allocation     uint16
 	ourBid         *cba.Bid
+	totalDeposits  uint64
 }
 
 func (pi *pipelineInfo) on_period(ring cba.PeriodRing) {
@@ -67,24 +69,6 @@ func (in *internal) on_pipeline(p pipe.Pipeline) {
 	go loopBidUpdate(in.ctx, p, in.errorC, in.bidListC)
 	go loopPeriodUpdate(in.ctx, p, in.errorC, in.periodRingC)
 	go loopUpdateRelativeStake(in.ctx, in.errorC, in.updateChangeActiveStakeC, p)
-}
-
-func (in *internal) on_connection_status(x pipelineConnectionStatus) {
-	pi, present := in.pipelines[x.id.String()]
-	if !present {
-		return
-	}
-	pi.status = &x
-	if pi.status.err != nil {
-		log.Debug(pi.status.err)
-		nextDuration := 5 * time.Second
-		if pi.lastDuration != 0 {
-			nextDuration = 30 * time.Second
-			//nextDuration = pi.lastDuration * 2
-		}
-		pi.lastDuration = nextDuration
-		go loopDelayPleaseConnect(in.ctx, pi.pleaseConnectC, nextDuration)
-	}
 }
 
 func loopUpdateRelativeStake(
@@ -222,6 +206,7 @@ out:
 		}
 	}
 	select {
+	case <-doneC:
 	case errorC <- err:
 	}
 }

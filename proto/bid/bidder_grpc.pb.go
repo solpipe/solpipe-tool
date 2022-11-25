@@ -23,7 +23,7 @@ const _ = grpc.SupportPackageIsVersion7
 // For semantics around ctx use and closing/ending streaming RPCs, please refer to https://pkg.go.dev/google.golang.org/grpc/?tab=doc#ClientConn.NewStream.
 type BrainClient interface {
 	// get the default period settings
-	GetTpsBudget(ctx context.Context, in *Empty, opts ...grpc.CallOption) (*TpsBudget, error)
+	GetTpsBudget(ctx context.Context, in *Empty, opts ...grpc.CallOption) (Brain_GetTpsBudgetClient, error)
 	SetTpsBudget(ctx context.Context, in *TpsBudget, opts ...grpc.CallOption) (*TpsBudget, error)
 	GetStats(ctx context.Context, in *Empty, opts ...grpc.CallOption) (Brain_GetStatsClient, error)
 }
@@ -36,13 +36,36 @@ func NewBrainClient(cc grpc.ClientConnInterface) BrainClient {
 	return &brainClient{cc}
 }
 
-func (c *brainClient) GetTpsBudget(ctx context.Context, in *Empty, opts ...grpc.CallOption) (*TpsBudget, error) {
-	out := new(TpsBudget)
-	err := c.cc.Invoke(ctx, "/bid.Brain/GetTpsBudget", in, out, opts...)
+func (c *brainClient) GetTpsBudget(ctx context.Context, in *Empty, opts ...grpc.CallOption) (Brain_GetTpsBudgetClient, error) {
+	stream, err := c.cc.NewStream(ctx, &Brain_ServiceDesc.Streams[0], "/bid.Brain/GetTpsBudget", opts...)
 	if err != nil {
 		return nil, err
 	}
-	return out, nil
+	x := &brainGetTpsBudgetClient{stream}
+	if err := x.ClientStream.SendMsg(in); err != nil {
+		return nil, err
+	}
+	if err := x.ClientStream.CloseSend(); err != nil {
+		return nil, err
+	}
+	return x, nil
+}
+
+type Brain_GetTpsBudgetClient interface {
+	Recv() (*TpsBudget, error)
+	grpc.ClientStream
+}
+
+type brainGetTpsBudgetClient struct {
+	grpc.ClientStream
+}
+
+func (x *brainGetTpsBudgetClient) Recv() (*TpsBudget, error) {
+	m := new(TpsBudget)
+	if err := x.ClientStream.RecvMsg(m); err != nil {
+		return nil, err
+	}
+	return m, nil
 }
 
 func (c *brainClient) SetTpsBudget(ctx context.Context, in *TpsBudget, opts ...grpc.CallOption) (*TpsBudget, error) {
@@ -55,7 +78,7 @@ func (c *brainClient) SetTpsBudget(ctx context.Context, in *TpsBudget, opts ...g
 }
 
 func (c *brainClient) GetStats(ctx context.Context, in *Empty, opts ...grpc.CallOption) (Brain_GetStatsClient, error) {
-	stream, err := c.cc.NewStream(ctx, &Brain_ServiceDesc.Streams[0], "/bid.Brain/GetStats", opts...)
+	stream, err := c.cc.NewStream(ctx, &Brain_ServiceDesc.Streams[1], "/bid.Brain/GetStats", opts...)
 	if err != nil {
 		return nil, err
 	}
@@ -91,7 +114,7 @@ func (x *brainGetStatsClient) Recv() (*Stats, error) {
 // for forward compatibility
 type BrainServer interface {
 	// get the default period settings
-	GetTpsBudget(context.Context, *Empty) (*TpsBudget, error)
+	GetTpsBudget(*Empty, Brain_GetTpsBudgetServer) error
 	SetTpsBudget(context.Context, *TpsBudget) (*TpsBudget, error)
 	GetStats(*Empty, Brain_GetStatsServer) error
 	mustEmbedUnimplementedBrainServer()
@@ -101,8 +124,8 @@ type BrainServer interface {
 type UnimplementedBrainServer struct {
 }
 
-func (UnimplementedBrainServer) GetTpsBudget(context.Context, *Empty) (*TpsBudget, error) {
-	return nil, status.Errorf(codes.Unimplemented, "method GetTpsBudget not implemented")
+func (UnimplementedBrainServer) GetTpsBudget(*Empty, Brain_GetTpsBudgetServer) error {
+	return status.Errorf(codes.Unimplemented, "method GetTpsBudget not implemented")
 }
 func (UnimplementedBrainServer) SetTpsBudget(context.Context, *TpsBudget) (*TpsBudget, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method SetTpsBudget not implemented")
@@ -123,22 +146,25 @@ func RegisterBrainServer(s grpc.ServiceRegistrar, srv BrainServer) {
 	s.RegisterService(&Brain_ServiceDesc, srv)
 }
 
-func _Brain_GetTpsBudget_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
-	in := new(Empty)
-	if err := dec(in); err != nil {
-		return nil, err
+func _Brain_GetTpsBudget_Handler(srv interface{}, stream grpc.ServerStream) error {
+	m := new(Empty)
+	if err := stream.RecvMsg(m); err != nil {
+		return err
 	}
-	if interceptor == nil {
-		return srv.(BrainServer).GetTpsBudget(ctx, in)
-	}
-	info := &grpc.UnaryServerInfo{
-		Server:     srv,
-		FullMethod: "/bid.Brain/GetTpsBudget",
-	}
-	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
-		return srv.(BrainServer).GetTpsBudget(ctx, req.(*Empty))
-	}
-	return interceptor(ctx, in, info, handler)
+	return srv.(BrainServer).GetTpsBudget(m, &brainGetTpsBudgetServer{stream})
+}
+
+type Brain_GetTpsBudgetServer interface {
+	Send(*TpsBudget) error
+	grpc.ServerStream
+}
+
+type brainGetTpsBudgetServer struct {
+	grpc.ServerStream
+}
+
+func (x *brainGetTpsBudgetServer) Send(m *TpsBudget) error {
+	return x.ServerStream.SendMsg(m)
 }
 
 func _Brain_SetTpsBudget_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
@@ -188,15 +214,16 @@ var Brain_ServiceDesc = grpc.ServiceDesc{
 	HandlerType: (*BrainServer)(nil),
 	Methods: []grpc.MethodDesc{
 		{
-			MethodName: "GetTpsBudget",
-			Handler:    _Brain_GetTpsBudget_Handler,
-		},
-		{
 			MethodName: "SetTpsBudget",
 			Handler:    _Brain_SetTpsBudget_Handler,
 		},
 	},
 	Streams: []grpc.StreamDesc{
+		{
+			StreamName:    "GetTpsBudget",
+			Handler:       _Brain_GetTpsBudget_Handler,
+			ServerStreams: true,
+		},
 		{
 			StreamName:    "GetStats",
 			Handler:       _Brain_GetStats_Handler,

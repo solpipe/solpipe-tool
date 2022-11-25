@@ -30,6 +30,18 @@ func (g *Generic[T]) Append(obj T) *Node[T] {
 	return node
 }
 
+func (g *Generic[T]) Prepend(obj T) *Node[T] {
+	g.Size++
+	node := &Node[T]{next: nil, prev: nil, value: obj}
+	oldHead := g.head
+	g.head = node
+	node.next = g.head
+	if oldHead != nil {
+		oldHead.prev = node
+	}
+	return node
+}
+
 func (g *Generic[T]) Head() (ans T, is_present bool) {
 	if g.head == nil {
 		is_present = false
@@ -86,6 +98,22 @@ func (g *Generic[T]) Iterate(callback func(obj T, index uint32, delete func()) e
 	return nil
 }
 
+func (g *Generic[T]) InsertSorted(newItem T, insertOk func(before *Node[T], after *Node[T], newItem T) bool) {
+	var node *Node[T]
+	if insertOk(nil, g.HeadNode(), newItem) {
+		g.Prepend(newItem)
+		return
+	}
+
+	for node = g.HeadNode(); node != nil; node = node.Next() {
+		if insertOk(node, node.Next(), newItem) {
+			g.Insert(newItem, node)
+			return
+		}
+	}
+	g.Append(newItem)
+}
+
 func (g *Generic[T]) IterateReverse(callback func(obj T, index uint32, delete func()) error) error {
 	var i uint32 = g.Size - 1
 	var err error
@@ -136,8 +164,10 @@ func (g *Generic[T]) Remove(node *Node[T]) {
 }
 
 func (g *Generic[T]) Insert(v T, prevNode *Node[T]) *Node[T] {
-	if prevNode == nil {
+	if prevNode == nil && 0 < g.Size {
 		return nil
+	} else if prevNode == nil {
+		return g.Append(v)
 	}
 	middleNode := &Node[T]{value: v}
 	g.Size++
