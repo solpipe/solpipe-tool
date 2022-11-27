@@ -5,14 +5,14 @@ import (
 	"os"
 	"time"
 
+	sgo "github.com/SolmateDev/solana-go"
+	log "github.com/sirupsen/logrus"
 	cba "github.com/solpipe/cba"
 	"github.com/solpipe/solpipe-tool/script"
 	ctr "github.com/solpipe/solpipe-tool/state/controller"
 	pyt "github.com/solpipe/solpipe-tool/state/payout"
 	pipe "github.com/solpipe/solpipe-tool/state/pipeline"
 	"github.com/solpipe/solpipe-tool/state/slot"
-	sgo "github.com/SolmateDev/solana-go"
-	log "github.com/sirupsen/logrus"
 )
 
 func (in *internal) on_payout(pwd pipe.PayoutWithData) {

@@ -14,6 +14,7 @@ import (
 	ll "github.com/solpipe/solpipe-tool/ds/list"
 	"github.com/solpipe/solpipe-tool/ds/sub"
 	pba "github.com/solpipe/solpipe-tool/proto/admin"
+	"github.com/solpipe/solpipe-tool/script"
 	ctr "github.com/solpipe/solpipe-tool/state/controller"
 	pyt "github.com/solpipe/solpipe-tool/state/payout"
 	pipe "github.com/solpipe/solpipe-tool/state/pipeline"
@@ -71,6 +72,7 @@ func DefaultPeriodSettings() *pba.PeriodSettings {
 		Withhold:  0,
 		Lookahead: 3 * 150,
 		Length:    150,
+		TickSize:  uint32(script.TICKSIZE_DEFAULT),
 	}
 }
 
@@ -101,7 +103,7 @@ func loopInternal(
 	in.ws = wsClient
 	in.closeSignalCList = make([]chan<- error, 0)
 	in.periodSettings = DefaultPeriodSettings()
-	in.rateSettings = initialSettings.ToProto()
+	in.rateSettings = initialSettings.ToProtoRateSettings()
 	//in.lastAddPeriod = 0
 	in.nextAttemptToAddPeriod = 0
 	in.lastAddPeriodAttemptToAddPeriod = 0

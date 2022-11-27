@@ -33,6 +33,7 @@ func (in *internal) attempt_add_period() error {
 		pipe.ALLOTMENT_DEFAULT,
 		state.RateFromProto(in.rateSettings.DecayRate),
 		state.RateFromProto(in.rateSettings.PayoutShare),
+		uint16(in.periodSettings.TickSize),
 	)
 	if err != nil {
 		return err

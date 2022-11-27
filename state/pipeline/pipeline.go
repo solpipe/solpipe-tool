@@ -199,7 +199,8 @@ type PipelineSettings struct {
 	PayoutShare *state.Rate
 }
 
-func (ps *PipelineSettings) ToProto() *pba.RateSettings {
+func (ps *PipelineSettings) ToProtoRateSettings() *pba.RateSettings {
+
 	return &pba.RateSettings{
 		CrankFee:    convertRateToProto(ps.CrankFee),
 		DecayRate:   convertRateToProto(ps.DecayRate),
@@ -218,6 +219,7 @@ func (ps *PipelineSettings) Check() error {
 	if ps.PayoutShare == nil {
 		return errors.New("no payout share")
 	}
+
 	return nil
 }
 
@@ -253,6 +255,9 @@ func (e1 Pipeline) PeriodRing() (cba.PeriodRing, error) {
 			ansC <- *in.periods
 		}
 	}:
+	}
+	if err != nil {
+		return cba.PeriodRing{}, err
 	}
 	select {
 	case <-e1.ctx.Done():

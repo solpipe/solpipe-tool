@@ -7,6 +7,7 @@ import (
 	sgo "github.com/SolmateDev/solana-go"
 	"github.com/cretz/bine/tor"
 	log "github.com/sirupsen/logrus"
+	cba "github.com/solpipe/cba"
 	"github.com/solpipe/solpipe-tool/ds/sub"
 	"github.com/solpipe/solpipe-tool/proxy/relay"
 	ntk "github.com/solpipe/solpipe-tool/state/network"
@@ -24,7 +25,6 @@ type internal struct {
 	// tor related
 	tor    *tor.Tor
 	dialer *tor.Dialer
-
 	config relay.Configuration
 
 	// solana state related
@@ -35,18 +35,23 @@ type internal struct {
 	pipelineTpsHome *sub.SubHome[float64] // let validators subscribe to pipeline updates
 
 	// relay related
-	validatorConnC chan<- validatorClientWithId
-
+	validatorConnC           chan<- validatorClientWithId
 	totalTpsC                chan<- float64
-	txFromBidderToValidatorC chan<- submitInfo // bidders write transactions ( via Submit() ); this channel blocks and has no buffer!
-	txCforValidator          <-chan submitInfo // validators read.  also rate limiting is done here
+	txFromBidderToValidatorC chan<- submitInfo      // bidders write transactions ( via Submit() ); this channel blocks and has no buffer!
+	txCforValidator          <-chan submitInfo      // validators read.  also rate limiting is done here
+	validatorInternalC       chan<- func(*internal) // duplicate internalC to let the validator object manage validatorMap
+	bx                       *bidListWithSlot
+	bidderMap                map[string]*bidderFeed          // map userId -> bid
+	validatorConnectionMap   map[string]*validatorConnection // map validator mgr id -> validator connection; connect to all validators
+	payoutMap                map[uint64]pipe.PayoutWithData
+	deletePayoutC            chan<- uint64
 
-	// duplicate internalC to let the validator object manage validatorMap
-	validatorInternalC chan<- func(*internal)
-
-	bidderMap map[string]*bidderFeed // map userId -> bid
 	//validatorMap           map[string]*validatorFeed       // map vote -> validator
-	validatorConnectionMap map[string]*validatorConnection // map validator mgr id -> validator connection; connect to all validators
+}
+
+type bidListWithSlot struct {
+	bl *cba.BidList
+	s  uint64
 }
 
 func loopInternal(
@@ -74,6 +79,7 @@ func loopInternal(
 	deleteBidderC := make(chan sgo.PublicKey, 1)
 	validatorInternalC := make(chan func(*internal), 10)
 	validatorConnC := make(chan validatorClientWithId, 10)
+	deletePayoutC := make(chan uint64, 10)
 
 	in := new(internal)
 	in.ctx = ctx
@@ -88,6 +94,7 @@ func loopInternal(
 	in.txFromBidderToValidatorC = txFromBidderToValidatorC
 	in.txCforValidator = txFromBidderToValidatorC
 	in.totalTpsC = pipelineTpsC
+	in.deletePayoutC = deletePayoutC
 
 	in.slot = 0
 	in.network = network
@@ -98,11 +105,18 @@ func loopInternal(
 	in.bidderMap = make(map[string]*bidderFeed)
 	in.validatorConnectionMap = make(map[string]*validatorConnection)
 
+	in.payoutMap = make(map[uint64]pipe.PayoutWithData)
+	in.bx = &bidListWithSlot{
+		s: 0,
+	}
+
 	// set up subscriptions pulling data from external sources
 	slotSub := slotHome.OnSlot()
 	defer slotSub.Unsubscribe()
 	payoutSub := pipeline.OnPayout()
 	defer payoutSub.Unsubscribe()
+	bidSub := pipeline.OnBid()
+	defer bidSub.Unsubscribe()
 	validatorSub := in.pipeline.OnValidator()
 	defer validatorSub.Unsubscribe()
 
@@ -214,29 +228,36 @@ out:
 				req.bidderFoundC <- false
 			}
 
+		case err = <-bidSub.ErrorC:
+			break out
+		case bl := <-bidSub.StreamC:
+			if bl.AllocationIsFinal {
+				in.bx.bl = &bl
+				in.bx.s = in.slot
+				pwd, present := in.payoutMap[in.bx.bl.LastPeriodStart]
+				if present {
+					in.allocation_set(
+						pwd,
+						insertBidderC,
+						deleteBidderC,
+						slotHome,
+					)
+				}
+			}
 		// handle new payout (periods) starting and finishing
 		// as part of this, track bidders
 		case err = <-payoutSub.ErrorC:
 			break out
-		case p := <-payoutSub.StreamC:
-			l, err := pipeline.BidList()
-			if err != nil {
-				log.Debug("should not have error with bid list")
-				break out
+		case pwd := <-payoutSub.StreamC:
+			_, present := in.payoutMap[pwd.Data.Period.Start]
+			if !present {
+				in.payoutMap[pwd.Data.Period.Start] = pwd
+				go loopDeletePayout(in.ctx, in.errorC, in.deletePayoutC, slotHome, pwd.Data.Period.Start, pwd.Data.Period.Start+pwd.Data.Period.Length)
+
 			}
-			for i := 0; i < len(l.Book); i++ {
-				// do a time delay on slotHome until the payout period starts
-				// once started, insert the bidder
-				go loopInsertDeleteBidder(
-					in.ctx,
-					in.errorC,
-					insertBidderC,
-					deleteBidderC,
-					slotHome,
-					l.Book[i],
-					p.Data,
-				)
-			}
+		case startTime := <-deletePayoutC:
+			delete(in.payoutMap, startTime)
+
 		case bi := <-insertBidderC:
 			in.insert_bidders(bi)
 		case id := <-deleteBidderC:
@@ -250,6 +271,83 @@ out:
 	}
 
 	in.finish(err)
+}
+
+func loopDeletePayout(
+	ctx context.Context,
+	errorC chan<- error,
+	deleteC chan<- uint64,
+	slotHome slot.SlotHome,
+	start uint64,
+	end uint64,
+) {
+	doneC := ctx.Done()
+	sub := slotHome.OnSlot()
+	defer sub.Unsubscribe()
+	var err error
+	var slot uint64
+out:
+	for {
+		select {
+		case <-doneC:
+			return
+		case err = <-sub.ErrorC:
+			break out
+		case slot = <-sub.StreamC:
+			if end <= slot {
+				break out
+			}
+		}
+	}
+	if err != nil {
+		select {
+		case <-doneC:
+		case errorC <- err:
+		}
+	} else {
+		select {
+		case <-doneC:
+		case deleteC <- start:
+		}
+	}
+
+}
+
+func (in *internal) allocation_set(
+	pwd pipe.PayoutWithData,
+	insertBidderC chan bidderInsertInfo,
+	deleteBidderC chan sgo.PublicKey,
+	slotHome slot.SlotHome,
+) {
+	var book []cba.Bid
+	if in.bx.bl != nil {
+		if pwd.Data.Period.Start == in.bx.bl.LastPeriodStart {
+			book = in.bx.bl.Book
+		}
+	}
+	if book == nil {
+		log.Debug("had to fetch non-authoritative bid list")
+		x, err := in.pipeline.BidList()
+		if err != nil {
+			in.errorC <- err
+			return
+		}
+		book = x.Book
+	}
+
+	for i := 0; i < len(book); i++ {
+		// do a time delay on slotHome until the payout period starts
+		// once started, insert the bidder
+		go loopInsertDeleteBidder(
+			in.ctx,
+			in.errorC,
+			insertBidderC,
+			deleteBidderC,
+			slotHome,
+			book[i],
+			pwd.Data,
+		)
+	}
 }
 
 func (in *internal) finish(err error) {

@@ -177,6 +177,8 @@ func TestSetup(t *testing.T) {
 			1*time.Minute,
 			args,
 			&pid,
+			100,
+			20,
 		)
 		if err != nil {
 			t.Fatal(err)

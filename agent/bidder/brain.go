@@ -93,7 +93,10 @@ func (e1 external) GetTpsBudget(ctx context.Context, req *pbb.Empty) (resp *pbb.
 	return
 }
 
-func (e1 external) SetTpsBudget(ctx context.Context, req *pbb.TpsBudget) (resp *pbb.TpsBudget, err error) {
+func (e1 external) SetTpsBudget(
+	ctx context.Context,
+	req *pbb.TpsBudget,
+) (resp *pbb.TpsBudget, err error) {
 
 	doneC := ctx.Done()
 	doneC2 := e1.a.ctx.Done()

@@ -26,6 +26,7 @@ type BrainClient interface {
 	GetTpsBudget(ctx context.Context, in *Empty, opts ...grpc.CallOption) (Brain_GetTpsBudgetClient, error)
 	SetTpsBudget(ctx context.Context, in *TpsBudget, opts ...grpc.CallOption) (*TpsBudget, error)
 	GetStats(ctx context.Context, in *Empty, opts ...grpc.CallOption) (Brain_GetStatsClient, error)
+	GetBalance(ctx context.Context, in *Empty, opts ...grpc.CallOption) (Brain_GetBalanceClient, error)
 }
 
 type brainClient struct {
@@ -109,6 +110,38 @@ func (x *brainGetStatsClient) Recv() (*Stats, error) {
 	return m, nil
 }
 
+func (c *brainClient) GetBalance(ctx context.Context, in *Empty, opts ...grpc.CallOption) (Brain_GetBalanceClient, error) {
+	stream, err := c.cc.NewStream(ctx, &Brain_ServiceDesc.Streams[2], "/bid.Brain/GetBalance", opts...)
+	if err != nil {
+		return nil, err
+	}
+	x := &brainGetBalanceClient{stream}
+	if err := x.ClientStream.SendMsg(in); err != nil {
+		return nil, err
+	}
+	if err := x.ClientStream.CloseSend(); err != nil {
+		return nil, err
+	}
+	return x, nil
+}
+
+type Brain_GetBalanceClient interface {
+	Recv() (*Balance, error)
+	grpc.ClientStream
+}
+
+type brainGetBalanceClient struct {
+	grpc.ClientStream
+}
+
+func (x *brainGetBalanceClient) Recv() (*Balance, error) {
+	m := new(Balance)
+	if err := x.ClientStream.RecvMsg(m); err != nil {
+		return nil, err
+	}
+	return m, nil
+}
+
 // BrainServer is the server API for Brain service.
 // All implementations must embed UnimplementedBrainServer
 // for forward compatibility
@@ -117,6 +150,7 @@ type BrainServer interface {
 	GetTpsBudget(*Empty, Brain_GetTpsBudgetServer) error
 	SetTpsBudget(context.Context, *TpsBudget) (*TpsBudget, error)
 	GetStats(*Empty, Brain_GetStatsServer) error
+	GetBalance(*Empty, Brain_GetBalanceServer) error
 	mustEmbedUnimplementedBrainServer()
 }
 
@@ -132,6 +166,9 @@ func (UnimplementedBrainServer) SetTpsBudget(context.Context, *TpsBudget) (*TpsB
 }
 func (UnimplementedBrainServer) GetStats(*Empty, Brain_GetStatsServer) error {
 	return status.Errorf(codes.Unimplemented, "method GetStats not implemented")
+}
+func (UnimplementedBrainServer) GetBalance(*Empty, Brain_GetBalanceServer) error {
+	return status.Errorf(codes.Unimplemented, "method GetBalance not implemented")
 }
 func (UnimplementedBrainServer) mustEmbedUnimplementedBrainServer() {}
 
@@ -206,6 +243,27 @@ func (x *brainGetStatsServer) Send(m *Stats) error {
 	return x.ServerStream.SendMsg(m)
 }
 
+func _Brain_GetBalance_Handler(srv interface{}, stream grpc.ServerStream) error {
+	m := new(Empty)
+	if err := stream.RecvMsg(m); err != nil {
+		return err
+	}
+	return srv.(BrainServer).GetBalance(m, &brainGetBalanceServer{stream})
+}
+
+type Brain_GetBalanceServer interface {
+	Send(*Balance) error
+	grpc.ServerStream
+}
+
+type brainGetBalanceServer struct {
+	grpc.ServerStream
+}
+
+func (x *brainGetBalanceServer) Send(m *Balance) error {
+	return x.ServerStream.SendMsg(m)
+}
+
 // Brain_ServiceDesc is the grpc.ServiceDesc for Brain service.
 // It's only intended for direct use with grpc.RegisterService,
 // and not to be introspected or modified (even as a copy)
@@ -227,6 +285,11 @@ var Brain_ServiceDesc = grpc.ServiceDesc{
 		{
 			StreamName:    "GetStats",
 			Handler:       _Brain_GetStats_Handler,
+			ServerStreams: true,
+		},
+		{
+			StreamName:    "GetBalance",
+			Handler:       _Brain_GetBalance_Handler,
 			ServerStreams: true,
 		},
 	},

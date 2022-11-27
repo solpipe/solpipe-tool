@@ -106,12 +106,10 @@ backout:
 		return errors.New("failed to find user vault")
 	}
 
-	configChannelGroup := bdr.ConfigByHup(ctx, r.Configuration)
 	bidder, err := bdr.Create(
 		ctx,
 		rpcClient,
 		wsClient,
-		configChannelGroup,
 		userKey,
 		userVaultId,
 		userVault,

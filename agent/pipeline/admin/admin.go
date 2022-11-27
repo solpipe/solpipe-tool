@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"io"
+	"math"
 
 	sgo "github.com/SolmateDev/solana-go"
 	sgorpc "github.com/SolmateDev/solana-go/rpc"
@@ -123,6 +124,9 @@ func (e1 Server) GetPeriod(ctx context.Context, req *pba.Empty) (*pba.PeriodSett
 
 func (e1 Server) SetPeriod(ctx context.Context, req *pba.PeriodSettings) (*pba.PeriodSettings, error) {
 	newSettings := util.CopyPeriodSettings(req)
+	if req.TickSize == 0 || math.MaxUint16 <= req.TickSize {
+		return nil, errors.New("tick size out of range")
+	}
 	e1.internalC <- func(in *internal) {
 		in.settings_change(newSettings)
 	}

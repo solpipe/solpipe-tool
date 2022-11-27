@@ -6,14 +6,14 @@ import (
 	"testing"
 	"time"
 
+	sgo "github.com/SolmateDev/solana-go"
+	log "github.com/sirupsen/logrus"
 	cba "github.com/solpipe/cba"
 	ap "github.com/solpipe/solpipe-tool/agent/pipeline"
 	"github.com/solpipe/solpipe-tool/proto/test"
 	"github.com/solpipe/solpipe-tool/state"
 	pipe "github.com/solpipe/solpipe-tool/state/pipeline"
 	"github.com/solpipe/solpipe-tool/test/sandbox"
-	sgo "github.com/SolmateDev/solana-go"
-	log "github.com/sirupsen/logrus"
 )
 
 func TestPipeline(t *testing.T) {
@@ -75,6 +75,8 @@ func TestPipeline(t *testing.T) {
 		1*time.Minute,
 		args,
 		nil,
+		100,
+		20,
 	)
 	if err != nil {
 		t.Fatal(err)

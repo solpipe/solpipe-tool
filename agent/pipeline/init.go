@@ -5,13 +5,13 @@ import (
 	"errors"
 	"time"
 
+	sgo "github.com/SolmateDev/solana-go"
+	sgorpc "github.com/SolmateDev/solana-go/rpc"
+	log "github.com/sirupsen/logrus"
 	"github.com/solpipe/solpipe-tool/script"
 	pipe "github.com/solpipe/solpipe-tool/state/pipeline"
 	rtr "github.com/solpipe/solpipe-tool/state/router"
 	"github.com/solpipe/solpipe-tool/util"
-	sgo "github.com/SolmateDev/solana-go"
-	sgorpc "github.com/SolmateDev/solana-go/rpc"
-	log "github.com/sirupsen/logrus"
 )
 
 const PIPELINE_MEMBER_SIZE = 1500000
@@ -23,6 +23,8 @@ func Initialize(
 	timeout time.Duration,
 	args *InitializationArg,
 	pipelineIdKeypair *sgo.PrivateKey,
+	bidSpace uint16,
+	residualSpace uint16,
 ) (
 	resultC <-chan ListenResult,
 	pipelineId sgo.PublicKey,
@@ -108,6 +110,9 @@ func Initialize(
 			100,
 			*programConfig.Settings.DecayRate,
 			*programConfig.Settings.PayoutShare,
+			bidSpace,
+			residualSpace,
+			script.TICKSIZE_DEFAULT,
 		)
 	} else {
 		pid, err = s1.AddPipelineDirect(
@@ -119,6 +124,9 @@ func Initialize(
 			100,
 			*programConfig.Settings.DecayRate,
 			*programConfig.Settings.PayoutShare,
+			bidSpace,
+			residualSpace,
+			script.TICKSIZE_DEFAULT,
 		)
 	}
 
