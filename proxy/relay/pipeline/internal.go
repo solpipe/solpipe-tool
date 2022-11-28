@@ -231,29 +231,45 @@ out:
 		case err = <-bidSub.ErrorC:
 			break out
 		case bl := <-bidSub.StreamC:
+			// we only care about final allocations for a given payout period
+			// final==true if either period is starting or a period is ending with no subsequent periods
 			if bl.AllocationIsFinal {
-				in.bx.bl = &bl
-				in.bx.s = in.slot
-				pwd, present := in.payoutMap[in.bx.bl.LastPeriodStart]
-				if present {
-					in.allocation_set(
-						pwd,
-						insertBidderC,
-						deleteBidderC,
-						slotHome,
-					)
+				start := in.bx.bl.LastPeriodStart
+				if in.bx.bl.LastPeriodStart < start {
+					log.Debug("have allocation-final flag set to true")
+					in.bx.bl = &bl
+					in.bx.s = in.slot
+					pwd, present := in.payoutMap[start]
+					if present {
+						in.allocation_set(
+							pwd,
+							insertBidderC,
+							deleteBidderC,
+							slotHome,
+						)
+					} else {
+						log.Debugf("no payout found for period start=%d", start)
+					}
 				}
+
 			}
 		// handle new payout (periods) starting and finishing
 		// as part of this, track bidders
 		case err = <-payoutSub.ErrorC:
 			break out
 		case pwd := <-payoutSub.StreamC:
-			_, present := in.payoutMap[pwd.Data.Period.Start]
+			start := pwd.Data.Period.Start
+			_, present := in.payoutMap[start]
 			if !present {
-				in.payoutMap[pwd.Data.Period.Start] = pwd
-				go loopDeletePayout(in.ctx, in.errorC, in.deletePayoutC, slotHome, pwd.Data.Period.Start, pwd.Data.Period.Start+pwd.Data.Period.Length)
-
+				in.payoutMap[start] = pwd
+				go loopDeletePayout(
+					in.ctx,
+					in.errorC,
+					in.deletePayoutC,
+					slotHome,
+					start,
+					start+pwd.Data.Period.Length,
+				)
 			}
 		case startTime := <-deletePayoutC:
 			delete(in.payoutMap, startTime)
@@ -313,6 +329,7 @@ out:
 
 }
 
+// the contract has defined the allocation for all bidders
 func (in *internal) allocation_set(
 	pwd pipe.PayoutWithData,
 	insertBidderC chan bidderInsertInfo,
@@ -327,17 +344,15 @@ func (in *internal) allocation_set(
 	}
 	if book == nil {
 		log.Debug("had to fetch non-authoritative bid list")
-		x, err := in.pipeline.BidList()
-		if err != nil {
-			in.errorC <- err
-			return
-		}
-		book = x.Book
+		return
 	}
 
 	for i := 0; i < len(book); i++ {
-		// do a time delay on slotHome until the payout period starts
-		// once started, insert the bidder
+		in.insert_bidders(bidderInsertInfo{
+			bid:    book[i],
+			payout: pwd.Data,
+			//periodC: ,
+		})
 		go loopInsertDeleteBidder(
 			in.ctx,
 			in.errorC,

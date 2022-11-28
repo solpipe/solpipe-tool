@@ -18,7 +18,7 @@ type bidderInsertInfo struct {
 	periodC chan<- [2]uint64
 }
 
-//const SLOT_BUFFER_AFTER_PERIOD_ENDS = uint64(10)
+const SLOT_BUFFER_AFTER_PERIOD_ENDS = uint64(10)
 
 // Insert bidders at the start of the payout period.
 // Delete bidders once the payout period has finished.
