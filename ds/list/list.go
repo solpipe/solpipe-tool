@@ -1,5 +1,7 @@
 package list
 
+import sgo "github.com/SolmateDev/solana-go"
+
 type Generic[T any] struct {
 	Size uint32
 	head *Node[T]
@@ -98,20 +100,34 @@ func (g *Generic[T]) Iterate(callback func(obj T, index uint32, delete func()) e
 	return nil
 }
 
-func (g *Generic[T]) InsertSorted(newItem T, insertOk func(before *Node[T], after *Node[T], newItem T) bool) {
+func (g *Generic[T]) InsertSorted(newItem T, insertOk func(before *Node[T], after *Node[T], newItem T) bool) *Node[T] {
 	var node *Node[T]
 	if insertOk(nil, g.HeadNode(), newItem) {
-		g.Prepend(newItem)
-		return
+		return g.Prepend(newItem)
 	}
 
 	for node = g.HeadNode(); node != nil; node = node.Next() {
 		if insertOk(node, node.Next(), newItem) {
-			g.Insert(newItem, node)
-			return
+			return g.Insert(newItem, node)
 		}
 	}
-	g.Append(newItem)
+	return g.Append(newItem)
+}
+
+func ComparePublicKey(a sgo.PublicKey, b sgo.PublicKey) int {
+	x := a.Bytes()[:]
+	y := b.Bytes()[:]
+	ans := 0
+	for i := 0; i < len(x); i++ {
+		if x[i] < y[i] {
+			ans = -1
+			break
+		} else if x[i] > y[i] {
+			ans = 1
+			break
+		}
+	}
+	return ans
 }
 
 func (g *Generic[T]) IterateReverse(callback func(obj T, index uint32, delete func()) error) error {
@@ -163,6 +179,7 @@ func (g *Generic[T]) Remove(node *Node[T]) {
 	}
 }
 
+// insert after prevNode
 func (g *Generic[T]) Insert(v T, prevNode *Node[T]) *Node[T] {
 	if prevNode == nil && 0 < g.Size {
 		return nil

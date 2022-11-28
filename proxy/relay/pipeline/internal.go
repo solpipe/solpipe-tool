@@ -75,8 +75,7 @@ func loopInternal(
 	txFromBidderToValidatorC := make(chan submitInfo)
 	insertValidatorC := make(chan validatorInsertInfo, 1)
 	deleteValidatorC := make(chan sgo.PublicKey, 1)
-	insertBidderC := make(chan bidderInsertInfo, 1)
-	deleteBidderC := make(chan sgo.PublicKey, 1)
+
 	validatorInternalC := make(chan func(*internal), 10)
 	validatorConnC := make(chan validatorClientWithId, 10)
 	deletePayoutC := make(chan uint64, 10)
@@ -234,24 +233,16 @@ out:
 			// we only care about final allocations for a given payout period
 			// final==true if either period is starting or a period is ending with no subsequent periods
 			if bl.AllocationIsFinal {
-				start := in.bx.bl.LastPeriodStart
-				if in.bx.bl.LastPeriodStart < start {
-					log.Debug("have allocation-final flag set to true")
-					in.bx.bl = &bl
-					in.bx.s = in.slot
-					pwd, present := in.payoutMap[start]
-					if present {
-						in.allocation_set(
-							pwd,
-							insertBidderC,
-							deleteBidderC,
-							slotHome,
-						)
-					} else {
-						log.Debugf("no payout found for period start=%d", start)
-					}
+				log.Debug("have allocation-final flag set to true")
+				in.bx.bl = &bl
+				in.bx.s = in.slot
+				total := uint64(0)
+				for _, bid := range in.bx.bl.Book {
+					total += bid.BandwidthAllocation
 				}
-
+				for _, bid := range in.bx.bl.Book {
+					in.bidder_adjust_tps(total, bid)
+				}
 			}
 		// handle new payout (periods) starting and finishing
 		// as part of this, track bidders
@@ -273,15 +264,6 @@ out:
 			}
 		case startTime := <-deletePayoutC:
 			delete(in.payoutMap, startTime)
-
-		case bi := <-insertBidderC:
-			in.insert_bidders(bi)
-		case id := <-deleteBidderC:
-			bf, present := in.bidderMap[id.String()]
-			if present {
-				bf.cancel()
-				delete(in.bidderMap, id.String())
-			}
 
 		}
 	}
@@ -327,42 +309,6 @@ out:
 		}
 	}
 
-}
-
-// the contract has defined the allocation for all bidders
-func (in *internal) allocation_set(
-	pwd pipe.PayoutWithData,
-	insertBidderC chan bidderInsertInfo,
-	deleteBidderC chan sgo.PublicKey,
-	slotHome slot.SlotHome,
-) {
-	var book []cba.Bid
-	if in.bx.bl != nil {
-		if pwd.Data.Period.Start == in.bx.bl.LastPeriodStart {
-			book = in.bx.bl.Book
-		}
-	}
-	if book == nil {
-		log.Debug("had to fetch non-authoritative bid list")
-		return
-	}
-
-	for i := 0; i < len(book); i++ {
-		in.insert_bidders(bidderInsertInfo{
-			bid:    book[i],
-			payout: pwd.Data,
-			//periodC: ,
-		})
-		go loopInsertDeleteBidder(
-			in.ctx,
-			in.errorC,
-			insertBidderC,
-			deleteBidderC,
-			slotHome,
-			book[i],
-			pwd.Data,
-		)
-	}
 }
 
 func (in *internal) finish(err error) {

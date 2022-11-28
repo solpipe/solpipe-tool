@@ -7,135 +7,68 @@ import (
 	sgo "github.com/SolmateDev/solana-go"
 	log "github.com/sirupsen/logrus"
 	cba "github.com/solpipe/cba"
-	"github.com/solpipe/solpipe-tool/ds/sub"
-	"github.com/solpipe/solpipe-tool/state/slot"
+	dssub "github.com/solpipe/solpipe-tool/ds/sub"
 )
 
-// used to add a bidder
-type bidderInsertInfo struct {
-	bid     cba.Bid
-	payout  cba.Payout
-	periodC chan<- [2]uint64
-}
-
-const SLOT_BUFFER_AFTER_PERIOD_ENDS = uint64(10)
-
-// Insert bidders at the start of the payout period.
-// Delete bidders once the payout period has finished.
-func loopInsertDeleteBidder(
-	ctx context.Context,
-	errorC chan<- error,
-	insertC chan<- bidderInsertInfo,
-	deleteC chan<- sgo.PublicKey,
-	slotHome slot.SlotHome,
-	bid cba.Bid,
-	payout cba.Payout,
-) {
-	doneC := ctx.Done()
-	sub := slotHome.OnSlot()
-	defer sub.Unsubscribe()
-
-	start := payout.Period.Start
-	finish := start + payout.Period.Length
-	slot := uint64(0)
-	periodC := make(chan [2]uint64, 1)
-
-	hasStarted := false
-
-out:
-	for {
-		if !hasStarted && start <= slot {
-			hasStarted = true
-			select {
-			case <-doneC:
-			case insertC <- bidderInsertInfo{
-				bid:     bid,
-				payout:  payout,
-				periodC: periodC,
-			}:
-			}
-		}
-		select {
-		case <-doneC:
-			break out
-		case x := <-periodC:
-			// push the finish back within the SLOT_BUFFER to keep the bidder connected
-			start = x[0]
-			finish = x[1]
-		case slot = <-sub.StreamC:
-			// add a small safety margin to account for delays in period updates
-			if finish+SLOT_BUFFER_AFTER_PERIOD_ENDS < slot {
-				select {
-				case <-doneC:
-				case deleteC <- bid.User:
-				}
-				break out
-			}
-		}
-	}
-}
-
 // update/insert bidder from loopInsertDeleteBidder()
-func (in *internal) insert_bidders(bi bidderInsertInfo) {
-	bf, present := in.bidderMap[bi.bid.User.String()]
+func (in *internal) bidder_adjust_tps(allotmentTotal uint64, bid cba.Bid) {
+	bt := BidWithTotal{
+		Bid:   bid,
+		Total: allotmentTotal,
+	}
+	bf, present := in.bidderMap[bid.User.String()]
 	if present {
 		select {
 		case <-bf.ctx.Done():
-		case bf.periodC <- [2]uint64{
-			bi.payout.Period.Start,
-			bi.payout.Period.Start + bi.payout.Period.Length,
-		}:
+		case bf.bidC <- bt:
 		}
 	} else {
-		in.bidderMap[bi.bid.User.String()] = in.createBidderFeed(
-			bi.periodC,
-			bi.payout,
-			bi.bid,
+		bf = in.bidder_create(
 			in.pipelineTpsHome.ReqC,
 			in.txFromBidderToValidatorC,
+			bt,
 		)
+		in.bidderMap[bid.User.String()] = bf
 	}
-
 }
 
 type bidderFeed struct {
 	ctx     context.Context
 	cancel  context.CancelFunc
+	bidC    chan<- BidWithTotal
 	submitC chan<- submitInfo
-	periodC chan<- [2]uint64 // used to update period from loopInternal
 }
 
-func (in *internal) createBidderFeed(
-	periodC chan<- [2]uint64,
-	initPayout cba.Payout,
-	bid cba.Bid,
-	pipelineTpsReqC chan sub.ResponseChannel[float64],
+func (in *internal) bidder_create(
+	pipelineTpsReqC chan dssub.ResponseChannel[float64],
 	txFromBidderToValidatorC chan<- submitInfo,
+	bt BidWithTotal,
 ) *bidderFeed {
 	ctx2, cancel := context.WithCancel(in.ctx)
+	bidC := make(chan BidWithTotal, 1)
 	txSubmitC := make(chan submitInfo) // no buffer
+
 	go loopBidderInternal(
 		ctx2,
 		cancel,
-		initPayout,
-		bid,
+		bidC,
 		txSubmitC,
 		pipelineTpsReqC,
 		txFromBidderToValidatorC,
+		bt,
 	)
 
 	return &bidderFeed{
 		ctx:     ctx2,
 		cancel:  cancel,
-		periodC: periodC,
 		submitC: txSubmitC,
+		bidC:    bidC,
 	}
 }
 
 type bidderInternal struct {
-	ctx    context.Context
-	errorC chan<- error
-
+	ctx           context.Context
+	errorC        chan<- error
 	allottedShare float64
 	pipelineTps   float64
 	allotedTps    float64
@@ -149,18 +82,18 @@ type bidderInternal struct {
 func loopBidderInternal(
 	ctx context.Context,
 	cancel context.CancelFunc,
-	initPayout cba.Payout,
-	bid cba.Bid,
+	bidC <-chan BidWithTotal,
 	txSubmitC <-chan submitInfo,
-	pipelineTpsReqC chan sub.ResponseChannel[float64],
+	pipelineTpsReqC chan dssub.ResponseChannel[float64],
 	txFromBidderToValidatorC chan<- submitInfo,
+	bt BidWithTotal,
 ) {
 	defer cancel()
 	var err error
 	doneC := ctx.Done()
 	errorC := make(chan error, 1)
 
-	pipelineTpsSub := sub.SubscriptionRequest(pipelineTpsReqC, func(x float64) bool { return true })
+	pipelineTpsSub := dssub.SubscriptionRequest(pipelineTpsReqC, func(x float64) bool { return true })
 	defer pipelineTpsSub.Unsubscribe()
 
 	bi := new(bidderInternal)
@@ -168,7 +101,8 @@ func loopBidderInternal(
 	bi.errorC = errorC
 
 	// bid.BandwidthAllocation
-	bi.allottedShare = float64(bid.BandwidthAllocation) / float64(initPayout.Period.BandwidthAllotment)
+	//bi.allottedShare = float64(bid.BandwidthAllocation) / float64(initPayout.Period.BandwidthAllotment)
+	bi.allottedShare = float64(bt.Bid.BandwidthAllocation) / float64(bt.Total)
 	bi.pipelineTps = float64(0)
 	bi.allotedTps = float64(0)
 	bi.txCount = float64(0)
@@ -179,6 +113,7 @@ func loopBidderInternal(
 	loopTxSubmitC := make(chan submitInfo)
 	keepReadingC := make(chan bool, 1)
 	bi.keepReadingC = keepReadingC
+	// implement a "dynamic" select with this goroutine
 	go loopBidderSubmitRateLimiter(bi.ctx, txSubmitC, loopTxSubmitC, keepReadingC)
 
 out:
@@ -188,6 +123,9 @@ out:
 			bi.txCount = 0
 			bi.keepReadingC <- true
 			bi.nextBoxC = time.After(bi.boxInterval)
+		case bt = <-bidC:
+			bi.allottedShare = float64(bt.Bid.BandwidthAllocation) / float64(bt.Total)
+			bi.allotedTps = bi.pipelineTps * bi.allottedShare
 		case s := <-loopTxSubmitC:
 			select {
 			case <-doneC:
@@ -207,13 +145,21 @@ out:
 	log.Debug(err)
 }
 
+// update tps from usage by bidder of capacity
 func (bi *bidderInternal) update_tps() {
 	bi.txCount += 1
 	if bi.allotedTps < (bi.txCount / bi.allotedTps) {
-		bi.keepReadingC <- false
+		select {
+		case <-bi.ctx.Done():
+		case bi.keepReadingC <- false:
+		}
 	}
 }
 
+// This goroutine functions as a kind of dynamic select;
+// We want to stop reading submitC when the bidder's TPS exceeds his/her rate limit
+// and to restart reading when the bidder's TPS drops back under his/her rate limit
+// with the passage of time.
 func loopBidderSubmitRateLimiter(
 	ctx context.Context,
 	inC <-chan submitInfo,
@@ -247,4 +193,27 @@ out:
 			}
 		}
 	}
+}
+
+type BidderStatus struct {
+	AllotedShare float64
+	AllotedTps   float64
+	ActualTps    float64
+}
+
+func (bi *bidderInternal) broadcast_status() {
+
+}
+
+type BidWithTotal struct {
+	Bid   cba.Bid
+	Total uint64
+}
+
+func (bwt BidWithTotal) User() sgo.PublicKey {
+	return bwt.Bid.User
+}
+
+func (bwt BidWithTotal) AllocatedShare() float64 {
+	return float64(bwt.Bid.BandwidthAllocation) / float64(bwt.Total)
 }

@@ -1,6 +1,8 @@
 package pipeline
 
 import (
+	"math/big"
+
 	log "github.com/sirupsen/logrus"
 	dssub "github.com/solpipe/solpipe-tool/ds/sub"
 	"github.com/solpipe/solpipe-tool/state/sub"
@@ -94,4 +96,20 @@ out:
 	if err != nil {
 		errorC <- err
 	}
+}
+
+func (in *internal) stake_share() float64 {
+	x := big.NewInt(0)
+	if in.totalStake.Cmp(x) == 0 {
+		return 0
+	} else {
+		x.DivMod(in.totalStake, in.activatedStake, in.activatedStake)
+		y := float64(x.Uint64())
+		if y == 0 {
+			return 0
+		} else {
+			return 1 / y
+		}
+	}
+
 }

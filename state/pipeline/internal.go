@@ -10,6 +10,7 @@ import (
 	cba "github.com/solpipe/cba"
 	ll "github.com/solpipe/solpipe-tool/ds/list"
 	dssub "github.com/solpipe/solpipe-tool/ds/sub"
+	ntk "github.com/solpipe/solpipe-tool/state/network"
 	pyt "github.com/solpipe/solpipe-tool/state/payout"
 	"github.com/solpipe/solpipe-tool/state/sub"
 	val "github.com/solpipe/solpipe-tool/state/validator"
@@ -22,10 +23,12 @@ type internal struct {
 	id                sgo.PublicKey
 	data              *cba.Pipeline
 	bids              *cba.BidList
+	bidInfo           *bidInfo
 	periods           *cba.PeriodRing
 	allottedTps       *big.Float
 	activatedStake    *big.Int
 	totalStake        *big.Int
+	networkStatus     *ntk.NetworkStatus
 	payoutById        map[string]*ll.Node[PayoutWithData]
 	updatePayoutC     chan<- cba.Payout
 	activePayout      *ll.Node[PayoutWithData] // what payout/period does ring.Start point to
@@ -36,6 +39,7 @@ type internal struct {
 	payoutHome        *dssub.SubHome[PayoutWithData]
 	validatorHome     *dssub.SubHome[ValidatorUpdate]
 	stakeStatusHome   *dssub.SubHome[sub.StakeUpdate]
+	bidStatusHome     *dssub.SubHome[BidStatus]
 	validatorStakeSub map[string]*validatorStakeSub // map vote id -> stake sub
 }
 
@@ -69,6 +73,8 @@ func loopInternal(
 	payoutHome *dssub.SubHome[PayoutWithData],
 	validatorHome *dssub.SubHome[ValidatorUpdate],
 	stakeStatusHome *dssub.SubHome[sub.StakeUpdate],
+	bidStatusHome *dssub.SubHome[BidStatus],
+	network ntk.Network,
 ) {
 	defer cancel()
 	var err error
@@ -102,7 +108,19 @@ func loopInternal(
 	defer validatorHome.Close()
 	in.stakeStatusHome = stakeStatusHome
 	defer stakeStatusHome.Close()
+	in.bidStatusHome = bidStatusHome
+	defer bidStatusHome.Close()
+	netSub := network.OnNetworkStats()
+	defer netSub.Unsubscribe()
 
+	in.networkStatus = &ntk.NetworkStatus{
+		WindowSize:                       1,
+		AverageTransactionsPerBlock:      0,
+		AverageTransactionsPerSecond:     0,
+		AverageTransactionsSizePerSecond: 0,
+	}
+
+	in.init_bid_status()
 	in.on_period(*pr)
 	in.on_bid(*bl)
 
@@ -175,6 +193,14 @@ out:
 			stakeStatusHome.Delete(id)
 		case r := <-stakeStatusHome.ReqC:
 			stakeStatusHome.Receive(r)
+		case id := <-bidStatusHome.DeleteC:
+			bidStatusHome.Delete(id)
+		case r := <-bidStatusHome.ReqC:
+			bidStatusHome.Receive(r)
+		case err = <-netSub.ErrorC:
+			break out
+		case ns := <-netSub.StreamC:
+			in.on_network_stats(ns)
 		case <-doneC:
 			break out
 		case err = <-errorC:

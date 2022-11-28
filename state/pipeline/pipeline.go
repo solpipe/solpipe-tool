@@ -13,6 +13,7 @@ import (
 	dssub "github.com/solpipe/solpipe-tool/ds/sub"
 	pba "github.com/solpipe/solpipe-tool/proto/admin"
 	"github.com/solpipe/solpipe-tool/state"
+	ntk "github.com/solpipe/solpipe-tool/state/network"
 	"github.com/solpipe/solpipe-tool/state/slot"
 	"github.com/solpipe/solpipe-tool/state/sub"
 )
@@ -39,6 +40,7 @@ type Pipeline struct {
 	updateValidatorStakeC chan<- validatorStakeUpdate
 	updateValidatorC      chan<- dssub.ResponseChannel[ValidatorUpdate]
 	updateStakeStatusC    chan<- dssub.ResponseChannel[sub.StakeUpdate]
+	updateBidStatusC      chan<- dssub.ResponseChannel[BidStatus]
 }
 
 func CreatePipeline(
@@ -47,6 +49,7 @@ func CreatePipeline(
 	data *cba.Pipeline,
 	rpcClient *sgorpc.Client,
 	slotSub slot.SlotHome,
+	network ntk.Network,
 ) (Pipeline, error) {
 	var err error
 	internalC := make(chan func(*internal), 10)
@@ -57,6 +60,7 @@ func CreatePipeline(
 	bidHome := dssub.CreateSubHome[cba.BidList]()
 	validatorHome := dssub.CreateSubHome[ValidatorUpdate]()
 	stakeStatusHome := dssub.CreateSubHome[sub.StakeUpdate]()
+	bidStatusHome := dssub.CreateSubHome[BidStatus]()
 
 	pr := new(cba.PeriodRing)
 	bl := new(cba.BidList)
@@ -95,6 +99,7 @@ out:
 	updateValidatorStakeC := make(chan validatorStakeUpdate, 10)
 	updateValidatorC := validatorHome.ReqC
 	updateStakeStatusC := stakeStatusHome.ReqC
+	updateBidStatusC := bidStatusHome.ReqC
 	ctx2, cancel := context.WithCancel(ctx)
 	go loopInternal(
 		ctx2,
@@ -111,6 +116,8 @@ out:
 		payoutHome,
 		validatorHome,
 		stakeStatusHome,
+		bidStatusHome,
+		network,
 	)
 	return Pipeline{
 		ctx:                ctx2,
@@ -125,6 +132,7 @@ out:
 		updatePayoutC:      updatePayoutC,
 		updateValidatorC:   updateValidatorC,
 		updateStakeStatusC: updateStakeStatusC,
+		updateBidStatusC:   updateBidStatusC,
 	}, nil
 }
 
@@ -344,11 +352,6 @@ func loopFetchBidList(ctx context.Context, rpcClient *sgorpc.Client, pubkey sgo.
 	if err != nil {
 		ansC <- *ans
 	}
-}
-
-// get alerted when a bid has been inserted
-func (e1 Pipeline) OnBid() dssub.Subscription[cba.BidList] {
-	return dssub.SubscriptionRequest(e1.updateBidListC, func(b cba.BidList) bool { return true })
 }
 
 func SubscribePipeline(wsClient *sgows.Client) (*sgows.ProgramSubscription, error) {

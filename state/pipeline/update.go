@@ -227,7 +227,6 @@ func (e1 Pipeline) OnPayout() dssub.Subscription[PayoutWithData] {
 // get alerted when a new period has been appended
 // The payout and period change together.
 func (e1 Pipeline) OnPeriod() dssub.Subscription[cba.PeriodRing] {
-
 	return dssub.SubscriptionRequest(e1.updatePeriodRingC, func(p cba.PeriodRing) bool { return true })
 }
 
@@ -244,6 +243,9 @@ func (e1 Pipeline) UpdateBid(list cba.BidList) {
 }
 
 func (in *internal) on_bid(list cba.BidList) {
-	in.bids = &list
+	oldbids := in.bids
+	newbids := &list
+	in.bids = newbids
 	in.bidHome.Broadcast(list)
+	in.on_bid_bucket_update(oldbids, newbids)
 }
