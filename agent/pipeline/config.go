@@ -3,9 +3,9 @@ package pipeline
 import (
 	"errors"
 
+	sgo "github.com/SolmateDev/solana-go"
 	"github.com/solpipe/solpipe-tool/proxy/relay"
 	pipe "github.com/solpipe/solpipe-tool/state/pipeline"
-	sgo "github.com/SolmateDev/solana-go"
 )
 
 type Configuration struct {
@@ -39,8 +39,9 @@ func (config *Configuration) Check() error {
 }
 
 type InitializationArg struct {
-	Relay   *relay.Configuration
-	Program *Configuration
+	Relay          *relay.Configuration
+	Program        *Configuration
+	ConfigFilePath string
 }
 
 func (args *InitializationArg) Check() error {
@@ -56,6 +57,9 @@ func (args *InitializationArg) Check() error {
 		return err
 	}
 
+	if len(args.ConfigFilePath) == 0 {
+		return errors.New("no configuration file path")
+	}
 	return nil
 }
 

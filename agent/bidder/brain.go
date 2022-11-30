@@ -3,6 +3,7 @@ package bidder
 import (
 	"context"
 	"errors"
+	"io"
 
 	dssub "github.com/solpipe/solpipe-tool/ds/sub"
 	pbb "github.com/solpipe/solpipe-tool/proto/bid"
@@ -65,30 +66,33 @@ func (a Agent) Attach(s *grpc.Server) error {
 	return nil
 }
 
-func (e1 external) GetTpsBudget(ctx context.Context, req *pbb.Empty) (resp *pbb.TpsBudget, err error) {
+func (e1 external) GetTpsBudget(req *pbb.Empty, stream pbb.Brain_GetTpsBudgetServer) (err error) {
+	ctx := stream.Context()
 	doneC := ctx.Done()
 	doneC2 := e1.a.ctx.Done()
-	respC := make(chan *pbb.TpsBudget)
-	select {
-	case <-doneC:
-		err = errors.New("canceled")
-	case <-doneC2:
-		err = errors.New("canceled")
-	case e1.a.internalC <- func(in *internal) {
-		ans := new(pbb.TpsBudget)
-		util.CopyProtoMessage(in.brain.budget, ans)
-		respC <- ans
-	}:
-	}
-	if err != nil {
-		return
-	}
-	select {
-	case <-doneC:
-		err = errors.New("canceled")
-	case <-doneC2:
-		err = errors.New("canceled")
-	case resp = <-respC:
+
+	sub := dssub.SubscriptionRequest(e1.a.bsgReq.budget, func(tb *pbb.TpsBudget) bool {
+		return true
+	})
+	defer sub.Unsubscribe()
+out:
+	for {
+		select {
+		case <-doneC:
+			break out
+		case <-doneC2:
+			break out
+		case err = <-sub.ErrorC:
+			break out
+		case budget := <-sub.StreamC:
+			err = stream.Send(budget)
+			if err == io.EOF {
+				err = nil
+				break out
+			} else if err != nil {
+				break out
+			}
+		}
 	}
 	return
 }

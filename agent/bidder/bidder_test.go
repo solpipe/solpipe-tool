@@ -137,12 +137,11 @@ func TestBidder(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	hConfig := bdr.ConfigByHup(ctx, sbox.BidderConfigFilePath[0])
+
 	agent, err := bdr.Create(
 		ctx,
 		relayConfig.Rpc(),
 		wsClient,
-		hConfig,
 		relayConfig.Admin,
 		pcVaultId,
 		pcVault,

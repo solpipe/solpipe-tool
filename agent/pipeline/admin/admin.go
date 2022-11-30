@@ -13,7 +13,7 @@ import (
 	"github.com/solpipe/solpipe-tool/ds/sub"
 	pba "github.com/solpipe/solpipe-tool/proto/admin"
 	ctr "github.com/solpipe/solpipe-tool/state/controller"
-	"github.com/solpipe/solpipe-tool/state/pipeline"
+
 	pipe "github.com/solpipe/solpipe-tool/state/pipeline"
 	rtr "github.com/solpipe/solpipe-tool/state/router"
 	"github.com/solpipe/solpipe-tool/util"
@@ -37,7 +37,8 @@ func Attach(
 	wsClient *sgows.Client,
 	pipelineId sgo.PublicKey,
 	admin sgo.PrivateKey,
-	initialSettings *pipeline.PipelineSettings,
+	initialSettings *pipe.PipelineSettings,
+	configFilePath string,
 ) (<-chan error, error) {
 	log.Debug("creating owner grpc server")
 	signalC := make(chan error, 1)
@@ -84,6 +85,7 @@ func Attach(
 		homeLog,
 		prList,
 		initialSettings,
+		configFilePath,
 	)
 
 	pba.RegisterPipelineServer(grpcServer, e1)
@@ -124,17 +126,47 @@ func (e1 Server) GetPeriod(ctx context.Context, req *pba.Empty) (*pba.PeriodSett
 
 func (e1 Server) SetPeriod(ctx context.Context, req *pba.PeriodSettings) (*pba.PeriodSettings, error) {
 	newSettings := util.CopyPeriodSettings(req)
+	// TODO: change
+	if req.TickSize == 0 {
+		req.TickSize = 1
+	}
 	if req.TickSize == 0 || math.MaxUint16 <= req.TickSize {
 		return nil, errors.New("tick size out of range")
 	}
-	e1.internalC <- func(in *internal) {
-		in.settings_change(newSettings)
+	doneC := ctx.Done()
+	errorC := make(chan error, 1)
+	var err error
+	select {
+	case <-doneC:
+		err = errors.New("canceled")
+	case e1.internalC <- func(in *internal) {
+
+		old := in.periodSettings
+		in.periodSettings = newSettings
+		err2 := in.config_save()
+		errorC <- err2
+		if err2 != nil {
+			in.periodSettings = old
+		} else {
+			in.settings_change()
+		}
+	}:
+	}
+	if err != nil {
+		return nil, err
+	}
+	select {
+	case <-doneC:
+		err = errors.New("canceled")
+	case err = <-errorC:
+	}
+	if err != nil {
+		return nil, err
 	}
 	return newSettings, nil
 }
 
-func (in *internal) settings_change(newSettings *pba.PeriodSettings) {
-	in.periodSettings = newSettings
+func (in *internal) settings_change() {
 	in.calculate_next_attempt_to_add_period(true)
 }
 

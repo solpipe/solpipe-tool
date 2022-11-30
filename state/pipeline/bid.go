@@ -20,7 +20,8 @@ type bidInfo struct {
 	bidders         map[string]*ll.Node[*BidStatus] // map user_id ->bid
 	allocationTotal uint64
 	lastPeriodStart uint64
-	list            ll.Generic[*BidStatus]
+	list            *ll.Generic[*BidStatus]
+	//lookupIndex     *radix.Tree[*ll.Node[*BidStatus]]
 }
 
 func (in *internal) init_bid_status() {
@@ -28,8 +29,10 @@ func (in *internal) init_bid_status() {
 	in.bidInfo.bidders = make(map[string]*ll.Node[*BidStatus])
 	in.bidInfo.allocationTotal = 0
 	in.bidInfo.lastPeriodStart = 0
+	in.bidInfo.list = ll.CreateGeneric[*BidStatus]()
 }
 
+// TODO: find some better algorithm for inserting/updating bids
 func (in *internal) on_bid_bucket_update(oldbids *cba.BidList, newbids *cba.BidList) {
 	if oldbids != nil {
 		if oldbids.LastPeriodStart == newbids.LastPeriodStart || !newbids.AllocationIsFinal {
@@ -64,47 +67,7 @@ func (in *internal) on_bid_bucket_update(oldbids *cba.BidList, newbids *cba.BidL
 					AllotedTps:      allocation * pipelineTps,
 					LastPeriodStart: newbids.LastPeriodStart,
 				}
-				var err error
-				node = bi.list.InsertSorted(bs, func(before, after *ll.Node[*BidStatus], newItem *BidStatus) bool {
-					var c int
-					var d int
-					if before == nil && after != nil {
-						c = ll.ComparePublicKey(newItem.Bid.User, after.Value().Bid.User)
-						if c < 0 {
-							return true
-						} else if c == 0 {
-							err = errors.New("duplicate")
-							return false
-						} else {
-							return false
-						}
-					} else if before != nil && after == nil {
-						c = ll.ComparePublicKey(newItem.Bid.User, before.Value().Bid.User)
-						if c < 0 {
-							return false
-						} else if c == 0 {
-							err = errors.New("duplicate")
-							return false
-						} else {
-							return true
-						}
-					} else {
-						c = ll.ComparePublicKey(newItem.Bid.User, before.Value().Bid.User)
-						d = ll.ComparePublicKey(newItem.Bid.User, after.Value().Bid.User)
-						if 0 < c && d < 0 {
-							return true
-						} else if c == 0 || d == 0 {
-							err = errors.New("duplicate")
-							return false
-						} else {
-							return false
-						}
-					}
-				})
-				if err != nil {
-					in.errorC <- err
-					return
-				}
+				node = bi.list.Append(bs)
 				if node == nil {
 					in.errorC <- errors.New("failed to insert node")
 					return
@@ -114,15 +77,14 @@ func (in *internal) on_bid_bucket_update(oldbids *cba.BidList, newbids *cba.BidL
 			} else {
 				bs := node.Value()
 				oldAllotedTps := bs.AllotedTps
+				bs.LastPeriodStart = newbids.LastPeriodStart
 				bs.Bid = *bid
 				bs.Allocation = float64(bid.BandwidthAllocation) / float64(bi.allocationTotal)
 				bs.AllotedTps = bs.Allocation * pipelineTps
 				if oldAllotedTps != bs.AllotedTps {
 					in.bidStatusHome.Broadcast(*bs)
 				}
-
 			}
-
 		}
 	}
 	// zero out all bidders that are not in the latest bid list
@@ -130,6 +92,7 @@ func (in *internal) on_bid_bucket_update(oldbids *cba.BidList, newbids *cba.BidL
 		if x.LastPeriodStart != newbids.LastPeriodStart {
 			x.AllotedTps = 0
 			x.Allocation = 0
+			x.LastPeriodStart = newbids.LastPeriodStart
 			in.bidStatusHome.Broadcast(*x)
 		}
 		return nil
@@ -164,6 +127,64 @@ type BidStatus struct {
 	Allocation      float64
 	AllotedTps      float64
 	LastPeriodStart uint64
+}
+
+func (e1 Pipeline) AllBidStatus(user sgo.PublicKey) (list []BidStatus, err error) {
+	err = e1.ctx.Err()
+	if err != nil {
+		return
+	}
+	doneC := e1.ctx.Done()
+	countC := make(chan uint32)
+	ansC := make(chan BidStatus, 10)
+	errorC := make(chan error, 1)
+
+	select {
+	case <-doneC:
+		err = errors.New("canceled")
+	case e1.internalC <- func(in *internal) {
+		in.all_bid_status(countC, ansC, errorC)
+	}:
+	}
+
+	select {
+	case <-doneC:
+		err = errors.New("canceled")
+	case err = <-errorC:
+	case count := <-countC:
+		list = make([]BidStatus, count)
+	}
+	if err != nil {
+		return
+	}
+out:
+	for i := 0; i < len(list); i++ {
+		select {
+		case <-doneC:
+			err = errors.New("canceled")
+			break out
+		case err = <-errorC:
+			break out
+		case list[i] = <-ansC:
+		}
+	}
+
+	return
+}
+
+func (in *internal) all_bid_status(countC chan<- uint32, ansC chan<- BidStatus, errorC chan<- error) {
+	doneC := in.ctx.Done()
+	countC <- in.bidInfo.list.Size
+	errorC <- in.bidInfo.list.Iterate(func(x *BidStatus, index uint32, deleteNode func()) error {
+		var err2 error
+		select {
+		case <-doneC:
+			err2 = errors.New("canceled")
+		case ansC <- *x:
+		}
+		return err2
+	})
+
 }
 
 // Get the TPS alloted to each bidder

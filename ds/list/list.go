@@ -1,6 +1,11 @@
 package list
 
-import sgo "github.com/SolmateDev/solana-go"
+import (
+	"errors"
+
+	sgo "github.com/SolmateDev/solana-go"
+	"github.com/solpipe/solpipe-tool/ds/radix"
+)
 
 type Generic[T any] struct {
 	Size uint32
@@ -225,4 +230,18 @@ func (n *Node[T]) Value() T {
 
 func (n *Node[T]) ChangeValue(v T) {
 	n.value = v
+}
+
+// Create a radix index to do quick inserts and look-ups.
+func (g *Generic[T]) RadixIndex(getKey func(T) string) (tree *radix.Tree[*Node[T]], err error) {
+	tree = radix.New[*Node[T]]()
+	var result bool
+	for node := g.HeadNode(); node != nil; node = node.Next() {
+		_, result = tree.Insert(getKey(node.Value()), node)
+		if !result {
+			err = errors.New("insert failed")
+			return
+		}
+	}
+	return
 }

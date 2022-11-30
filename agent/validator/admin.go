@@ -144,6 +144,10 @@ func (in *internal) pipeline_set(pipeline pipe.Pipeline) error {
 	)
 	in.settings.PipelineId = pipeline.Id.String()
 
+	err = in.config_save()
+	if err != nil {
+		return err
+	}
 	// set pipeline
 
 	return nil

@@ -71,7 +71,8 @@ solpipe --verbose  \
    --clear_listen=127.0.0.1:50051 \
    --admin_url="unix:///tmp/pipeline.socket" \
   $(solana-keygen pubkey ./localconfig/single/pipeline.json) \
-  ./localconfig/single/pipeline-admin.json
+  ./localconfig/single/pipeline-admin.json \
+  ./localconfig/single/pipeline-config.json
 ```
 * make sure `/tmp/pipeline.socket` does not exist prior to running this command
 
@@ -141,7 +142,8 @@ solpipe --verbose  \
    --clear_listen=127.0.0.1:50052 \
    --admin_url="tcp://127.0.0.1:30052" \
    $(solana-keygen pubkey ./localconfig/single/vote.json) \
-  ./localconfig/single/validator-admin.json
+  ./localconfig/single/validator-admin.json \
+  ./localconfig/single/validator-config.json
 ```
 
 

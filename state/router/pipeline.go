@@ -46,7 +46,7 @@ func (in *internal) on_pipeline(obj sub.PipelineGroup, slotHome slot.SlotHome) e
 
 	pipeline, mainPresent := in.l_pipeline.byId[id.String()]
 	if !mainPresent {
-		pipeline, err = pipe.CreatePipeline(in.ctx, id, &data, in.rpc, slotHome)
+		pipeline, err = pipe.CreatePipeline(in.ctx, id, &data, in.rpc, slotHome, in.network)
 		if err != nil {
 			return err
 		}

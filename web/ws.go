@@ -44,6 +44,7 @@ const (
 	TYPE_PIPELINE        string = "pipeline"
 	TYPE_PERIOD          string = "period"
 	TYPE_BID             string = "bid"
+	TYPE_BID_STATUS      string = "bid_status"
 	TYPE_VALIDATOR       string = "validator"
 	TYPE_VALIDATOR_STAKE string = "validator_stake"
 	TYPE_PAYOUT          string = "payout"
@@ -215,6 +216,11 @@ out:
 			}
 		case x := <-pipeIn.periodC:
 			err = writeConn(conn, TYPE_PERIOD, &x)
+			if err != nil {
+				break out
+			}
+		case x := <-pipeIn.bidStatusC:
+			err = writeConn(conn, TYPE_BID_STATUS, &x)
 			if err != nil {
 				break out
 			}

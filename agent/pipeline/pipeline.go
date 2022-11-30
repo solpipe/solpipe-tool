@@ -134,6 +134,7 @@ func Create(
 		*config.Pipeline,
 		args.Admin(),
 		args.Program.Settings,
+		args.ConfigFilePath,
 	)
 	if err != nil {
 		cancel()

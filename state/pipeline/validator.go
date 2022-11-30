@@ -100,7 +100,7 @@ out:
 
 func (in *internal) stake_share() float64 {
 	x := big.NewInt(0)
-	if in.totalStake.Cmp(x) == 0 {
+	if in.totalStake.Cmp(x) == 0 || in.activatedStake.Cmp(x) == 0 {
 		return 0
 	} else {
 		x.DivMod(in.totalStake, in.activatedStake, in.activatedStake)

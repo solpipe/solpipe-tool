@@ -2,8 +2,13 @@ package validator
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
+	"os"
 
+	sgorpc "github.com/SolmateDev/solana-go/rpc"
+	sgows "github.com/SolmateDev/solana-go/rpc/ws"
+	log "github.com/sirupsen/logrus"
 	pba "github.com/solpipe/solpipe-tool/proto/admin"
 	rly "github.com/solpipe/solpipe-tool/proxy/relay"
 	"github.com/solpipe/solpipe-tool/script"
@@ -11,9 +16,6 @@ import (
 	pipe "github.com/solpipe/solpipe-tool/state/pipeline"
 	rtr "github.com/solpipe/solpipe-tool/state/router"
 	val "github.com/solpipe/solpipe-tool/state/validator"
-	sgorpc "github.com/SolmateDev/solana-go/rpc"
-	sgows "github.com/SolmateDev/solana-go/rpc/ws"
-	log "github.com/sirupsen/logrus"
 )
 
 type internal struct {
@@ -21,6 +23,7 @@ type internal struct {
 	errorC              chan<- error
 	closeSignalCList    []chan<- error
 	config              rly.Configuration
+	configFilePath      string
 	rpc                 *sgorpc.Client
 	ws                  *sgows.Client
 	script              *script.Script
@@ -46,6 +49,7 @@ func loopInternal(
 	script *script.Script,
 	router rtr.Router,
 	validator val.Validator,
+	configFilePath string,
 ) {
 	defer cancel()
 	var err error
@@ -55,6 +59,7 @@ func loopInternal(
 	in.ctx = ctx
 	in.errorC = errorC
 	in.closeSignalCList = make([]chan<- error, 0)
+	in.configFilePath = configFilePath
 	in.config = config
 	in.rpc = rpcClient
 	in.ws = wsClient
@@ -67,17 +72,23 @@ func loopInternal(
 	in.settings = &pba.ValidatorSettings{}
 	in.hasPipeline = false
 
+	if in.config_exists() {
+		err = in.config_load()
+		if err != nil {
+			in.errorC <- err
+		}
+	}
 out:
 	for {
 		select {
+		case err = <-errorC:
+			break out
 		case err = <-serverErrorC:
 			break out
 		case err = <-slotSub.ErrorC:
 			break out
 		case in.slot = <-slotSub.StreamC:
 		case <-doneC:
-			break out
-		case err = <-errorC:
 			break out
 		case req := <-internalC:
 			req(in)
@@ -93,6 +104,46 @@ func (in *internal) finish(err error) {
 	for i := 0; i < len(in.closeSignalCList); i++ {
 		in.closeSignalCList[i] <- err
 	}
+}
+
+func (in *internal) config_exists() bool {
+	log.Debugf("checking config file=%s", in.configFilePath)
+	if _, err := os.Stat(in.configFilePath); err == nil {
+		return true
+	} else {
+		return false
+	}
+}
+
+func (in *internal) config_load() error {
+	log.Debugf("loading configuration file from %s", in.configFilePath)
+	f, err := os.Open(in.configFilePath)
+	if err != nil {
+		return err
+	}
+	in.settings = new(pba.ValidatorSettings)
+	err = json.NewDecoder(f).Decode(in.settings)
+	if err != nil {
+		return err
+	}
+
+	return nil
+}
+
+func (in *internal) config_save() error {
+	log.Debugf("saving configuration file to %s", in.configFilePath)
+	f, err := os.Open(in.configFilePath)
+	if err != nil {
+		f, err = os.Create(in.configFilePath)
+		if err != nil {
+			return err
+		}
+	}
+	err = json.NewEncoder(f).Encode(in.settings)
+	if err != nil {
+		return err
+	}
+	return nil
 }
 
 func (a adminExternal) send_cb(ctx context.Context, cb func(in *internal)) error {

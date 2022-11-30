@@ -99,6 +99,7 @@ func TestSetup(t *testing.T) {
 			relayConfig,
 			router,
 			validator,
+			"/tmp/validator-config.json", // TODO: change this
 		)
 		if err != nil {
 			t.Fatal(err)

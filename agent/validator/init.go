@@ -19,6 +19,7 @@ type InitializationArg struct {
 	Stake          sgo.PublicKey
 	AdminListenUrl string
 	RelayConfig    relay.Configuration
+	ConfigFilePath string
 }
 
 const VALIDATOR_MEMBER_SIZE = 1500
@@ -97,6 +98,7 @@ func Initialize(
 		router,
 		args.Vote.PublicKey(),
 		timeout,
+		args.ConfigFilePath,
 	)
 
 	err = s1.FinishTx(true)

@@ -129,7 +129,7 @@ func (e1 *Script) bidListSize(bidSpace uint16, residualSpace uint16) (uint64, er
 	}
 	size += util.STRUCT_SIZE_BID_LIST_HEADER + uint64(bidSpace)*util.STRUCT_BID_SINGLE
 
-	return util.STRUCT_SIZE_BID_LIST_HEADER, nil
+	return size, nil
 }
 
 func (e1 *Script) residualSize(residualSpace uint16) (uint64, error) {

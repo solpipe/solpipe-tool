@@ -52,6 +52,7 @@ func CreateFromListener(
 	router rtr.Router,
 	vote sgo.PublicKey,
 	timeout time.Duration,
+	configFilePath string,
 ) (l ListenResult) {
 	ctxShort, cancelShort := context.WithTimeout(ctx, timeout)
 
@@ -87,6 +88,7 @@ func CreateFromListener(
 		rpcClient,
 		wsClient,
 		router,
+		configFilePath,
 	)
 
 	return
@@ -103,6 +105,7 @@ func loopListener(
 	rpcClient *sgorpc.Client,
 	wsClient *sgows.Client,
 	router rtr.Router,
+	configFilePath string,
 ) {
 	defer cancelShort()
 	defer sh.Unsubscribe()
@@ -121,7 +124,7 @@ func loopListener(
 		errorC <- err
 		return
 	}
-	a, err := Create(ctx, config, router, v)
+	a, err := Create(ctx, config, router, v, configFilePath)
 	errorC <- err
 	if err != nil {
 		return
@@ -135,6 +138,7 @@ func Create(
 	config rly.Configuration,
 	router rtr.Router,
 	validator val.Validator,
+	configFilePath string,
 ) (agent Agent, err error) {
 	var data cba.ValidatorManager
 	data, err = validator.Data()
@@ -263,6 +267,7 @@ func Create(
 		script,
 		router,
 		validator,
+		configFilePath,
 	)
 	agent = Agent{
 		ctx:        ctxC,

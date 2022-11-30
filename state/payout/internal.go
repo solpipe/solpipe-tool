@@ -4,11 +4,11 @@ import (
 	"context"
 	"errors"
 
+	log "github.com/sirupsen/logrus"
 	cba "github.com/solpipe/cba"
 	sub2 "github.com/solpipe/solpipe-tool/ds/sub"
 	rpt "github.com/solpipe/solpipe-tool/state/receipt"
 	"github.com/solpipe/solpipe-tool/state/sub"
-	log "github.com/sirupsen/logrus"
 )
 
 type internal struct {

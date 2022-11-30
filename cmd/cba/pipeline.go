@@ -257,6 +257,7 @@ type PipelineAgent struct {
 	ProgramIdCba     sgo.PublicKey `name:"program_id_cba" help:"Specify the program id for the CBA program"`
 	PipelineId       string        `arg name:"id" help:"the Pipeline ID"`
 	Admin            string        `arg name:"admin" help:"the Pipeline admin"`
+	ConfigFilePath   string        `arg name:"configuration" help:"file path for the configuration file"`
 }
 
 func (r *PipelineAgent) Run(kongCtx *CLIContext) error {
@@ -337,6 +338,7 @@ func (r *PipelineAgent) Run(kongCtx *CLIContext) error {
 					PayoutShare: payoutShare,
 				},
 			},
+			ConfigFilePath: r.ConfigFilePath,
 		},
 		router,
 		pipeline,

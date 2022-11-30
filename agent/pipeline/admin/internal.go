@@ -2,6 +2,7 @@ package admin
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"os"
 
@@ -27,6 +28,7 @@ type internal struct {
 	errorC                          chan<- error
 	deletePayoutC                   chan<- sgo.PublicKey
 	closeSignalCList                []chan<- error
+	configFilePath                  string
 	rpc                             *sgorpc.Client
 	ws                              *sgows.Client
 	rateSettings                    *pba.RateSettings
@@ -43,6 +45,11 @@ type internal struct {
 	admin                           sgo.PrivateKey
 	homeLog                         *sub.SubHome[*pba.LogLine]
 	//lastAddPeriod        uint64
+}
+
+type SettingsForFile struct {
+	RateSettings   *pba.RateSettings   `json:"rate"`
+	PeriodSettings *pba.PeriodSettings `json:"period"`
 }
 
 type addPeriodResult struct {
@@ -89,6 +96,7 @@ func loopInternal(
 	homeLog *sub.SubHome[*pba.LogLine],
 	pr *list.Generic[cba.PeriodWithPayout],
 	initialSettings *pipe.PipelineSettings,
+	configFilePath string,
 ) {
 	var err error
 	doneC := ctx.Done()
@@ -99,6 +107,7 @@ func loopInternal(
 	in.ctx = ctx
 	in.errorC = errorC
 	in.deletePayoutC = deletePayoutC
+	in.configFilePath = configFilePath
 	in.rpc = rpcClient
 	in.ws = wsClient
 	in.closeSignalCList = make([]chan<- error, 0)
@@ -130,6 +139,24 @@ func loopInternal(
 	go loopPreloadPayout(in.ctx, in.pipeline, in.errorC, preaddPayoutC)
 
 	failedAttempts := 0
+
+	log.Debug("loading config - 1")
+	if in.config_exists() {
+		log.Debug("loading config - 2")
+		err = in.config_load()
+		if err != nil {
+			log.Debug("loading config - 3")
+			in.errorC <- err
+		}
+	} else {
+		log.Debug("loading config - 4")
+		err = in.config_save()
+		if err != nil {
+			log.Debug("loading config - 5")
+			in.errorC <- err
+		}
+	}
+	log.Debug("loading config - 6")
 out:
 	for {
 		select {
@@ -277,4 +304,49 @@ func (in *internal) finish(err error) {
 	for i := 0; i < len(in.closeSignalCList); i++ {
 		in.closeSignalCList[i] <- err
 	}
+}
+
+func (in *internal) config_exists() bool {
+	log.Debugf("checking config file=%s", in.configFilePath)
+	if _, err := os.Stat(in.configFilePath); err == nil {
+		return true
+	} else {
+		return false
+	}
+}
+
+func (in *internal) config_load() error {
+	log.Debugf("loading configuration file from %s", in.configFilePath)
+	f, err := os.Open(in.configFilePath)
+	if err != nil {
+		return err
+	}
+	c := new(SettingsForFile)
+	err = json.NewDecoder(f).Decode(c)
+	if err != nil {
+		return err
+	}
+
+	in.periodSettings = c.PeriodSettings
+	in.rateSettings = c.RateSettings
+	return nil
+}
+
+func (in *internal) config_save() error {
+	log.Debugf("saving configuration file to %s", in.configFilePath)
+	f, err := os.Open(in.configFilePath)
+	if err != nil {
+		f, err = os.Create(in.configFilePath)
+		if err != nil {
+			return err
+		}
+	}
+	c := new(SettingsForFile)
+	c.PeriodSettings = in.periodSettings
+	c.RateSettings = in.rateSettings
+	err = json.NewEncoder(f).Encode(c)
+	if err != nil {
+		return err
+	}
+	return nil
 }

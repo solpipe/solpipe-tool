@@ -102,6 +102,7 @@ type ValidatorAgent struct {
 	AdminListenUrl string `option name:"admin_url" help:"The url on which the admin grpc server listens."`
 	VoteKey        string `arg name:"vote" help:"The vote account for the validator."`
 	AdminKey       string `arg name:"admin" help:"The admin key used to administrate the validator."`
+	ConfigFilePath string `arg name:"configuration" help:"The file path to the configuration."`
 }
 
 const DEFAULT_VALIDATOR_ADMIN_SOCKET = "unix:///tmp/.validator.socket"
@@ -177,6 +178,7 @@ func (r *ValidatorAgent) Run(kongCtx *CLIContext) error {
 		relayConfig,
 		router,
 		validator,
+		r.ConfigFilePath,
 	)
 	if err != nil {
 		return err
