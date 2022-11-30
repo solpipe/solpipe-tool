@@ -69,11 +69,11 @@ func loopListenPeriod(
 		return
 	}
 
-	periodSub := pi.pipeline.OnPeriod()
-	defer periodSub.Unsubscribe()
-	var list []pipe.PayoutWithData
+	payoutSub := pi.pipeline.OnPayout()
+	defer payoutSub.Unsubscribe()
+	pwdStreamC := make(chan pipe.PayoutWithData)
+	go lookupPayoutWithData(pi.ctx, pi.pipeline, pi.errorC, pwdStreamC)
 
-	var present bool
 out:
 	for {
 		select {
@@ -82,34 +82,42 @@ out:
 		case payoutId := <-setValidatorOnPayoutC:
 			// run the SetValidator instruction to cr
 			pi.validator_set(payoutId)
-		case err = <-periodSub.ErrorC:
+		case err = <-payoutSub.ErrorC:
 			break out
-		case <-periodSub.StreamC:
-			list, err = pi.pipeline.PayoutWithData()
-			if err != nil {
-				break out
-			}
-			for _, item := range list {
-				_, present = pi.payoutMap[item.Data.Pipeline.String()]
-				if !present {
-					pi.payoutMap[item.Data.Pipeline.String()] = item
-					go loopReceipt(
-						pi.ctx,
-						pi.errorC,
-						pi.setValidatorC,
-						pi.slotHome,
-						item.Data.Period,
-						item,
-						pi.validator.Id,
-					)
-				}
-			}
+		case pwd := <-payoutSub.StreamC:
+			pi.on_payout(pwd)
+		case pwd := <-pwdStreamC:
+			pi.on_payout(pwd)
 		}
 	}
 
 	if err != nil {
 		log.Debug(err)
 		errorC <- err
+	}
+}
+
+func lookupPayoutWithData(
+	ctx context.Context,
+	p pipe.Pipeline,
+	errorC chan<- error,
+	pwdStreamC chan<- pipe.PayoutWithData,
+) {
+	doneC := ctx.Done()
+	list, err := p.PayoutWithData()
+	if err != nil {
+		select {
+		case <-doneC:
+		case errorC <- err:
+		}
+		return
+	}
+	for _, pwd := range list {
+		select {
+		case <-doneC:
+			return
+		case pwdStreamC <- pwd:
+		}
 	}
 }
 
@@ -134,4 +142,20 @@ func (pi *listenPeriodInternal) validator_set(payoutId sgo.PublicKey) error {
 		return err
 	}
 	return nil
+}
+
+func (pi *listenPeriodInternal) on_payout(pwd pipe.PayoutWithData) {
+	_, present := pi.payoutMap[pwd.Id.String()]
+	if !present {
+		pi.payoutMap[pwd.Id.String()] = pwd
+		go loopReceipt(
+			pi.ctx,
+			pi.errorC,
+			pi.setValidatorC,
+			pi.slotHome,
+			pwd.Data.Period,
+			pwd,
+			pi.validator.Id,
+		)
+	}
 }
