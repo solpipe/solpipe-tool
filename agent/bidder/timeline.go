@@ -87,6 +87,7 @@ func (in *internal) timeline_period_new(
 	sp *singlePayout,
 ) {
 
+	in.on_brain_tick()
 }
 
 func (in *internal) timeline_append(
@@ -156,9 +157,11 @@ gotnode:
 // set which periods are being bid on now
 func (in *internal) timeline_bid_set() {
 
+	in.on_brain_tick()
 }
 
 // node has been removed from the time line
 func (in *internal) timeline_remove(node *ll.Node[*timePoint]) {
 
+	in.on_brain_tick()
 }

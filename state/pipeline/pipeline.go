@@ -35,12 +35,11 @@ type Pipeline struct {
 	slotSub               slot.SlotHome
 	updatePipelineC       chan<- dssub.ResponseChannel[cba.Pipeline]
 	updatePeriodRingC     chan<- dssub.ResponseChannel[cba.PeriodRing]
-	updateBidListC        chan<- dssub.ResponseChannel[cba.BidList]
+	updateRefundC         chan<- dssub.ResponseChannel[cba.Refunds]
 	updatePayoutC         chan<- dssub.ResponseChannel[PayoutWithData]
 	updateValidatorStakeC chan<- validatorStakeUpdate
 	updateValidatorC      chan<- dssub.ResponseChannel[ValidatorUpdate]
 	updateStakeStatusC    chan<- dssub.ResponseChannel[sub.StakeUpdate]
-	updateBidStatusC      chan<- dssub.ResponseChannel[BidStatus]
 }
 
 func CreatePipeline(
@@ -57,13 +56,12 @@ func CreatePipeline(
 	pipelineHome := dssub.CreateSubHome[cba.Pipeline]()
 	payoutHome := dssub.CreateSubHome[PayoutWithData]()
 	periodHome := dssub.CreateSubHome[cba.PeriodRing]()
-	bidHome := dssub.CreateSubHome[cba.BidList]()
+	refundHome := dssub.CreateSubHome[cba.Refunds]()
 	validatorHome := dssub.CreateSubHome[ValidatorUpdate]()
 	stakeStatusHome := dssub.CreateSubHome[sub.StakeUpdate]()
-	bidStatusHome := dssub.CreateSubHome[BidStatus]()
 
 	pr := new(cba.PeriodRing)
-	bl := new(cba.BidList)
+	rf := new(cba.Refunds)
 
 	if data == nil {
 		err = rpcClient.GetAccountDataBorshInto(ctx, id, data)
@@ -71,35 +69,23 @@ func CreatePipeline(
 			return Pipeline{}, err
 		}
 	}
-	doneC := ctx.Done()
-	errorC := make(chan error, 2)
-	go func() {
-		errorC <- rpcClient.GetAccountDataBorshInto(ctx, data.Periods, pr)
-	}()
-	go func() {
-		errorC <- rpcClient.GetAccountDataBorshInto(ctx, data.Bids, bl)
-	}()
+	err = rpcClient.GetAccountDataBorshInto(ctx, data.Periods, pr)
+	if err != nil {
+		return Pipeline{}, err
+	}
 
-out:
-	for i := 0; i < 2; i++ {
-		select {
-		case <-doneC:
-			break out
-		case err = <-errorC:
-			if err != nil {
-				return Pipeline{}, err
-			}
-		}
+	err = rpcClient.GetAccountDataBorshInto(ctx, data.Refunds, rf)
+	if err != nil {
+		return Pipeline{}, err
 	}
 
 	updatePeriodRingC := periodHome.ReqC
-	updateBidListC := bidHome.ReqC
+	updateRefundC := refundHome.ReqC
 	updatePayoutC := payoutHome.ReqC
 	updatePipelineC := pipelineHome.ReqC
 	updateValidatorStakeC := make(chan validatorStakeUpdate, 10)
 	updateValidatorC := validatorHome.ReqC
 	updateStakeStatusC := stakeStatusHome.ReqC
-	updateBidStatusC := bidStatusHome.ReqC
 	ctx2, cancel := context.WithCancel(ctx)
 	go loopInternal(
 		ctx2,
@@ -109,14 +95,13 @@ out:
 		id,
 		data,
 		pr,
-		bl,
+		rf,
 		pipelineHome,
 		periodHome,
-		bidHome,
+		refundHome,
 		payoutHome,
 		validatorHome,
 		stakeStatusHome,
-		bidStatusHome,
 		network,
 	)
 	return Pipeline{
@@ -128,11 +113,10 @@ out:
 		slotSub:            slotSub,
 		updatePipelineC:    updatePipelineC,
 		updatePeriodRingC:  updatePeriodRingC,
-		updateBidListC:     updateBidListC,
+		updateRefundC:      updateRefundC,
 		updatePayoutC:      updatePayoutC,
 		updateValidatorC:   updateValidatorC,
 		updateStakeStatusC: updateStakeStatusC,
-		updateBidStatusC:   updateBidStatusC,
 	}, nil
 }
 

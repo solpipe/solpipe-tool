@@ -3,11 +3,11 @@ package script
 import (
 	"errors"
 
+	sgo "github.com/SolmateDev/solana-go"
+	log "github.com/sirupsen/logrus"
 	cba "github.com/solpipe/cba"
 	ctr "github.com/solpipe/solpipe-tool/state/controller"
 	pipe "github.com/solpipe/solpipe-tool/state/pipeline"
-	sgo "github.com/SolmateDev/solana-go"
-	log "github.com/sirupsen/logrus"
 )
 
 // get the start=end_of_last_period from either pipeline.PeriodRing() or pipeline.OnPeriod()
@@ -18,6 +18,7 @@ func (e1 *Script) AppendPeriod(
 	start uint64,
 	length uint64,
 	withhold uint16,
+	bidSpace uint16,
 ) (payoutId sgo.PublicKey, err error) {
 	if e1.txBuilder == nil {
 		err = errors.New("no tx builder")
@@ -32,6 +33,12 @@ func (e1 *Script) AppendPeriod(
 	if err != nil {
 		return
 	}
+
+	bidListId, err := e1.CreateAccount(e1.bidListSize(bidSpace), cba.ProgramID, admin)
+	if err != nil {
+		return
+	}
+
 	payoutId = payout.PublicKey()
 	log.Debugf("controller=%s", controller.Id().String())
 	log.Debugf("payout=%s", payout.PublicKey())
@@ -43,6 +50,7 @@ func (e1 *Script) AppendPeriod(
 	b.SetControllerAccount(controller.Id())
 	b.SetEpochScheduleAccount(sgo.SysVarEpochSchedulePubkey)
 	b.SetPayoutAccount(payout.PublicKey())
+	b.SetBidsAccount(bidListId)
 	e1.AppendKey(payout)
 	b.SetPeriodsAccount(data.Periods)
 	b.SetPipelineAccount(pipeline.Id)
@@ -53,6 +61,7 @@ func (e1 *Script) AppendPeriod(
 	b.SetStart(start)
 	b.SetLength(length)
 	b.SetWithhold(withhold)
+	b.SetBidSpace(bidSpace)
 
 	e1.txBuilder.AddInstruction(b.Build())
 

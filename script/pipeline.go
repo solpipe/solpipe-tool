@@ -20,9 +20,8 @@ func (e1 *Script) AddPipeline(
 	allotment uint16,
 	decayRate state.Rate,
 	validatorPayoutShare state.Rate,
-	bidSpace uint16,
-	residualSpace uint16,
 	tickSize uint16,
+	refundSpace uint16,
 ) (pipelineId sgo.PrivateKey, err error) {
 
 	pipelineId, err = sgo.NewRandomPrivateKey()
@@ -38,9 +37,8 @@ func (e1 *Script) AddPipeline(
 		allotment,
 		decayRate,
 		validatorPayoutShare,
-		bidSpace,
-		residualSpace,
 		tickSize,
+		refundSpace,
 	)
 }
 
@@ -55,9 +53,8 @@ func (e1 *Script) AddPipelineDirect(
 	allotment uint16,
 	decayRate state.Rate,
 	validatorPayoutShare state.Rate,
-	bidSpace uint16,
-	residualSpace uint16,
 	tickSize uint16,
+	refundSpace uint16,
 ) (pipelineId sgo.PrivateKey, err error) {
 	if e1.txBuilder == nil {
 		err = errors.New("no tx builder")
@@ -76,15 +73,11 @@ func (e1 *Script) AddPipelineDirect(
 		return nil, err
 	}
 
-	bidListSize, err := e1.bidListSize(bidSpace, residualSpace)
-	if err != nil {
-		return nil, err
-	}
-	log.Infof("bid account size=%d", bidListSize)
-	bidListId, err := e1.CreateAccount(bidListSize, cba.ProgramID, adminKey)
+	refundsId, err := e1.CreateAccount(e1.refundSize(refundSpace), cba.ProgramID, adminKey)
 	if err != nil {
 		return
 	}
+
 	periodRingId, err := e1.CreateAccount(util.STRUCT_SIZE_PERIOD_RING, cba.ProgramID, adminKey)
 	if err != nil {
 		return
@@ -98,7 +91,7 @@ func (e1 *Script) AddPipelineDirect(
 	b.SetPipelineAccount(pipelineId.PublicKey())
 	e1.AppendKey(pipelineId)
 	b.SetPipelineVaultAccount(vaultId)
-	b.SetBidsAccount(bidListId)
+	b.SetRefundsAccount(refundsId)
 	b.SetPeriodsAccount(periodRingId)
 	b.SetAdminAccount(adminKey.PublicKey())
 	e1.AppendKey(adminKey)
@@ -114,30 +107,15 @@ func (e1 *Script) AddPipelineDirect(
 	b.SetValidatorPayoutShareNum(validatorPayoutShare.N)
 	b.SetValidatorPayoutShareDen(validatorPayoutShare.D)
 	b.SetTickSize(tickSize)
-	b.SetBidSpace(bidSpace)
-	b.SetResidualSpace(residualSpace)
+	b.SetRefundSpace(refundSpace)
 
 	e1.txBuilder.AddInstruction(b.Build())
 
 	return
 }
 
-func (e1 *Script) bidListSize(bidSpace uint16, residualSpace uint16) (uint64, error) {
-	size, err := e1.residualSize(residualSpace)
-	if err != nil {
-		return 0, err
-	}
-	size += util.STRUCT_SIZE_BID_LIST_HEADER + uint64(bidSpace)*util.STRUCT_BID_SINGLE
-
-	return size, nil
-}
-
-func (e1 *Script) residualSize(residualSpace uint16) (uint64, error) {
-	if residualSpace == 0 {
-		return 0, errors.New("residual space cannot be 0")
-	}
-
-	return util.STRUCT_RESIDUAL_SINGLE * uint64(residualSpace), nil
+func (e1 *Script) refundSize(refundSpace uint16) uint64 {
+	return util.STRUCT_SIZE_REFUND_HEADER + uint64(refundSpace)*util.STRUCT_SIZE_REFUND_CLAIM
 }
 
 func (e1 *Script) UpdatePipeline(

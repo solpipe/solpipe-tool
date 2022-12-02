@@ -6,9 +6,10 @@ const (
 	STRUCT_SIZE_PIPELINE        uint64 = 353
 	STRUCT_SIZE_PERIOD_RING     uint64 = 5000
 	STRUCT_SIZE_BID_LIST        uint64 = 1600000
-	STRUCT_SIZE_BID_LIST_HEADER uint64 = 1 + 40 + 8 + 8 + 8
-	STRUCT_BID_SINGLE           uint64 = 1 + 40 + 40 + 8 + 8
-	STRUCT_RESIDUAL_SINGLE      uint64 = 40 + 8
+	STRUCT_SIZE_BID_LIST_HEADER uint64 = 1 + 1 + 40 + 8 + 8 + 8
+	STRUCT_SIZE_REFUND_HEADER   uint64 = 40 + 8
+	STRUCT_SIZE_REFUND_CLAIM    uint64 = 40 + 8
+	STRUCT_BID_SINGLE           uint64 = 1 + 40 + 8 + 8
 )
 
 /*

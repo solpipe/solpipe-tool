@@ -7,6 +7,11 @@ import (
 	"os"
 	"time"
 
+	sgo "github.com/SolmateDev/solana-go"
+	sgotkn "github.com/SolmateDev/solana-go/programs/token"
+	sgorpc "github.com/SolmateDev/solana-go/rpc"
+	sgows "github.com/SolmateDev/solana-go/rpc/ws"
+	log "github.com/sirupsen/logrus"
 	cba "github.com/solpipe/cba"
 	dssub "github.com/solpipe/solpipe-tool/ds/sub"
 	"github.com/solpipe/solpipe-tool/proxy/relay"
@@ -15,11 +20,6 @@ import (
 	rtr "github.com/solpipe/solpipe-tool/state/router"
 	"github.com/solpipe/solpipe-tool/state/sub"
 	"github.com/solpipe/solpipe-tool/util"
-	sgo "github.com/SolmateDev/solana-go"
-	sgotkn "github.com/SolmateDev/solana-go/programs/token"
-	sgorpc "github.com/SolmateDev/solana-go/rpc"
-	sgows "github.com/SolmateDev/solana-go/rpc/ws"
-	log "github.com/sirupsen/logrus"
 )
 
 type internal struct {
@@ -311,7 +311,7 @@ func (in *internal) get_status(id sgo.PublicKey) (*pipelineStatus, error) {
 
 // upgrade last period crank (by start time)
 func (in *internal) on_bid(bs sub.BidSummary) {
-	status, err := in.get_status(bs.Pipeline)
+	status, err := in.get_status(bs.Payout)
 	if err != nil {
 		log.Debug(err)
 		return

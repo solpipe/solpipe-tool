@@ -22,8 +22,7 @@ type internal struct {
 	finishPayoutC     chan<- payoutFinish
 	id                sgo.PublicKey
 	data              *cba.Pipeline
-	bids              *cba.BidList
-	bidInfo           *bidInfo
+	refunds           *cba.Refunds
 	periods           *cba.PeriodRing
 	allottedTps       *big.Float
 	activatedStake    *big.Int
@@ -35,11 +34,10 @@ type internal struct {
 	payoutLinkedList  *ll.Generic[PayoutWithData]
 	pipelineHome      *dssub.SubHome[cba.Pipeline]
 	periodHome        *dssub.SubHome[cba.PeriodRing]
-	bidHome           *dssub.SubHome[cba.BidList]
+	refundHome        *dssub.SubHome[cba.Refunds]
 	payoutHome        *dssub.SubHome[PayoutWithData]
 	validatorHome     *dssub.SubHome[ValidatorUpdate]
 	stakeStatusHome   *dssub.SubHome[sub.StakeUpdate]
-	bidStatusHome     *dssub.SubHome[BidStatus]
 	validatorStakeSub map[string]*validatorStakeSub // map vote id -> stake sub
 }
 
@@ -66,14 +64,13 @@ func loopInternal(
 	id sgo.PublicKey,
 	data *cba.Pipeline,
 	pr *cba.PeriodRing,
-	bl *cba.BidList,
+	rf *cba.Refunds,
 	pipelineHome *dssub.SubHome[cba.Pipeline],
 	periodHome *dssub.SubHome[cba.PeriodRing],
-	bidHome *dssub.SubHome[cba.BidList],
+	refundHome *dssub.SubHome[cba.Refunds],
 	payoutHome *dssub.SubHome[PayoutWithData],
 	validatorHome *dssub.SubHome[ValidatorUpdate],
 	stakeStatusHome *dssub.SubHome[sub.StakeUpdate],
-	bidStatusHome *dssub.SubHome[BidStatus],
 	network ntk.Network,
 ) {
 	defer cancel()
@@ -100,16 +97,14 @@ func loopInternal(
 	in.periodHome = periodHome
 	defer periodHome.Close()
 	in.updatePayoutC = updatePayoutC
-	in.bidHome = bidHome
-	defer bidHome.Close()
+	in.refundHome = refundHome
+	defer refundHome.Close()
 	in.payoutHome = payoutHome
 	defer payoutHome.Close()
 	in.validatorHome = validatorHome
 	defer validatorHome.Close()
 	in.stakeStatusHome = stakeStatusHome
 	defer stakeStatusHome.Close()
-	in.bidStatusHome = bidStatusHome
-	defer bidStatusHome.Close()
 	netSub := network.OnNetworkStats()
 	defer netSub.Unsubscribe()
 
@@ -120,9 +115,8 @@ func loopInternal(
 		AverageTransactionsSizePerSecond: 0,
 	}
 
-	in.init_bid_status()
 	in.on_period(*pr)
-	in.on_bid(*bl)
+	in.on_refund(*rf)
 
 out:
 	for {
@@ -175,10 +169,6 @@ out:
 			in.periodHome.Receive(x)
 		case id := <-in.periodHome.DeleteC:
 			in.periodHome.Delete(id)
-		case x := <-in.bidHome.ReqC:
-			in.bidHome.Receive(x)
-		case id := <-in.bidHome.DeleteC:
-			in.bidHome.Delete(id)
 		case x := <-in.payoutHome.ReqC:
 			in.payoutHome.Receive(x)
 		case id := <-in.payoutHome.DeleteC:
@@ -193,10 +183,6 @@ out:
 			stakeStatusHome.Delete(id)
 		case r := <-stakeStatusHome.ReqC:
 			stakeStatusHome.Receive(r)
-		case id := <-bidStatusHome.DeleteC:
-			bidStatusHome.Delete(id)
-		case r := <-bidStatusHome.ReqC:
-			bidStatusHome.Receive(r)
 		case err = <-netSub.ErrorC:
 			break out
 		case ns := <-netSub.StreamC:

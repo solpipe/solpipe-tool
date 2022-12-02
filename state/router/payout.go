@@ -1,6 +1,7 @@
 package router
 
 import (
+	log "github.com/sirupsen/logrus"
 	cba "github.com/solpipe/cba"
 	pyt "github.com/solpipe/solpipe-tool/state/payout"
 	rpt "github.com/solpipe/solpipe-tool/state/receipt"
@@ -15,6 +16,7 @@ type refPayout struct {
 type lookUpPayout struct {
 	byId                map[string]*refPayout
 	byPipeline          map[string]map[uint64]*refPayout  // pipeline id -> start -> payout
+	bidListWithNoPayout map[string]cba.BidList            // pipeline id  -> bidlist
 	receiptWithNoPayout map[string]map[string]rpt.Receipt // payout id -> receipt id -> receipt
 }
 
@@ -22,6 +24,7 @@ func createLookupPayout() *lookUpPayout {
 	return &lookUpPayout{
 		byId:                make(map[string]*refPayout),
 		byPipeline:          make(map[string]map[uint64]*refPayout),
+		bidListWithNoPayout: make(map[string]cba.BidList),
 		receiptWithNoPayout: make(map[string]map[string]rpt.Receipt),
 	}
 }
@@ -69,6 +72,16 @@ func (in *internal) on_payout(pwd sub.PayoutWithData) error {
 		p = ref.p
 	}
 
+	{
+		{
+			y, present := in.l_payout.bidListWithNoPayout[id.String()]
+			if present {
+				log.Debugf("fill bid pipeline=%s", id.String())
+				p.UpdateBidList(y)
+				delete(in.l_payout.bidListWithNoPayout, id.String())
+			}
+		}
+	}
 	{
 		x, present := in.l_payout.receiptWithNoPayout[id.String()]
 		if present {

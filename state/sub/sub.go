@@ -21,6 +21,7 @@ type SubscriptionProgramGroup struct {
 	ValidatorC  chan<- dssub.ResponseChannel[ValidatorGroup]
 
 	PipelineC      chan<- dssub.ResponseChannel[PipelineGroup]
+	RefundC        chan<- dssub.ResponseChannel[cba.Refunds]
 	BidListC       chan<- dssub.ResponseChannel[cba.BidList]
 	BidSummaryC    chan<- dssub.ResponseChannel[BidSummary]
 	PeriodRingC    chan<- dssub.ResponseChannel[cba.PeriodRing]
@@ -35,6 +36,7 @@ type internalSubscriptionProgramGroup struct {
 	validator    *dssub.SubHome[ValidatorGroup]
 	pipeline     *dssub.SubHome[PipelineGroup]
 	bidList      *dssub.SubHome[cba.BidList]
+	refund       *dssub.SubHome[cba.Refunds]
 	bidSummary   *dssub.SubHome[BidSummary]
 	periodRing   *dssub.SubHome[cba.PeriodRing]
 	stakeManager *dssub.SubHome[StakeGroup]
@@ -47,8 +49,9 @@ type ProgramAllResult struct {
 	Controller   *cba.Controller
 	Validator    *ll.Generic[*ValidatorGroup]
 	Pipeline     *ll.Generic[*PipelineGroup]
+	Refund       map[string]*cba.Refunds
 	PeriodRing   map[string]*PeriodGroup
-	BidList      map[string]*BidGroup
+	BidList      map[string]*BidGroup // map payout id -> BidList
 	Stake        *ll.Generic[*StakeGroup]
 	StakeReceipt *ll.Generic[*StakerReceiptGroup] // new from refactored code
 	Receipt      *ll.Generic[*ReceiptGroup]
@@ -59,6 +62,7 @@ func createProgramAllResult() *ProgramAllResult {
 	ans := new(ProgramAllResult)
 	ans.Validator = ll.CreateGeneric[*ValidatorGroup]()
 	ans.Pipeline = ll.CreateGeneric[*PipelineGroup]()
+	ans.Refund = make(map[string]*cba.Refunds)
 	ans.PeriodRing = make(map[string]*PeriodGroup)
 	ans.BidList = make(map[string]*BidGroup)
 	ans.Stake = ll.CreateGeneric[*StakeGroup]()
@@ -137,11 +141,17 @@ func FetchProgramAll(ctx context.Context, rpcClient *sgorpc.Client, version vrs.
 							IsOpen: true,
 						}
 					}
+				case cba.RefundsDiscriminator:
+					x := new(cba.Refunds)
+					err = c.Decode(x)
+					if err == nil {
+						ans.Refund[x.Pipeline.String()] = x
+					}
 				case cba.BidListDiscriminator:
 					x := new(cba.BidList)
 					err = c.Decode(x)
 					if err == nil {
-						ans.BidList[x.Pipeline.String()] = &BidGroup{
+						ans.BidList[x.Payout.String()] = &BidGroup{
 							Id:     r[i].Pubkey,
 							Data:   *x,
 							IsOpen: true,
@@ -391,9 +401,8 @@ out:
 						break out
 					}
 					in.bidSummary.Broadcast(BidSummary{
-						LastPeriodStart: y.LastPeriodStart,
-						Pipeline:        y.Pipeline,
-						TotalDeposits:   y.TotalDeposits,
+						Payout:        y.Payout,
+						TotalDeposits: y.TotalDeposits,
 					})
 					in.bidList.Broadcast(*y)
 				case D_periodring:

@@ -2,11 +2,10 @@ package payout
 
 import (
 	"context"
-	"errors"
 
 	log "github.com/sirupsen/logrus"
 	cba "github.com/solpipe/cba"
-	sub2 "github.com/solpipe/solpipe-tool/ds/sub"
+	dssub "github.com/solpipe/solpipe-tool/ds/sub"
 	rpt "github.com/solpipe/solpipe-tool/state/receipt"
 	"github.com/solpipe/solpipe-tool/state/sub"
 )
@@ -16,9 +15,11 @@ type internal struct {
 	errorC           chan<- error
 	closeSignalCList []chan<- error
 	data             *cba.Payout
+	bi               *bidInfo
 	receipts         map[string]rpt.ReceiptWithData
-	payoutHome       *sub2.SubHome[cba.Payout]
-	receiptHome      *sub2.SubHome[rpt.ReceiptWithData]
+	payoutHome       *dssub.SubHome[cba.Payout]
+	receiptHome      *dssub.SubHome[rpt.ReceiptWithData]
+	bidStatusHome    *dssub.SubHome[BidStatus]
 }
 
 func loopInternal(
@@ -26,8 +27,9 @@ func loopInternal(
 	internalC <-chan func(*internal),
 	data *cba.Payout,
 	dataC <-chan sub.PayoutWithData,
-	payoutHome *sub2.SubHome[cba.Payout],
-	receiptHome *sub2.SubHome[rpt.ReceiptWithData],
+	payoutHome *dssub.SubHome[cba.Payout],
+	receiptHome *dssub.SubHome[rpt.ReceiptWithData],
+	bidStatusHome *dssub.SubHome[BidStatus],
 ) {
 	var err error
 	errorC := make(chan error, 1)
@@ -44,13 +46,19 @@ func loopInternal(
 
 	defer payoutHome.Close()
 	defer receiptHome.Close()
+	defer bidStatusHome.Close()
+
+	err = in.init()
+	if err != nil {
+		errorC <- err
+	}
 
 out:
 	for {
 		select {
-		case <-doneC:
-			break out
 		case err = <-errorC:
+			break out
+		case <-doneC:
 			break out
 		case req := <-internalC:
 			req(in)
@@ -64,48 +72,26 @@ out:
 			receiptHome.Delete(id)
 		case d := <-receiptHome.ReqC:
 			receiptHome.Receive(d)
+		case id := <-bidStatusHome.DeleteC:
+			bidStatusHome.Delete(id)
+		case d := <-bidStatusHome.ReqC:
+			bidStatusHome.Receive(d)
 		}
 	}
+	in.finish(err)
+}
+
+func (in *internal) init() error {
+	err := in.init_bid()
+	if err != nil {
+		return err
+	}
+	return nil
+}
+
+func (in *internal) finish(err error) {
 	log.Debug(err)
 	for i := 0; i < len(in.closeSignalCList); i++ {
 		in.closeSignalCList[i] <- err
 	}
-}
-
-// get all receipts
-func (e1 Payout) Receipt() ([]rpt.ReceiptWithData, error) {
-	doneC := e1.ctx.Done()
-	err := e1.ctx.Err()
-	if err != nil {
-		return nil, err
-	}
-	countC := make(chan int, 1)
-	ansC := make(chan rpt.ReceiptWithData, 1)
-	select {
-	case <-doneC:
-		err = errors.New("canceled")
-	case e1.internalC <- func(in *internal) {
-		countC <- len(in.receipts)
-		for _, r := range in.receipts {
-			ansC <- r
-		}
-	}:
-	}
-	if err != nil {
-		return nil, err
-	}
-	var n int
-	select {
-	case <-doneC:
-		err = errors.New("canceled")
-	case n = <-countC:
-	}
-	if err != nil {
-		return nil, err
-	}
-	ans := make([]rpt.ReceiptWithData, n)
-	for i := 0; i < n; i++ {
-		ans[i] = <-ansC
-	}
-	return ans, nil
 }

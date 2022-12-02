@@ -67,6 +67,7 @@ func CreateRouter(
 	pipelineG := dssub.SubscriptionRequest(subAll.PipelineC, func(pg sub.PipelineGroup) bool {
 		return true
 	})
+	refundG := dssub.SubscriptionRequest(subAll.RefundC, func(bl cba.Refunds) bool { return true })
 	bidListG := dssub.SubscriptionRequest(subAll.BidListC, func(bl cba.BidList) bool { return true })
 	periodRingG := dssub.SubscriptionRequest(subAll.PeriodRingC, func(pr cba.PeriodRing) bool { return true })
 	stakerManagerG := dssub.SubscriptionRequest(subAll.StakerManagerC, func(pr sub.StakeGroup) bool { return true })
@@ -90,6 +91,7 @@ func CreateRouter(
 		oaReq.reqClose,
 		validatorG,
 		pipelineG,
+		refundG,
 		bidListG,
 		periodRingG,
 		stakerManagerG,
@@ -514,11 +516,11 @@ func (e1 Router) AllPipeline() ([]pipe.Pipeline, error) {
 }
 
 func (in *internal) add_bid(list cba.BidList) error {
-	p, present := in.l_pipeline.byId[list.Pipeline.String()]
+	ref, present := in.l_payout.byId[list.Payout.String()]
 	if !present {
 		return errors.New("no pipeline")
 	}
-	p.UpdateBid(list)
+	ref.p.UpdateBidList(list)
 
 	return nil
 }

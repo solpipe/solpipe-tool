@@ -235,17 +235,3 @@ func (in *internal) on_period(ring cba.PeriodRing) {
 	in.periodHome.Broadcast(ring)
 	in.on_payout_find_current()
 }
-
-func (e1 Pipeline) UpdateBid(list cba.BidList) {
-	e1.internalC <- func(in *internal) {
-		in.on_bid(list)
-	}
-}
-
-func (in *internal) on_bid(list cba.BidList) {
-	oldbids := in.bids
-	newbids := &list
-	in.bids = newbids
-	in.bidHome.Broadcast(list)
-	in.on_bid_bucket_update(oldbids, newbids)
-}

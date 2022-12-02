@@ -27,16 +27,16 @@ type Pipeline struct {
 }
 
 type PipelineCreate struct {
-	Payer         string `name:"payer" short:"p" help:"the account paying SOL fees"`
-	PipelineKey   string `arg name:"pipeline" help:"the Pipeline ID private key"`
-	AdminKey      string `arg name:"admin" short:"a" help:"the account with administrative privileges"`
-	CrankFee      string `arg name:"crank" help:"set the fee that the controller earns from Validator revenue."`
-	DecayRate     string `arg name:"decay"  help:"set the fee that the controller earns from Validator revenue."`
-	PayoutShare   string `arg name:"payout"  help:"set the fee that the controller earns from Validator revenue."`
-	Allotment     uint16 `arg name:"allotment" help:"allotment"`
-	BidSpace      uint16 `arg name:"bid_space" help:"how many spaces will there be for bids (affects rent in SOL)"`
-	ResidualSpace uint16 `arg name:"residual_space" help:"how many spaces will there be for refunds (affects rent in SOL)"`
-	TickSize      uint16 `option name:"tick_size" help:"what is the tick size (deposit modulo tick_size must be zero)"`
+	Payer       string `name:"payer" short:"p" help:"the account paying SOL fees"`
+	PipelineKey string `arg name:"pipeline" help:"the Pipeline ID private key"`
+	AdminKey    string `arg name:"admin" short:"a" help:"the account with administrative privileges"`
+	CrankFee    string `arg name:"crank" help:"set the fee that the controller earns from Validator revenue."`
+	DecayRate   string `arg name:"decay"  help:"set the fee that the controller earns from Validator revenue."`
+	PayoutShare string `arg name:"payout"  help:"set the fee that the controller earns from Validator revenue."`
+	Allotment   uint16 `arg name:"allotment" help:"allotment"`
+	BidSpace    uint16 `arg name:"bid_space" help:"how many spaces will there be for bids (affects rent in SOL)"`
+	RefundSpace uint16 `arg name:"residual_space" help:"how many spaces will there be for refunds (affects rent in SOL)"`
+	TickSize    uint16 `option name:"tick_size" help:"what is the tick size (deposit modulo tick_size must be zero)"`
 }
 
 func (r *PipelineCreate) Run(kongCtx *CLIContext) error {
@@ -119,9 +119,8 @@ func (r *PipelineCreate) Run(kongCtx *CLIContext) error {
 		r.Allotment,
 		*decayRate,
 		*payoutShare,
-		r.BidSpace,
-		r.ResidualSpace,
 		r.TickSize,
+		r.RefundSpace,
 	)
 	if err != nil {
 		return err

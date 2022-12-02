@@ -157,3 +157,8 @@ out:
 
 	return err
 }
+
+// do all brain decisions here
+func (in *internal) on_brain_tick() {
+
+}

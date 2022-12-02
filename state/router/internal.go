@@ -8,7 +8,7 @@ import (
 	sgows "github.com/SolmateDev/solana-go/rpc/ws"
 	log "github.com/sirupsen/logrus"
 	cba "github.com/solpipe/cba"
-	sub2 "github.com/solpipe/solpipe-tool/ds/sub"
+	dssub "github.com/solpipe/solpipe-tool/ds/sub"
 	ctr "github.com/solpipe/solpipe-tool/state/controller"
 	ntk "github.com/solpipe/solpipe-tool/state/network"
 	"github.com/solpipe/solpipe-tool/state/sub"
@@ -30,6 +30,7 @@ type internal struct {
 	l_validator               *lookUpValidator
 	l_payout                  *lookUpPayout
 	l_pipeline                *lookUpPipeline
+	unmatchedRefunds          map[string]cba.Refunds
 	unmatchedPeriodRings      map[string]cba.PeriodRing
 	unmatchedBidLists         map[string]cba.BidList
 	unmatchedStaker           map[string]sub.StakeGroup     // set by receipt id
@@ -47,18 +48,30 @@ func loopInternal(
 	allErrorC <-chan error,
 	startErrorC chan<- error,
 	reqClose objReqClose,
-	validatorG sub2.Subscription[sub.ValidatorGroup],
-	pipelineG sub2.Subscription[sub.PipelineGroup],
-	bidListG sub2.Subscription[cba.BidList],
-	periodRingG sub2.Subscription[cba.PeriodRing],
-	stakerManagerG sub2.Subscription[sub.StakeGroup],
-	stakerReceiptG sub2.Subscription[sub.StakerReceiptGroup],
-	receiptG sub2.Subscription[sub.ReceiptGroup],
-	payoutG sub2.Subscription[sub.PayoutWithData],
+	validatorG dssub.Subscription[sub.ValidatorGroup],
+	pipelineG dssub.Subscription[sub.PipelineGroup],
+	refundG dssub.Subscription[cba.Refunds],
+	bidListG dssub.Subscription[cba.BidList],
+	periodRingG dssub.Subscription[cba.PeriodRing],
+	stakerManagerG dssub.Subscription[sub.StakeGroup],
+	stakerReceiptG dssub.Subscription[sub.StakerReceiptGroup],
+	receiptG dssub.Subscription[sub.ReceiptGroup],
+	payoutG dssub.Subscription[sub.PayoutWithData],
 	subAll *sub.SubscriptionProgramGroup,
 	all *sub.ProgramAllResult,
 	oa *objSub, // also contains account deletions
 ) {
+
+	defer validatorG.Unsubscribe()
+	defer pipelineG.Unsubscribe()
+	defer refundG.Unsubscribe()
+	defer bidListG.Unsubscribe()
+	defer periodRingG.Unsubscribe()
+	defer stakerManagerG.Unsubscribe()
+	defer stakerReceiptG.Unsubscribe()
+	defer receiptG.Unsubscribe()
+	defer payoutG.Unsubscribe()
+
 	var err error
 	doneC := ctx.Done()
 	errorC := make(chan error, 1)
@@ -106,6 +119,11 @@ out:
 			// received pipeline update
 			log.Debug("received pipeline update____")
 			in.on_pipeline(pg, in.controller.SlotHome())
+		case err = <-refundG.ErrorC:
+			break out
+		case x := <-refundG.StreamC:
+			log.Debug("received refund______")
+			in.on_refund(x)
 		case err = <-bidListG.ErrorC:
 			break out
 		case list := <-bidListG.StreamC:
@@ -233,14 +251,18 @@ func (in *internal) init(all *sub.ProgramAllResult) error {
 	in.l_payout = createLookupPayout()
 	in.l_pipeline = createLookupPipeline()
 
+	in.unmatchedRefunds = make(map[string]cba.Refunds)
 	in.unmatchedPeriodRings = make(map[string]cba.PeriodRing)
 	in.unmatchedBidLists = make(map[string]cba.BidList)
 	in.unmatchedStaker = make(map[string]sub.StakeGroup)
 	in.unmatchedReceiptsByPayout = make(map[string]sub.ReceiptGroup)
 	in.unmatchedPayouts = make(map[string]sub.PayoutWithData)
 
+	for _, v := range all.Refund {
+		in.unmatchedRefunds[v.Pipeline.String()] = *v
+	}
 	for _, v := range all.BidList {
-		in.unmatchedBidLists[v.Data.Pipeline.String()] = v.Data
+		in.unmatchedBidLists[v.Data.Payout.String()] = v.Data
 	}
 	for _, v := range all.PeriodRing {
 		in.unmatchedPeriodRings[v.Data.Pipeline.String()] = v.Data

@@ -12,7 +12,6 @@ import (
 type lookUpPipeline struct {
 	byId                     map[string]pipe.Pipeline
 	payoutWithNoPipeline     map[string]map[string]pyt.Payout // pipeline id->payout id->payout
-	bidListWithNoPipeline    map[string]cba.BidList           // pipeline id  -> bidlist
 	periodRingWithNoPipeline map[string]cba.PeriodRing
 }
 
@@ -20,7 +19,6 @@ func createLookupPipeline() *lookUpPipeline {
 	return &lookUpPipeline{
 		byId:                     make(map[string]pipe.Pipeline),
 		payoutWithNoPipeline:     make(map[string]map[string]pyt.Payout),
-		bidListWithNoPipeline:    make(map[string]cba.BidList),
 		periodRingWithNoPipeline: make(map[string]cba.PeriodRing),
 	}
 }
@@ -54,14 +52,6 @@ func (in *internal) on_pipeline(obj sub.PipelineGroup, slotHome slot.SlotHome) e
 	}
 
 	{
-		y, present := in.l_pipeline.bidListWithNoPipeline[id.String()]
-		if present {
-			log.Debugf("fill bid pipeline=%s", id.String())
-			pipeline.UpdateBid(y)
-			delete(in.l_pipeline.bidListWithNoPipeline, id.String())
-		}
-	}
-	{
 		y, present := in.l_pipeline.periodRingWithNoPipeline[id.String()]
 		if present {
 			log.Debugf("fill period pipeline=%s", id.String())
@@ -90,16 +80,6 @@ func (in *internal) on_pipeline(obj sub.PipelineGroup, slotHome slot.SlotHome) e
 
 	//in.routerByValidator[data.Validator.String()] = p
 	return nil
-}
-
-func (in *internal) on_bid(list cba.BidList) {
-	p, present := in.l_pipeline.byId[list.Pipeline.String()]
-	if !present {
-		log.Debugf("pipeline not present (%s)", list.Pipeline.String())
-		in.l_pipeline.bidListWithNoPipeline[list.Pipeline.String()] = list
-	} else {
-		p.UpdateBid(list)
-	}
 }
 
 func (in *internal) on_period(ring cba.PeriodRing) {

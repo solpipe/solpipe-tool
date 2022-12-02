@@ -23,6 +23,15 @@ func (in *internal) on_data(pwd sub.PayoutWithData) {
 	in.data = &pwd.Data
 }
 
+func (e1 Payout) UpdateBidList(bl cba.BidList) {
+	select {
+	case <-e1.ctx.Done():
+	case e1.internalC <- func(in *internal) {
+		in.on_bid_list(bl)
+	}:
+	}
+}
+
 // do not worry about deleting receipts;  we worry about deleting the payout.
 func (e1 Payout) UpdateReceipt(r rpt.Receipt) {
 	doneC := e1.ctx.Done()

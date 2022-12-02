@@ -16,32 +16,41 @@ import (
 const PAYOUT_CLOSE_DELAY = uint64(100)
 
 type Payout struct {
-	ctx            context.Context
-	cancel         context.CancelFunc
-	internalC      chan<- func(*internal)
-	dataC          chan<- sub.PayoutWithData
-	Id             sgo.PublicKey
-	updatePayoutC  chan dssub.ResponseChannel[cba.Payout]
-	updateReceiptC chan dssub.ResponseChannel[rpt.ReceiptWithData]
+	ctx              context.Context
+	cancel           context.CancelFunc
+	internalC        chan<- func(*internal)
+	dataC            chan<- sub.PayoutWithData
+	Id               sgo.PublicKey
+	updateBidStatusC chan dssub.ResponseChannel[BidStatus]
+	updatePayoutC    chan dssub.ResponseChannel[cba.Payout]
+	updateReceiptC   chan dssub.ResponseChannel[rpt.ReceiptWithData]
 }
 
 func CreatePayout(ctx context.Context, d sub.PayoutWithData) (e1 Payout, err error) {
 	internalC := make(chan func(*internal), 10)
 	dataC := make(chan sub.PayoutWithData, 10)
+	bidStatusHome := dssub.CreateSubHome[BidStatus]()
 	payoutHome := dssub.CreateSubHome[cba.Payout]()
 	receiptHome := dssub.CreateSubHome[rpt.ReceiptWithData]()
-	updatePayoutC := payoutHome.ReqC
-	updateReceiptC := receiptHome.ReqC
 	ctxC, cancel := context.WithCancel(ctx)
-	go loopInternal(ctxC, internalC, &d.Data, dataC, payoutHome, receiptHome)
+	go loopInternal(
+		ctxC,
+		internalC,
+		&d.Data,
+		dataC,
+		payoutHome,
+		receiptHome,
+		bidStatusHome,
+	)
 	e1 = Payout{
-		ctx:            ctxC,
-		cancel:         cancel,
-		internalC:      internalC,
-		dataC:          dataC,
-		Id:             d.Id,
-		updatePayoutC:  updatePayoutC,
-		updateReceiptC: updateReceiptC,
+		ctx:              ctxC,
+		cancel:           cancel,
+		internalC:        internalC,
+		dataC:            dataC,
+		Id:               d.Id,
+		updateBidStatusC: bidStatusHome.ReqC,
+		updatePayoutC:    payoutHome.ReqC,
+		updateReceiptC:   receiptHome.ReqC,
 	}
 
 	return

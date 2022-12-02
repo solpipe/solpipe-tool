@@ -9,8 +9,7 @@ import (
 
 func GetBidSummary(list *cba.BidList) *BidSummary {
 	ans := new(BidSummary)
-	ans.LastPeriodStart = list.LastPeriodStart
-	ans.Pipeline = list.Pipeline
+	ans.Payout = list.Payout
 	ans.TotalDeposits = 0
 	for i := 0; i < len(list.Book); i++ {
 		ans.TotalDeposits += list.Book[i].Deposit
@@ -52,10 +51,8 @@ type BidForBidder struct {
 }
 
 type BidSummary struct {
-	// period
-	LastPeriodStart uint64
 	// the validator to which this bid belongs to
-	Pipeline sgo.PublicKey
+	Payout sgo.PublicKey
 	// total deposits in the bid bucket
 	TotalDeposits uint64
 }
