@@ -47,10 +47,9 @@ type payoutFinish struct {
 }
 
 type PayoutWithData struct {
-	IsEmpty bool
-	Id      sgo.PublicKey
-	Payout  pyt.Payout
-	Data    cba.Payout
+	Id     sgo.PublicKey
+	Payout pyt.Payout
+	Data   cba.Payout
 }
 
 const PROXY_MAX_CONNECTION_ATTEMPT = 10

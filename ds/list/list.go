@@ -92,7 +92,7 @@ func (g *Generic[T]) Tail() (ans T, is_present bool) {
 	return
 }
 
-func (g *Generic[T]) Iterate(callback func(obj T, index uint32, delete func()) error) error {
+func (g *Generic[T]) Iterate(callback func(obj T, index uint32, deleteNode func()) error) error {
 	var i uint32 = 0
 	var err error
 	for node := g.head; node != nil; node = node.next {

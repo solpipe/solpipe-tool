@@ -7,36 +7,88 @@ import (
 	sgo "github.com/SolmateDev/solana-go"
 	log "github.com/sirupsen/logrus"
 	cba "github.com/solpipe/cba"
+	ll "github.com/solpipe/solpipe-tool/ds/list"
 	dssub "github.com/solpipe/solpipe-tool/ds/sub"
 )
 
-// update/insert bidder from loopInsertDeleteBidder()
-func (in *internal) bidder_adjust_tps(allotmentTotal uint64, bid cba.Bid) {
-	bt := BidWithTotal{
-		Bid:   bid,
-		Total: allotmentTotal,
-	}
-	bf, present := in.bidderMap[bid.User.String()]
-	if present {
-		select {
-		case <-bf.ctx.Done():
-		case bf.bidC <- bt:
-		}
-	} else {
-		bf = in.bidder_create(
-			in.pipelineTpsHome.ReqC,
-			in.txFromBidderToValidatorC,
-			bt,
-		)
-		in.bidderMap[bid.User.String()] = bf
-	}
-}
-
 type bidderFeed struct {
+	user    sgo.PublicKey
 	ctx     context.Context
 	cancel  context.CancelFunc
 	bidC    chan<- BidWithTotal
 	submitC chan<- submitInfo
+}
+
+type bidderInfo struct {
+	list *ll.Generic[*bidderFeed]
+	m    map[string]*ll.Node[*bidderFeed]
+}
+
+func (in *internal) init_bid() error {
+	in.bidderMap = make(map[string]*bidderFeed)
+	return nil
+}
+
+func (in *internal) pwbs_init_bid(pwbs *payoutWithBidStatus) error {
+	bi := new(bidderInfo)
+	bi.list = ll.CreateGeneric[*bidderFeed]()
+	bi.m = make(map[string]*ll.Node[*bidderFeed])
+	return nil
+}
+
+func (in *internal) on_bid_status(s bidStatusWithStartTime) {
+	doneC := in.ctx.Done()
+	node, _ := in.periodInfo.find(s.start)
+	if node == nil {
+		log.Debugf("unable to match start=%d", s.start)
+		return
+	}
+	v := node.Value()
+
+	bi := v.bi
+	oldList := bi.list
+	newList := ll.CreateGeneric[*bidderFeed]()
+
+	for _, bid := range s.status.Bid {
+		var bf *bidderFeed
+		sentBidUpdate := false
+		oldNode, present := bi.m[bid.User.String()]
+		if present {
+			bf = oldNode.Value()
+			oldList.Remove(oldNode)
+			newList.Append(bf)
+		} else {
+			var present bool
+			bf, present = in.bidderMap[bid.User.String()]
+			if !present {
+				sentBidUpdate = true
+				bf = in.bidder_create(
+					in.pipelineTpsHome.ReqC,
+					in.txFromBidderToValidatorC,
+					BidWithTotal{
+						Period:               v.Pwd.Data.Period,
+						Bid:                  bid,
+						TotalDeposit:         s.status.TotalDeposits,
+						BandwidthDenominator: s.status.BandwidthDenominator,
+					},
+				)
+				in.bidderMap[bid.User.String()] = bf
+			}
+		}
+		if !sentBidUpdate {
+			select {
+			case <-doneC:
+			case bf.bidC <- BidWithTotal{
+				Period:               v.Pwd.Data.Period,
+				Bid:                  bid,
+				TotalDeposit:         s.status.TotalDeposits,
+				BandwidthDenominator: s.status.BandwidthDenominator,
+			}:
+			}
+		}
+		bi.m[bid.User.String()] = newList.Append(bf)
+	}
+
 }
 
 func (in *internal) bidder_create(
@@ -206,8 +258,10 @@ func (bi *bidderInternal) broadcast_status() {
 }
 
 type BidWithTotal struct {
-	Bid   cba.Bid
-	Total uint64
+	Period               cba.Period
+	Bid                  cba.Bid
+	TotalDeposit         uint64
+	BandwidthDenominator uint64
 }
 
 func (bwt BidWithTotal) User() sgo.PublicKey {

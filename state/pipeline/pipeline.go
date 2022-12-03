@@ -296,48 +296,6 @@ func loopFetchPeriodRing(
 	}
 }
 
-func (e1 Pipeline) BidList() (cba.BidList, error) {
-	errorC := make(chan error, 1)
-	fetchedC := make(chan bool, 1)
-	ansC := make(chan cba.BidList, 1)
-	rpcClient := e1.rpc
-	e1.internalC <- func(in *internal) {
-		if in.data == nil {
-			errorC <- errors.New("no pipeline data")
-			return
-		}
-		if in.periods == nil {
-			fetchedC <- true
-			go loopFetchBidList(in.ctx, rpcClient, in.data.Periods, errorC, ansC)
-		} else {
-			errorC <- nil
-			fetchedC <- false
-			ansC <- *in.bids
-		}
-	}
-	err := <-errorC
-	if err != nil {
-		return cba.BidList{}, err
-	}
-	ans := <-ansC
-	if <-fetchedC {
-		e1.UpdateBid(ans)
-	}
-	if err != nil {
-		return cba.BidList{}, err
-	}
-	return ans, nil
-}
-
-func loopFetchBidList(ctx context.Context, rpcClient *sgorpc.Client, pubkey sgo.PublicKey, errorC chan<- error, ansC chan<- cba.BidList) {
-	ans := new(cba.BidList)
-	err := rpcClient.GetAccountDataBorshInto(ctx, pubkey, ans)
-	errorC <- err
-	if err != nil {
-		ansC <- *ans
-	}
-}
-
 func SubscribePipeline(wsClient *sgows.Client) (*sgows.ProgramSubscription, error) {
 	return wsClient.ProgramSubscribe(cba.ProgramID, sgorpc.CommitmentFinalized)
 	//return wsClient.ProgramSubscribeWithOpts(cba.ProgramID, sgorpc.CommitmentFinalized, sgo.EncodingBase64, []sgorpc.RPCFilter{
