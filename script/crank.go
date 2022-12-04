@@ -3,10 +3,11 @@ package script
 import (
 	"errors"
 
+	sgo "github.com/SolmateDev/solana-go"
 	cba "github.com/solpipe/cba"
 	ctr "github.com/solpipe/solpipe-tool/state/controller"
 	vrs "github.com/solpipe/solpipe-tool/state/version"
-	sgo "github.com/SolmateDev/solana-go"
+	"github.com/solpipe/solpipe-tool/util"
 )
 
 func Crank(
@@ -43,11 +44,11 @@ func (e1 *Script) Crank(
 	controller ctr.Controller,
 	pipelineId sgo.PublicKey,
 	periodId sgo.PublicKey,
-	bidId sgo.PublicKey,
 	payoutId sgo.PublicKey,
 	cranker sgo.PrivateKey,
 	crankerFunds sgo.PublicKey,
 ) error {
+	bidId := util.Zero()
 	if e1.txBuilder == nil {
 		return errors.New("blank tx builder")
 	}

@@ -18,7 +18,6 @@ import (
 	"github.com/solpipe/solpipe-tool/script"
 	pipe "github.com/solpipe/solpipe-tool/state/pipeline"
 	rtr "github.com/solpipe/solpipe-tool/state/router"
-	"github.com/solpipe/solpipe-tool/state/sub"
 	"github.com/solpipe/solpipe-tool/util"
 )
 
@@ -138,8 +137,8 @@ out:
 			}
 		case err = <-bidSub.ErrorC:
 			break out
-		case x := <-bidSub.StreamC:
-			in.on_bid(x)
+		case <-bidSub.StreamC:
+			//in.on_bid(x)
 		case err = <-periodSub.ErrorC:
 			break out
 		case x := <-periodSub.StreamC:
@@ -265,11 +264,6 @@ func (in *internal) init(
 			return err
 		}
 		in.on_period(ring)
-		bidlist, err := p.BidList()
-		if err != nil {
-			return err
-		}
-		in.on_bid(*sub.GetBidSummary(&bidlist))
 	}
 
 	return nil
@@ -307,16 +301,6 @@ func (in *internal) get_status(id sgo.PublicKey) (*pipelineStatus, error) {
 		in.status[id.String()] = status
 	}
 	return status, nil
-}
-
-// upgrade last period crank (by start time)
-func (in *internal) on_bid(bs sub.BidSummary) {
-	status, err := in.get_status(bs.Payout)
-	if err != nil {
-		log.Debug(err)
-		return
-	}
-	status.lastPeriodStart = bs.LastPeriodStart
 }
 
 // on a period, set the next crank time

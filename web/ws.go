@@ -12,6 +12,7 @@ import (
 	"github.com/gorilla/websocket"
 	log "github.com/sirupsen/logrus"
 	cba "github.com/solpipe/cba"
+	pipe "github.com/solpipe/solpipe-tool/state/pipeline"
 	rtr "github.com/solpipe/solpipe-tool/state/router"
 )
 
@@ -219,7 +220,7 @@ out:
 			if err != nil {
 				break out
 			}
-		case x := <-pipeIn.bidStatusC:
+		case x := <-pIn.bidC:
 			err = writeConn(conn, TYPE_BID_STATUS, &x)
 			if err != nil {
 				break out
@@ -249,10 +250,18 @@ out:
 			break out
 		case p := <-payoutSub.StreamC:
 			// covers new payouts
+			data, err := p.Data()
+			if err != nil {
+				break out
+			}
 			go e1.ws_on_payout(
 				errorC,
 				clientCtx,
-				p,
+				pipe.PayoutWithData{
+					Id:     p.Id,
+					Payout: p,
+					Data:   data,
+				},
 				pOut,
 			)
 		case d := <-pIn.dataC:
