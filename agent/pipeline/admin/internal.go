@@ -36,7 +36,7 @@ type internal struct {
 	controller                      ctr.Controller
 	router                          rtr.Router
 	pipeline                        pipe.Pipeline
-	payoutMap                       map[string]pipe.PayoutWithData // payout id -> payout
+	payoutInfo                      *payoutInfo
 	nextAttemptToAddPeriod          uint64
 	lastAddPeriodAttemptToAddPeriod uint64
 	addPeriodResultC                chan<- addPeriodResult
@@ -123,13 +123,11 @@ func loopInternal(
 	in.controller = controller
 	in.router = router
 	in.pipeline = pipeline
-	in.payoutMap = make(map[string]pipe.PayoutWithData)
+	//in.payoutMap = make(map[string]pipe.PayoutWithData)
 	in.homeLog = homeLog
 
 	slotSubChannelGroup := subSlot.OnSlot()
 	defer slotSubChannelGroup.Unsubscribe()
-	periodSubChannelGroup := in.pipeline.OnPeriod()
-	defer periodSubChannelGroup.Unsubscribe()
 	payoutSub := in.pipeline.OnPayout()
 	defer payoutSub.Unsubscribe()
 
@@ -140,26 +138,20 @@ func loopInternal(
 
 	failedAttempts := 0
 
-	log.Debug("loading config - 1")
-	if in.config_exists() {
-		log.Debug("loading config - 2")
-		err = in.config_load()
-		if err != nil {
-			log.Debug("loading config - 3")
-			in.errorC <- err
-		}
-	} else {
-		log.Debug("loading config - 4")
-		err = in.config_save()
-		if err != nil {
-			log.Debug("loading config - 5")
-			in.errorC <- err
-		}
-	}
 	log.Debug("loading config - 6")
+
+	err = in.init()
+	if err != nil {
+		in.errorC <- err
+	}
+
 out:
 	for {
 		select {
+		case <-doneC:
+			break out
+		case err = <-errorC:
+			break out
 		case id := <-deletePayoutC:
 			delete(in.payoutMap, id.String())
 		case result := <-addPeriodResultC:
@@ -176,32 +168,17 @@ out:
 			}
 		case err = <-payoutSub.ErrorC:
 			break out
+		case x := <-payoutSub.StreamC:
+			in.on_payout(x)
 		case x := <-preaddPayoutC:
 			// copy the code from "case x := <-payoutSub.StreamC:"
 			log.Debugf("reading existing payout=%s", x.Id.String())
-			if x.Data.Pipeline.Equals(in.pipeline.Id) {
-				_, present := in.payoutMap[x.Payout.Id.String()]
-				if !present {
-					in.payoutMap[x.Payout.Id.String()] = x
-					in.on_payout(x)
-					go loopDeletePayout(in.ctx, in.errorC, in.deletePayoutC, x.Payout)
-				}
-			}
-		case x := <-payoutSub.StreamC:
-			if x.Data.Pipeline.Equals(in.pipeline.Id) {
-				_, present := in.payoutMap[x.Payout.Id.String()]
-				if !present {
-					in.payoutMap[x.Payout.Id.String()] = x
-					in.on_payout(x)
-					go loopDeletePayout(in.ctx, in.errorC, in.deletePayoutC, x.Payout)
-				}
-			}
+			in.on_payout(x)
 		case id := <-in.homeLog.DeleteC:
 			in.homeLog.Delete(id)
 		case x := <-in.homeLog.ReqC:
 			in.homeLog.Receive(x)
 		case err = <-slotSubChannelGroup.ErrorC:
-			log.Debug("slot sub exiting")
 			break out
 		case slot := <-slotSubChannelGroup.StreamC:
 			if slot%50 == 0 {
@@ -220,10 +197,6 @@ out:
 				list.Append(pr.Ring[(i+pr.Start)%uint16(len(pr.Ring))])
 			}
 			in.on_period(list)
-		case <-doneC:
-			break out
-		case err = <-errorC:
-			break out
 		case req := <-internalC:
 			req(in)
 		}
@@ -234,6 +207,32 @@ out:
 	}
 
 	in.finish(err)
+}
+
+func (in *internal) init() error {
+	var err error
+	log.Debug("loading config - 1")
+	if in.config_exists() {
+		log.Debug("loading config - 2")
+		err = in.config_load()
+		if err != nil {
+			log.Debug("loading config - 3")
+			return err
+		}
+	} else {
+		log.Debug("loading config - 4")
+		err = in.config_save()
+		if err != nil {
+			log.Debug("loading config - 5")
+			return err
+		}
+	}
+	err = in.init_payout()
+	if err != nil {
+		return err
+	}
+
+	return nil
 }
 
 // look up existing payouts
