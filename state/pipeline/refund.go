@@ -30,7 +30,7 @@ func (in *internal) on_refund(d cba.Refunds) {
 	oldList := ri.list
 	newList := ll.CreateGeneric[*cba.Claim]()
 
-	for _, claim := range d.Data {
+	for _, claim := range d.Refunds {
 		if 0 < claim.Balance {
 			var newNode *ll.Node[*cba.Claim]
 			c := &claim

@@ -25,6 +25,16 @@ type payoutSingle struct {
 	cancel context.CancelFunc
 }
 
+func (pi *payoutInfo) delete(start uint64) {
+	node, present := pi.m[start]
+	if present {
+		return
+	}
+	node.Value().cancel()
+	pi.list.Remove(node)
+	delete(pi.m, start)
+}
+
 func (pi *payoutInfo) insert(ps *payoutSingle) *ll.Node[*payoutSingle] {
 	_, present := pi.m[ps.pwd.Data.Period.Start]
 	if present {
@@ -100,15 +110,13 @@ func (in *internal) on_payout(pwd pipe.PayoutWithData) {
 		in.admin,
 	)
 
-	go loopDeletePayout(in.ctx, in.errorC, in.deletePayoutC, pwd.Payout)
-
 }
 
 type payoutInternal struct {
 	ctx        context.Context
 	slot       uint64
 	errorC     chan<- error
-	deleteC    chan<- sgo.PublicKey
+	deleteC    chan<- uint64
 	controller ctr.Controller
 	pipeline   pipe.Pipeline
 	data       *cba.Payout
@@ -122,7 +130,7 @@ func loopPayout(
 	ctx context.Context,
 	cancel context.CancelFunc,
 	errorC chan<- error,
-	deletePayoutC chan<- sgo.PublicKey,
+	deletePayoutC chan<- uint64,
 	controller ctr.Controller,
 	pipeline pipe.Pipeline,
 	pwd pipe.PayoutWithData,
@@ -196,23 +204,10 @@ out:
 		}
 
 	}
-
 	pi.finish(err)
 }
 
 func (pi *payoutInternal) on_bid(newStatus *pyt.BidStatus) {
-	oldStatus := pi.bidStatus
-	if oldStatus.IsFinal {
-		return
-	}
-	if newStatus.IsFinal {
-
-	}
-
-	if oldStatus.IsFinal {
-		return
-	}
-
 	pi.bidStatus = newStatus
 }
 
@@ -232,8 +227,13 @@ func (pi *payoutInternal) finish(err error) {
 
 	select {
 	case <-doneC:
-	case pi.deleteC <- pi.payout.Id:
+	case pi.deleteC <- pi.data.Period.Start:
 	}
+}
+
+func (pi *payoutInternal) close_bids() error {
+
+	return nil
 }
 
 const CLOSE_PAYOUT_MAX_TRIES = 10

@@ -31,10 +31,8 @@ type PipelineCreate struct {
 	PipelineKey string `arg name:"pipeline" help:"the Pipeline ID private key"`
 	AdminKey    string `arg name:"admin" short:"a" help:"the account with administrative privileges"`
 	CrankFee    string `arg name:"crank" help:"set the fee that the controller earns from Validator revenue."`
-	DecayRate   string `arg name:"decay"  help:"set the fee that the controller earns from Validator revenue."`
 	PayoutShare string `arg name:"payout"  help:"set the fee that the controller earns from Validator revenue."`
 	Allotment   uint16 `arg name:"allotment" help:"allotment"`
-	BidSpace    uint16 `arg name:"bid_space" help:"how many spaces will there be for bids (affects rent in SOL)"`
 	RefundSpace uint16 `arg name:"residual_space" help:"how many spaces will there be for refunds (affects rent in SOL)"`
 	TickSize    uint16 `option name:"tick_size" help:"what is the tick size (deposit modulo tick_size must be zero)"`
 }
@@ -68,11 +66,6 @@ func (r *PipelineCreate) Run(kongCtx *CLIContext) error {
 	}
 
 	crankerFee, err := readRate(r.CrankFee)
-	if err != nil {
-		return err
-	}
-
-	decayRate, err := readRate(r.DecayRate)
 	if err != nil {
 		return err
 	}
@@ -117,7 +110,6 @@ func (r *PipelineCreate) Run(kongCtx *CLIContext) error {
 		admin,
 		*crankerFee,
 		r.Allotment,
-		*decayRate,
 		*payoutShare,
 		r.TickSize,
 		r.RefundSpace,
@@ -186,11 +178,6 @@ func (r *PipelineUpdate) Run(kongCtx *CLIContext) error {
 		return err
 	}
 
-	decayRate, err := readRate(r.DecayRate)
-	if err != nil {
-		return err
-	}
-
 	payoutShare, err := readRate(r.PayoutShare)
 	if err != nil {
 		return err
@@ -230,7 +217,6 @@ func (r *PipelineUpdate) Run(kongCtx *CLIContext) error {
 		admin,
 		*crankerFee,
 		r.Allotment,
-		*decayRate,
 		*payoutShare,
 		r.TickSize,
 	)
@@ -257,6 +243,7 @@ type PipelineAgent struct {
 	PipelineId       string        `arg name:"id" help:"the Pipeline ID"`
 	Admin            string        `arg name:"admin" help:"the Pipeline admin"`
 	ConfigFilePath   string        `arg name:"configuration" help:"file path for the configuration file"`
+	BidSpace         uint16        `arg name:"bid_space" help:"how many spaces will there be for bids (affects rent in SOL)"`
 }
 
 func (r *PipelineAgent) Run(kongCtx *CLIContext) error {
@@ -293,10 +280,7 @@ func (r *PipelineAgent) Run(kongCtx *CLIContext) error {
 	if err != nil {
 		return err
 	}
-	decayRate, err := convertRate(r.CrankRate, &state.Rate{N: 1, D: 100})
-	if err != nil {
-		return err
-	}
+
 	payoutShare, err := convertRate(r.CrankRate, &state.Rate{N: 95, D: 100})
 	if err != nil {
 		return err
@@ -333,8 +317,8 @@ func (r *PipelineAgent) Run(kongCtx *CLIContext) error {
 				Wallet:       &relayConfig.Admin,
 				Settings: &pipe.PipelineSettings{
 					CrankFee:    crankFee,
-					DecayRate:   decayRate,
 					PayoutShare: payoutShare,
+					BidSpace:    r.BidSpace,
 				},
 			},
 			ConfigFilePath: r.ConfigFilePath,

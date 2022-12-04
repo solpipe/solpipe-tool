@@ -18,7 +18,6 @@ func (e1 *Script) AddPipeline(
 	adminKey sgo.PrivateKey,
 	crankFee state.Rate,
 	allotment uint16,
-	decayRate state.Rate,
 	validatorPayoutShare state.Rate,
 	tickSize uint16,
 	refundSpace uint16,
@@ -35,7 +34,6 @@ func (e1 *Script) AddPipeline(
 		adminKey,
 		crankFee,
 		allotment,
-		decayRate,
 		validatorPayoutShare,
 		tickSize,
 		refundSpace,
@@ -51,7 +49,6 @@ func (e1 *Script) AddPipelineDirect(
 	adminKey sgo.PrivateKey,
 	crankFee state.Rate,
 	allotment uint16,
-	decayRate state.Rate,
 	validatorPayoutShare state.Rate,
 	tickSize uint16,
 	refundSpace uint16,
@@ -100,8 +97,6 @@ func (e1 *Script) AddPipelineDirect(
 	b.SetRentAccount(sgo.SysVarRentPubkey)
 
 	b.SetAllotment(allotment)
-	b.SetDecayRateNum(decayRate.N)
-	b.SetDecayRateDen(decayRate.D)
 	b.SetCrankFeeRateNum(crankFee.N)
 	b.SetCrankFeeRateDen(crankFee.D)
 	b.SetValidatorPayoutShareNum(validatorPayoutShare.N)
@@ -124,7 +119,6 @@ func (e1 *Script) UpdatePipeline(
 	adminKey sgo.PrivateKey,
 	crankFee state.Rate,
 	allotment uint16,
-	decayRate state.Rate,
 	validatorPayoutShare state.Rate,
 	tickSize uint16,
 ) (err error) {
@@ -143,8 +137,6 @@ func (e1 *Script) UpdatePipeline(
 	e1.AppendKey(adminKey)
 
 	b.SetAllotment(allotment)
-	b.SetDecayRateNum(decayRate.N)
-	b.SetDecayRateDen(decayRate.D)
 	b.SetCrankFeeRateNum(crankFee.N)
 	b.SetCrankFeeRateDen(crankFee.D)
 	b.SetValidatorPayoutShareNum(validatorPayoutShare.N)
@@ -157,3 +149,5 @@ func (e1 *Script) UpdatePipeline(
 }
 
 const TICKSIZE_DEFAULT uint16 = 1
+
+const BIDSPACE_DEFAULT uint16 = 50

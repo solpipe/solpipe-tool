@@ -17,7 +17,6 @@ import (
 	pba "github.com/solpipe/solpipe-tool/proto/admin"
 	"github.com/solpipe/solpipe-tool/script"
 	ctr "github.com/solpipe/solpipe-tool/state/controller"
-	pyt "github.com/solpipe/solpipe-tool/state/payout"
 	pipe "github.com/solpipe/solpipe-tool/state/pipeline"
 	rtr "github.com/solpipe/solpipe-tool/state/router"
 	slt "github.com/solpipe/solpipe-tool/state/slot"
@@ -26,7 +25,7 @@ import (
 type internal struct {
 	ctx                             context.Context
 	errorC                          chan<- error
-	deletePayoutC                   chan<- sgo.PublicKey
+	deletePayoutC                   chan<- uint64 // start slot
 	closeSignalCList                []chan<- error
 	configFilePath                  string
 	rpc                             *sgorpc.Client
@@ -63,10 +62,6 @@ func DefaultRateSettings() *pba.RateSettings {
 			Numerator:   0,
 			Denominator: 2,
 		},
-		DecayRate: &pba.Rate{
-			Numerator:   1,
-			Denominator: 2,
-		},
 		PayoutShare: &pba.Rate{
 			Numerator:   1,
 			Denominator: 1,
@@ -80,6 +75,7 @@ func DefaultPeriodSettings() *pba.PeriodSettings {
 		Lookahead: 3 * 150,
 		Length:    150,
 		TickSize:  uint32(script.TICKSIZE_DEFAULT),
+		BidSpace:  uint32(script.BIDSPACE_DEFAULT),
 	}
 }
 
@@ -102,7 +98,7 @@ func loopInternal(
 	doneC := ctx.Done()
 	errorC := make(chan error, 1)
 	addPeriodResultC := make(chan addPeriodResult, 1)
-	deletePayoutC := make(chan sgo.PublicKey)
+	deletePayoutC := make(chan uint64)
 	in := new(internal)
 	in.ctx = ctx
 	in.errorC = errorC
@@ -152,8 +148,8 @@ out:
 			break out
 		case err = <-errorC:
 			break out
-		case id := <-deletePayoutC:
-			delete(in.payoutMap, id.String())
+		case start := <-deletePayoutC:
+			in.payoutInfo.delete(start)
 		case result := <-addPeriodResultC:
 			if result.err != nil {
 				os.Stderr.WriteString(result.err.Error())
@@ -186,17 +182,6 @@ out:
 				//in.log(pba.Severity_INFO, fmt.Sprintf("slot=%d", slot))
 			}
 			in.on_slot(slot)
-		case err = <-periodSubChannelGroup.ErrorC:
-			break out
-		case pr := <-periodSubChannelGroup.StreamC:
-			if pr.Ring == nil {
-				pr.Ring = make([]cba.PeriodWithPayout, 0)
-			}
-			list := ll.CreateGeneric[cba.PeriodWithPayout]()
-			for i := uint16(0); i < pr.Length; i++ {
-				list.Append(pr.Ring[(i+pr.Start)%uint16(len(pr.Ring))])
-			}
-			in.on_period(list)
 		case req := <-internalC:
 			req(in)
 		}
@@ -258,34 +243,6 @@ func loopPreloadPayout(
 		case inC <- pwd:
 		}
 	}
-}
-
-func loopDeletePayout(
-	ctx context.Context,
-	errorC chan<- error,
-	deleteC chan<- sgo.PublicKey,
-	payout pyt.Payout,
-) {
-	var err error
-	doneC := ctx.Done()
-	id := payout.Id
-	closeC := payout.CloseSignal()
-	log.Debugf("setting up delete-payout id=%s", id.String())
-
-	select {
-	case <-doneC:
-	case err = <-closeC:
-		if err != nil {
-			errorC <- err
-		} else {
-			log.Debugf("deleting payout=%s", id.String())
-			select {
-			case <-doneC:
-			case deleteC <- id:
-			}
-		}
-	}
-
 }
 
 func (in *internal) log(level pba.Severity, message string) {

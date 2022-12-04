@@ -187,15 +187,14 @@ func convertRateToProto(r *state.Rate) *pba.Rate {
 
 type PipelineSettings struct {
 	CrankFee    *state.Rate
-	DecayRate   *state.Rate
+	BidSpace    uint16
+	RefundSpace uint16
 	PayoutShare *state.Rate
 }
 
 func (ps *PipelineSettings) ToProtoRateSettings() *pba.RateSettings {
-
 	return &pba.RateSettings{
 		CrankFee:    convertRateToProto(ps.CrankFee),
-		DecayRate:   convertRateToProto(ps.DecayRate),
 		PayoutShare: convertRateToProto(ps.PayoutShare),
 	}
 }
@@ -205,8 +204,8 @@ func (ps *PipelineSettings) Check() error {
 	if ps.CrankFee == nil {
 		return errors.New("no crank fee")
 	}
-	if ps.DecayRate == nil {
-		return errors.New("no decay rate")
+	if ps.BidSpace < 10 {
+		return errors.New("bid space too low")
 	}
 	if ps.PayoutShare == nil {
 		return errors.New("no payout share")
