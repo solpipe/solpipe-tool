@@ -35,7 +35,7 @@ type Pipeline struct {
 	slotSub               slot.SlotHome
 	updatePipelineC       chan<- dssub.ResponseChannel[cba.Pipeline]
 	updatePeriodRingC     chan<- dssub.ResponseChannel[cba.PeriodRing]
-	updateRefundC         chan<- dssub.ResponseChannel[cba.Refunds]
+	updateClaimC          chan<- dssub.ResponseChannel[cba.Claim]
 	updatePayoutC         chan<- dssub.ResponseChannel[PayoutWithData]
 	updateValidatorStakeC chan<- validatorStakeUpdate
 	updateValidatorC      chan<- dssub.ResponseChannel[ValidatorUpdate]
@@ -56,7 +56,7 @@ func CreatePipeline(
 	pipelineHome := dssub.CreateSubHome[cba.Pipeline]()
 	payoutHome := dssub.CreateSubHome[PayoutWithData]()
 	periodHome := dssub.CreateSubHome[cba.PeriodRing]()
-	refundHome := dssub.CreateSubHome[cba.Refunds]()
+	claimHome := dssub.CreateSubHome[cba.Claim]()
 	validatorHome := dssub.CreateSubHome[ValidatorUpdate]()
 	stakeStatusHome := dssub.CreateSubHome[sub.StakeUpdate]()
 
@@ -80,7 +80,7 @@ func CreatePipeline(
 	}
 
 	updatePeriodRingC := periodHome.ReqC
-	updateRefundC := refundHome.ReqC
+	updateClaimC := claimHome.ReqC
 	updatePayoutC := payoutHome.ReqC
 	updatePipelineC := pipelineHome.ReqC
 	updateValidatorStakeC := make(chan validatorStakeUpdate, 10)
@@ -98,7 +98,7 @@ func CreatePipeline(
 		rf,
 		pipelineHome,
 		periodHome,
-		refundHome,
+		claimHome,
 		payoutHome,
 		validatorHome,
 		stakeStatusHome,
@@ -113,7 +113,7 @@ func CreatePipeline(
 		slotSub:            slotSub,
 		updatePipelineC:    updatePipelineC,
 		updatePeriodRingC:  updatePeriodRingC,
-		updateRefundC:      updateRefundC,
+		updateClaimC:       updateClaimC,
 		updatePayoutC:      updatePayoutC,
 		updateValidatorC:   updateValidatorC,
 		updateStakeStatusC: updateStakeStatusC,

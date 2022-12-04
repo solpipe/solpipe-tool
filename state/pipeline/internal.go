@@ -22,7 +22,7 @@ type internal struct {
 	finishPayoutC     chan<- payoutFinish
 	id                sgo.PublicKey
 	data              *cba.Pipeline
-	refunds           *cba.Refunds
+	refundInfo        *refundInfo
 	periods           *cba.PeriodRing
 	allottedTps       *big.Float
 	activatedStake    *big.Int
@@ -34,7 +34,7 @@ type internal struct {
 	payoutLinkedList  *ll.Generic[PayoutWithData]
 	pipelineHome      *dssub.SubHome[cba.Pipeline]
 	periodHome        *dssub.SubHome[cba.PeriodRing]
-	refundHome        *dssub.SubHome[cba.Refunds]
+	claimHome         *dssub.SubHome[cba.Claim]
 	payoutHome        *dssub.SubHome[PayoutWithData]
 	validatorHome     *dssub.SubHome[ValidatorUpdate]
 	stakeStatusHome   *dssub.SubHome[sub.StakeUpdate]
@@ -66,7 +66,7 @@ func loopInternal(
 	rf *cba.Refunds,
 	pipelineHome *dssub.SubHome[cba.Pipeline],
 	periodHome *dssub.SubHome[cba.PeriodRing],
-	refundHome *dssub.SubHome[cba.Refunds],
+	claimHome *dssub.SubHome[cba.Claim],
 	payoutHome *dssub.SubHome[PayoutWithData],
 	validatorHome *dssub.SubHome[ValidatorUpdate],
 	stakeStatusHome *dssub.SubHome[sub.StakeUpdate],
@@ -96,8 +96,8 @@ func loopInternal(
 	in.periodHome = periodHome
 	defer periodHome.Close()
 	in.updatePayoutC = updatePayoutC
-	in.refundHome = refundHome
-	defer refundHome.Close()
+	in.claimHome = claimHome
+	defer claimHome.Close()
 	in.payoutHome = payoutHome
 	defer payoutHome.Close()
 	in.validatorHome = validatorHome
@@ -117,9 +117,18 @@ func loopInternal(
 	in.on_period(*pr)
 	in.on_refund(*rf)
 
+	err = in.init()
+	if err != nil {
+		in.errorC <- err
+	}
+
 out:
 	for {
 		select {
+		case <-doneC:
+			break out
+		case err = <-errorC:
+			break out
 		case u := <-updateValidatorStakeC:
 			// we must account for a situation in which
 			// prior receipt account closes after
@@ -186,10 +195,6 @@ out:
 			break out
 		case ns := <-netSub.StreamC:
 			in.on_network_stats(ns)
-		case <-doneC:
-			break out
-		case err = <-errorC:
-			break out
 		case x := <-finishPayoutC:
 			node, present := in.payoutById[x.id.String()]
 			if present {
@@ -204,4 +209,12 @@ out:
 	if err != nil {
 		log.Debug(err)
 	}
+}
+
+func (in *internal) init() error {
+	err := in.init_refund()
+	if err != nil {
+		return err
+	}
+	return nil
 }
