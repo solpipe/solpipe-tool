@@ -12,7 +12,6 @@ import (
 )
 
 type bidderFeed struct {
-	user    sgo.PublicKey
 	ctx     context.Context
 	cancel  context.CancelFunc
 	bidC    chan<- BidWithTotal
@@ -26,13 +25,6 @@ type bidderInfo struct {
 
 func (in *internal) init_bid() error {
 	in.bidderMap = make(map[string]*bidderFeed)
-	return nil
-}
-
-func (in *internal) pwbs_init_bid(pwbs *payoutWithBidStatus) error {
-	bi := new(bidderInfo)
-	bi.list = ll.CreateGeneric[*bidderFeed]()
-	bi.m = make(map[string]*ll.Node[*bidderFeed])
 	return nil
 }
 
@@ -154,7 +146,7 @@ func loopBidderInternal(
 
 	// bid.BandwidthAllocation
 	//bi.allottedShare = float64(bid.BandwidthAllocation) / float64(initPayout.Period.BandwidthAllotment)
-	bi.allottedShare = float64(bt.Bid.BandwidthAllocation) / float64(bt.Total)
+	bi.allottedShare = float64(bt.Bid.BandwidthAllocation) / float64(bt.BandwidthDenominator)
 	bi.pipelineTps = float64(0)
 	bi.allotedTps = float64(0)
 	bi.txCount = float64(0)
@@ -176,7 +168,7 @@ out:
 			bi.keepReadingC <- true
 			bi.nextBoxC = time.After(bi.boxInterval)
 		case bt = <-bidC:
-			bi.allottedShare = float64(bt.Bid.BandwidthAllocation) / float64(bt.Total)
+			bi.allottedShare = float64(bt.Bid.BandwidthAllocation) / float64(bt.BandwidthDenominator)
 			bi.allotedTps = bi.pipelineTps * bi.allottedShare
 		case s := <-loopTxSubmitC:
 			select {
@@ -253,10 +245,6 @@ type BidderStatus struct {
 	ActualTps    float64
 }
 
-func (bi *bidderInternal) broadcast_status() {
-
-}
-
 type BidWithTotal struct {
 	Period               cba.Period
 	Bid                  cba.Bid
@@ -269,5 +257,5 @@ func (bwt BidWithTotal) User() sgo.PublicKey {
 }
 
 func (bwt BidWithTotal) AllocatedShare() float64 {
-	return float64(bwt.Bid.BandwidthAllocation) / float64(bwt.Total)
+	return float64(bwt.Bid.BandwidthAllocation) / float64(bwt.BandwidthDenominator)
 }

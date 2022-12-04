@@ -79,6 +79,12 @@ func (in *internal) pbs_create(pwd pipe.PayoutWithData) (*payoutWithBidStatus, e
 		pwd.Data.Period.Start+pwd.Data.Period.Length,
 	)
 
+	err = in.pwbs_init_bid(pwbs)
+	if err != nil {
+		cancel()
+		return nil, err
+	}
+
 	return pwbs, nil
 }
 
@@ -107,6 +113,13 @@ func (in *internal) on_payout(pwd pipe.PayoutWithData, slotHome slot.SlotHome) {
 		pi.list.Append(pbs)
 	}
 
+}
+
+func (in *internal) pwbs_init_bid(pwbs *payoutWithBidStatus) error {
+	bi := new(bidderInfo)
+	bi.list = ll.CreateGeneric[*bidderFeed]()
+	bi.m = make(map[string]*ll.Node[*bidderFeed])
+	return nil
 }
 
 type bidStatusWithStartTime struct {
