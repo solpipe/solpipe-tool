@@ -110,7 +110,7 @@ func Initialize(
 			100,
 			*programConfig.Settings.PayoutShare,
 			script.TICKSIZE_DEFAULT,
-			20,
+			args.Program.Settings.RefundSpace,
 		)
 	} else {
 		pid, err = s1.AddPipelineDirect(
@@ -122,7 +122,7 @@ func Initialize(
 			100,
 			*programConfig.Settings.PayoutShare,
 			script.TICKSIZE_DEFAULT,
-			20,
+			args.Program.Settings.RefundSpace,
 		)
 	}
 

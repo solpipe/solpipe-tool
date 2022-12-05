@@ -96,12 +96,17 @@ func (e1 *Script) AddPipelineDirect(
 	b.SetSystemProgramAccount(sgo.SystemProgramID)
 	b.SetRentAccount(sgo.SysVarRentPubkey)
 
+	log.Debugf("allotment=%d", allotment)
 	b.SetAllotment(allotment)
+	log.Debugf("crank fee=%d/%d", crankFee.N, crankFee.D)
 	b.SetCrankFeeRateNum(crankFee.N)
 	b.SetCrankFeeRateDen(crankFee.D)
+	log.Debugf("payout share=%d/%d", validatorPayoutShare.N, validatorPayoutShare.D)
 	b.SetValidatorPayoutShareNum(validatorPayoutShare.N)
 	b.SetValidatorPayoutShareDen(validatorPayoutShare.D)
+	log.Debugf("tick size=%d", tickSize)
 	b.SetTickSize(tickSize)
+	log.Debugf("refund space=%d", refundSpace)
 	b.SetRefundSpace(refundSpace)
 
 	e1.txBuilder.AddInstruction(b.Build())

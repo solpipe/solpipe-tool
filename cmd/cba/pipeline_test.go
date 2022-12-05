@@ -98,5 +98,6 @@ func TestPipeline(t *testing.T) {
 
 	time.Sleep(30 * time.Second)
 	agent.Close()
+	t.Log("finished")
 	// create pipeline
 }

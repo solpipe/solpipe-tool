@@ -114,13 +114,12 @@ func loopInternal(
 		AverageTransactionsSizePerSecond: 0,
 	}
 
-	in.on_period(*pr)
-	in.on_refund(*rf)
-
 	err = in.init()
 	if err != nil {
 		in.errorC <- err
 	}
+	in.on_period(*pr)
+	in.on_refund(*rf)
 
 out:
 	for {

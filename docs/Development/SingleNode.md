@@ -156,6 +156,14 @@ solpipe --verbose  \
    web \
    --frontend=http://localhost:3001 \
    4001
+solpipe --verbose  \
+   --rpc=http://localhost:8899 \
+   --ws=ws://localhost:8900  \
+   web \
+   --frontend=http://localhost:3001 \
+   --grpc=tcp://localhost4002 \
+   4001
+
 ```
 
 

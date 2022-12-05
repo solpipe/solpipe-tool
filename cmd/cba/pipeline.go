@@ -33,7 +33,7 @@ type PipelineCreate struct {
 	CrankFee    string `arg name:"crank" help:"set the fee that the controller earns from Validator revenue."`
 	PayoutShare string `arg name:"payout"  help:"set the fee that the controller earns from Validator revenue."`
 	Allotment   uint16 `arg name:"allotment" help:"allotment"`
-	RefundSpace uint16 `arg name:"residual_space" help:"how many spaces will there be for refunds (affects rent in SOL)"`
+	RefundSpace uint16 `arg name:"refund_space" help:"how many spaces will there be for refunds (affects rent in SOL)"`
 	TickSize    uint16 `option name:"tick_size" help:"what is the tick size (deposit modulo tick_size must be zero)"`
 }
 

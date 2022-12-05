@@ -4,6 +4,7 @@ import (
 	"errors"
 
 	sgo "github.com/SolmateDev/solana-go"
+	log "github.com/sirupsen/logrus"
 	cba "github.com/solpipe/cba"
 	ll "github.com/solpipe/solpipe-tool/ds/list"
 	dssub "github.com/solpipe/solpipe-tool/ds/sub"
@@ -26,6 +27,7 @@ func (in *internal) init_refund() error {
 }
 
 func (in *internal) on_refund(d cba.Refunds) {
+	log.Debugf("refunds=%+v", &d)
 	ri := in.refundInfo
 	oldList := ri.list
 	newList := ll.CreateGeneric[*cba.Claim]()
