@@ -108,6 +108,12 @@ func loopInternal(
 	in.ws = wsClient
 	in.closeSignalCList = make([]chan<- error, 0)
 	in.periodSettings = DefaultPeriodSettings()
+	if initialSettings != nil {
+		in.periodSettings.BidSpace = uint32(initialSettings.BidSpace)
+	}
+	log.Debug("settings+++!+!+!+!+")
+	log.Debugf("initial settings=%+v", initialSettings)
+
 	in.rateSettings = initialSettings.ToProtoRateSettings()
 	//in.lastAddPeriod = 0
 	in.nextAttemptToAddPeriod = 0

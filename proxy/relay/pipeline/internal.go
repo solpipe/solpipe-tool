@@ -101,6 +101,9 @@ func loopInternal(
 
 	in.validatorConnectionMap = make(map[string]*validatorConnection)
 
+	pwdC := make(chan pipe.PayoutWithData)
+	go loopPayoutAll(in.ctx, pipeline, pwdC, in.errorC)
+
 	// set up subscriptions pulling data from external sources
 	slotSub := slotHome.OnSlot()
 	defer slotSub.Unsubscribe()
@@ -230,11 +233,14 @@ out:
 			break out
 		case pwd := <-payoutSub.StreamC:
 			in.on_payout(pwd, slotHome)
+		case pwd := <-pwdC:
+			in.on_payout(pwd, slotHome)
 		case startTime := <-deletePayoutC:
-			pi, present := in.periodInfo.m[startTime]
+			node, present := in.periodInfo.m[startTime]
 			if present {
-				in.periodInfo.list.Remove(pi)
-				pi.Value().cancel()
+				log.Debugf("removing payout=%s with start=%d", node.Value().Pwd.Id.String(), node.Value().Pwd.Data.Period.Start)
+				in.periodInfo.list.Remove(node)
+				node.Value().cancel()
 				delete(in.periodInfo.m, startTime)
 			}
 
@@ -242,6 +248,28 @@ out:
 	}
 
 	in.finish(err)
+}
+
+func loopPayoutAll(
+	ctx context.Context,
+	p pipe.Pipeline,
+	outC chan<- pipe.PayoutWithData,
+	errorC chan<- error,
+) {
+	doneC := ctx.Done()
+	list, err := p.AllPayouts()
+	if err != nil {
+		errorC <- err
+		return
+	}
+out:
+	for _, pwd := range list {
+		select {
+		case <-doneC:
+			break out
+		case outC <- pwd:
+		}
+	}
 }
 
 func (in *internal) init() error {

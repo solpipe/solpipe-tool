@@ -42,6 +42,7 @@ func loopInternal(
 	in.receipts = make(map[string]rpt.ReceiptWithData)
 	in.payoutHome = payoutHome
 	in.receiptHome = receiptHome
+	in.bidStatusHome = bidStatusHome
 	in.closeSignalCList = make([]chan<- error, 0)
 
 	defer payoutHome.Close()

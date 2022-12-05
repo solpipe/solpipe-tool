@@ -8,6 +8,7 @@ import (
 	sgo "github.com/SolmateDev/solana-go"
 	sgorpc "github.com/SolmateDev/solana-go/rpc"
 	sgows "github.com/SolmateDev/solana-go/rpc/ws"
+	log "github.com/sirupsen/logrus"
 	cba "github.com/solpipe/cba"
 	ll "github.com/solpipe/solpipe-tool/ds/list"
 	dssub "github.com/solpipe/solpipe-tool/ds/sub"
@@ -310,55 +311,40 @@ func SubscribePipeline(wsClient *sgows.Client) (*sgows.ProgramSubscription, erro
 
 func (e1 Pipeline) AllPayouts() ([]PayoutWithData, error) {
 	doneC := e1.ctx.Done()
-	countC := make(chan int)
-	payoutC := make(chan PayoutWithData)
+	ansC := make(chan []PayoutWithData)
 
 	select {
 	case <-doneC:
 		return nil, errors.New("canceled")
 	case e1.internalC <- func(in *internal) {
-		in.payout_list(countC, payoutC)
+		in.payout_list(ansC)
 	}:
 	}
-	var count int
+	var list []PayoutWithData
 	select {
 	case <-doneC:
 		return nil, errors.New("canceled")
-	case count = <-countC:
-	}
-	ans := make([]PayoutWithData, count)
-	for i := 0; i < count; i++ {
-		select {
-		case <-doneC:
-			return nil, errors.New("canceled")
-		case ans[i] = <-payoutC:
-		}
+	case list = <-ansC:
 	}
 
-	return ans, nil
+	return list, nil
 }
 
-func (in *internal) payout_list(countC chan<- int, payoutC chan<- PayoutWithData) {
+func (in *internal) payout_list(ansC chan<- []PayoutWithData) {
 	doneC := in.ctx.Done()
-	select {
-	case <-doneC:
-		return
-	case countC <- int(in.payoutLinkedList.Size):
-	}
-	if len(in.payoutById) == 0 {
-		return
-	}
+	list := make([]PayoutWithData, in.payoutLinkedList.Size)
 
 	err := in.payoutLinkedList.Iterate(func(obj PayoutWithData, index uint32, delete func()) error {
-		select {
-		case <-doneC:
-			return errors.New("canceled")
-		case payoutC <- obj:
-			return nil
-		}
+		log.Debugf("index=%d with id=%s", index, obj.Id.String())
+		list[index] = obj
+		return nil
 	})
 	if err != nil {
 		return
+	}
+	select {
+	case <-doneC:
+	case ansC <- list:
 	}
 
 }

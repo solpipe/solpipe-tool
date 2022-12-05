@@ -12,9 +12,15 @@ import (
 
 func (in *internal) attempt_add_period() error {
 	start := in.next_slot()
-	log.Debugf("attempting to add a period; start=%d; end=%d;", start, start+in.periodSettings.Length-1)
+	log.Debugf("attempting to add a period; start=%d; end=%d; bid space=%d", start, start+in.periodSettings.Length-1, in.periodSettings.BidSpace)
 	if math.MaxUint16 <= in.periodSettings.Withhold {
 		return errors.New("withhold is too large")
+	}
+	if math.MaxUint16 <= in.periodSettings.BidSpace {
+		return errors.New("bid space is too large")
+	}
+	if in.periodSettings.BidSpace <= 10 {
+		return errors.New("bid space is too small")
 	}
 	s1, err := script.Create(in.ctx, &script.Configuration{Version: in.controller.Version}, in.rpc, in.ws)
 	if err != nil {
@@ -37,6 +43,7 @@ func (in *internal) attempt_add_period() error {
 	if err != nil {
 		return err
 	}
+
 	_, err = s1.AppendPeriod(
 		in.controller,
 		in.pipeline,
@@ -44,7 +51,7 @@ func (in *internal) attempt_add_period() error {
 		start,
 		in.periodSettings.Length,
 		withhold,
-		10,
+		uint16(in.periodSettings.BidSpace),
 	)
 	if err != nil {
 		return err

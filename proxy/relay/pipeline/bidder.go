@@ -35,6 +35,7 @@ func (in *internal) on_bid_status(s bidStatusWithStartTime) {
 		log.Debugf("unable to match start=%d", s.start)
 		return
 	}
+	log.Debugf("____+_+____node=%+v", node.Value())
 	v := node.Value()
 
 	bi := v.bi

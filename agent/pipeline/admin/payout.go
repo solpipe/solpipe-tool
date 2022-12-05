@@ -170,7 +170,7 @@ func loopPayout(
 
 	log.Debugf("finish for payout=%s is slot=%d", pi.payout.Id.String(), finish)
 out:
-	for {
+	for pi.slot < pwd.Data.Period.Start+pwd.Data.Period.Length+pyt.PAYOUT_CLOSE_DELAY {
 		select {
 		case <-doneC:
 			break out
@@ -231,16 +231,20 @@ func (pi *payoutInternal) finish(err error) {
 	}
 }
 
-func (pi *payoutInternal) close_bids() error {
-
-	return nil
-}
-
 const CLOSE_PAYOUT_MAX_TRIES = 10
 
 func (pi *payoutInternal) close_payout() error {
 	log.Debugf("attempting to close payout=%s", pi.payout.Id.String())
 	err := pi.script.SetTx(pi.admin)
+	if err != nil {
+		return err
+	}
+	err = pi.script.CloseBids(
+		pi.controller,
+		pi.pipeline,
+		pi.payout,
+		pi.admin,
+	)
 	if err != nil {
 		return err
 	}

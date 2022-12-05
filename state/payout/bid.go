@@ -67,7 +67,22 @@ func (in *internal) on_bid_list(bl cba.BidList) {
 	}
 	bi.list = newList
 
-	in.bidStatusHome.Broadcast(BidStatus{})
+	in.bid_broadcast()
+}
+
+func (in *internal) bid_broadcast() {
+	bi := in.bi
+	list := make([]cba.Bid, bi.list.Size)
+	bi.list.Iterate(func(obj *cba.Bid, index uint32, deleteNode func()) error {
+		list[index] = *obj
+		return nil
+	})
+	in.bidStatusHome.Broadcast(BidStatus{
+		Bid:                  list,
+		IsFinal:              bi.is_final,
+		TotalDeposits:        bi.totalDeposits,
+		BandwidthDenominator: bi.bandwidthDenominator,
+	})
 }
 
 func (in *internal) bid_status() BidStatus {
