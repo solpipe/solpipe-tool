@@ -11,7 +11,6 @@ import (
 	sgows "github.com/SolmateDev/solana-go/rpc/ws"
 	log "github.com/sirupsen/logrus"
 	cba "github.com/solpipe/cba"
-	"github.com/solpipe/solpipe-tool/ds/list"
 	ll "github.com/solpipe/solpipe-tool/ds/list"
 	"github.com/solpipe/solpipe-tool/ds/sub"
 	pba "github.com/solpipe/solpipe-tool/proto/admin"
@@ -53,7 +52,7 @@ type SettingsForFile struct {
 
 type addPeriodResult struct {
 	err     error
-	attempt uint64
+	attempt uint64 // keep this only for logging purposes
 }
 
 func DefaultRateSettings() *pba.RateSettings {
@@ -90,7 +89,6 @@ func loopInternal(
 	pipeline pipe.Pipeline,
 	subSlot slt.SlotHome,
 	homeLog *sub.SubHome[*pba.LogLine],
-	pr *list.Generic[cba.PeriodWithPayout],
 	initialSettings *pipe.PipelineSettings,
 	configFilePath string,
 ) {
@@ -133,7 +131,7 @@ func loopInternal(
 	payoutSub := in.pipeline.OnPayout()
 	defer payoutSub.Unsubscribe()
 
-	in.on_period(pr)
+	//in.on_period(pr)
 	// TODO: search for existing payouts
 	preaddPayoutC := make(chan pipe.PayoutWithData)
 	go loopPreloadPayout(in.ctx, in.pipeline, in.errorC, preaddPayoutC)
@@ -161,8 +159,8 @@ out:
 				os.Stderr.WriteString(result.err.Error())
 				//log.Debug(result.err)
 				failedAttempts++
-				log.Debugf("failed attempts=%d", failedAttempts)
-				in.calculate_next_attempt_to_add_period(false)
+				log.Debugf("failed attempts=%d; last attempt=%d", failedAttempts, result.attempt)
+				//in.calculate_next_attempt_to_add_period(false)
 				//log.Debugf("failed to add period: %+v", result.err)
 			} else {
 				log.Debugf("successfully added period at slot=%d", result.attempt)
@@ -296,7 +294,7 @@ func (in *internal) config_load() error {
 
 func (in *internal) config_save() error {
 	log.Debugf("saving configuration file to %s", in.configFilePath)
-	f, err := os.Open(in.configFilePath)
+	f, err := os.OpenFile(in.configFilePath, os.O_WRONLY, 0640)
 	if err != nil {
 		f, err = os.Create(in.configFilePath)
 		if err != nil {

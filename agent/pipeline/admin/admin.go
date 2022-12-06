@@ -63,15 +63,6 @@ func Attach(
 		return signalC, errors.New("no initial settings")
 	}
 
-	pr, err := pipeline.PeriodRing()
-	if err != nil {
-		return signalC, err
-	}
-	prList, err := util.GetLinkedListFromPeriodRing(&pr)
-	if err != nil {
-		return signalC, err
-	}
-
 	go loopInternal(
 		ctx,
 		internalC,
@@ -83,7 +74,6 @@ func Attach(
 		pipeline,
 		slotHome,
 		homeLog,
-		prList,
 		initialSettings,
 		configFilePath,
 	)
@@ -167,7 +157,7 @@ func (e1 Server) SetPeriod(ctx context.Context, req *pba.PeriodSettings) (*pba.P
 }
 
 func (in *internal) settings_change() {
-	in.calculate_next_attempt_to_add_period(true)
+	log.Debug("admin settings have changed")
 }
 
 func (e1 Server) GetLogStream(req *pba.Empty, stream pba.Validator_GetLogStreamServer) error {

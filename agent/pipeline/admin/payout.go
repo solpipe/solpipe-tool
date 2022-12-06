@@ -16,13 +16,23 @@ import (
 )
 
 type payoutInfo struct {
-	m    map[uint64]*ll.Node[*payoutSingle]
-	list *ll.Generic[*payoutSingle]
+	m        map[uint64]*ll.Node[*payoutSingle]
+	list     *ll.Generic[*payoutSingle]
+	tailSlot uint64 // what is the last slot of the last period
 }
 
 type payoutSingle struct {
 	pwd    pipe.PayoutWithData
 	cancel context.CancelFunc
+}
+
+func (pi *payoutInfo) update_tail_slot() {
+	tail, present := pi.list.Tail()
+	if present {
+		pi.tailSlot = tail.pwd.Data.Period.Start + tail.pwd.Data.Period.Length
+	} else {
+		pi.tailSlot = 0
+	}
 }
 
 func (pi *payoutInfo) delete(start uint64) {
@@ -62,6 +72,7 @@ func (pi *payoutInfo) insert(ps *payoutSingle) *ll.Node[*payoutSingle] {
 		panic("ps should have been inserted by now")
 	}
 	pi.m[ps.pwd.Data.Period.Start] = node
+	pi.update_tail_slot()
 	return node
 }
 
@@ -70,6 +81,7 @@ func (in *internal) init_payout() error {
 	in.payoutInfo = pi
 	pi.m = make(map[uint64]*ll.Node[*payoutSingle])
 	pi.list = ll.CreateGeneric[*payoutSingle]()
+	pi.tailSlot = 0
 	return nil
 }
 
@@ -85,6 +97,7 @@ func (in *internal) on_payout(pwd pipe.PayoutWithData) {
 		log.Debugf("have duplicate payout with start=%d", pwd.Data.Period.Start)
 		return
 	}
+
 	ctxC, cancel := context.WithCancel(in.ctx)
 	ps.cancel = cancel
 

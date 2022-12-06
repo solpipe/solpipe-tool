@@ -10,9 +10,11 @@ import (
 	pipe "github.com/solpipe/solpipe-tool/state/pipeline"
 )
 
-func (in *internal) attempt_add_period() error {
-	start := in.next_slot()
-	log.Debugf("attempting to add a period; start=%d; end=%d; bid space=%d", start, start+in.periodSettings.Length-1, in.periodSettings.BidSpace)
+func (in *internal) attempt_add_period(
+	start uint64,
+) error {
+	in.lastAddPeriodAttemptToAddPeriod = in.slot
+	log.Debugf("(slot=%d) attempting to add a period; start=%d; end=%d; bid space=%d", in.slot, start, start+in.periodSettings.Length-1, in.periodSettings.BidSpace)
 	if math.MaxUint16 <= in.periodSettings.Withhold {
 		return errors.New("withhold is too large")
 	}
