@@ -19,23 +19,22 @@ import (
 )
 
 type internal struct {
-	ctx                 context.Context
-	errorC              chan<- error
-	closeSignalCList    []chan<- error
-	config              rly.Configuration
-	configFilePath      string
-	rpc                 *sgorpc.Client
-	ws                  *sgows.Client
-	script              *script.Script
-	slot                uint64
-	controller          ctr.Controller
-	router              rtr.Router
-	validator           val.Validator
-	settings            *pba.ValidatorSettings
-	pipeline            pipe.Pipeline
-	hasPipeline         bool
-	payoutScannerCtx    context.Context // loopPeriod scoops up new payout accounts
-	payoutScannerCancel context.CancelFunc
+	ctx              context.Context
+	errorC           chan<- error
+	closeSignalCList []chan<- error
+	config           rly.Configuration
+	configFilePath   string
+	rpc              *sgorpc.Client
+	ws               *sgows.Client
+	script           *script.Script
+	//slot                uint64
+	controller     ctr.Controller
+	router         rtr.Router
+	validator      val.Validator
+	settings       *pba.ValidatorSettings
+	pipeline       *pipe.Pipeline
+	pipelineCtx    context.Context // loopPeriod scoops up new payout accounts
+	pipelineCancel context.CancelFunc
 }
 
 func loopInternal(
@@ -64,13 +63,11 @@ func loopInternal(
 	in.rpc = rpcClient
 	in.ws = wsClient
 	in.script = script
-	in.slot = 0
+	//in.slot = 0
 	in.controller = router.Controller
 	in.router = router
 	in.validator = validator
-	slotSub := in.controller.SlotHome().OnSlot()
-	in.settings = &pba.ValidatorSettings{}
-	in.hasPipeline = false
+	in.settings = nil
 
 	if in.config_exists() {
 		err = in.config_load()
@@ -78,6 +75,7 @@ func loopInternal(
 			in.errorC <- err
 		}
 	}
+
 out:
 	for {
 		select {
@@ -85,9 +83,6 @@ out:
 			break out
 		case err = <-serverErrorC:
 			break out
-		case err = <-slotSub.ErrorC:
-			break out
-		case in.slot = <-slotSub.StreamC:
 		case <-doneC:
 			break out
 		case req := <-internalC:
@@ -116,23 +111,22 @@ func (in *internal) config_exists() bool {
 }
 
 func (in *internal) config_load() error {
-	log.Debugf("loading configuration file from %s", in.configFilePath)
+	log.Debugf("++++++++++++++++++++++loading configuration file from %s", in.configFilePath)
 	f, err := os.Open(in.configFilePath)
 	if err != nil {
 		return err
 	}
-	in.settings = new(pba.ValidatorSettings)
-	err = json.NewDecoder(f).Decode(in.settings)
+	newSettings := new(pba.ValidatorSettings)
+	err = json.NewDecoder(f).Decode(newSettings)
 	if err != nil {
 		return err
 	}
-
-	return nil
+	return in.settings_change(newSettings)
 }
 
 func (in *internal) config_save() error {
 	log.Debugf("saving configuration file to %s", in.configFilePath)
-	f, err := os.Open(in.configFilePath)
+	f, err := os.OpenFile(in.configFilePath, os.O_WRONLY, 0640)
 	if err != nil {
 		f, err = os.Create(in.configFilePath)
 		if err != nil {
@@ -158,19 +152,4 @@ func (a adminExternal) send_cb(ctx context.Context, cb func(in *internal)) error
 	case a.agent.internalC <- cb:
 	}
 	return err
-}
-
-type scriptResult struct {
-	err    error
-	script *script.Script
-}
-
-func (in *internal) script_create(ctx context.Context) scriptResult {
-	script, err := script.Create(
-		in.ctx,
-		&script.Configuration{Version: in.config.Version},
-		in.config.Rpc(),
-		in.ws,
-	)
-	return scriptResult{err: err, script: script}
 }

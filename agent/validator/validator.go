@@ -256,6 +256,7 @@ func Create(
 		go loopGrpcShutdown(ctxC, t1, clearLi.Listener, grpcServerClearNet)
 	}
 
+	log.Debug("entering internal loop for validator agent")
 	go loopInternal(
 		ctxC,
 		cancel,

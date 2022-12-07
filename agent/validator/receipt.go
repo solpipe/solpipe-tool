@@ -2,7 +2,6 @@ package validator
 
 import (
 	"context"
-	"errors"
 
 	sgo "github.com/SolmateDev/solana-go"
 	log "github.com/sirupsen/logrus"
@@ -13,22 +12,39 @@ import (
 	"github.com/solpipe/solpipe-tool/state/slot"
 )
 
+type receiptInfo struct {
+	pwd       pipe.PayoutWithData
+	cancel    context.CancelFunc
+	receiptId sgo.PublicKey
+}
+
+func (ri *receiptInfo) Id() sgo.PublicKey {
+	return ri.pwd.Id
+}
+
+const RECEIPT_END_DELAY uint64 = 100
+
 // listen for a receipt.
 // wait til stakers claim their payments, then delete the receipt account and claim validator payout
 func loopReceipt(
 	ctx context.Context,
+	cancel context.CancelFunc,
 	errorC chan<- error,
-	setValidatorOnPayoutC chan<- sgo.PublicKey,
 	slotHome slot.SlotHome,
 	period cba.Period,
 	item pipe.PayoutWithData,
 	validatorId sgo.PublicKey,
 ) {
+	defer cancel()
 	p := item.Payout
 	fetchErrorC := make(chan error, 1)
 	rwdC := make(chan rpt.ReceiptWithData, 1)
+	receiptSub := p.OnReceipt(validatorId)
+	defer receiptSub.Unsubscribe()
+	ctxC, cancelC := context.WithCancel(ctx)
+	defer cancelC()
 	go loopGetReceiptWithData(
-		ctx,
+		ctxC,
 		validatorId,
 		p,
 		fetchErrorC,
@@ -36,11 +52,7 @@ func loopReceipt(
 	)
 	doneC := ctx.Done()
 
-	slotSub := slotHome.OnSlot()
-	defer slotSub.Unsubscribe()
 	var err error
-
-	slot := uint64(0)
 	var rwd rpt.ReceiptWithData
 	hasRwd := false
 out:
@@ -50,36 +62,48 @@ out:
 			break out
 		case err = <-fetchErrorC:
 			break out
+		case err = <-receiptSub.ErrorC:
+			break out
+		case rwd = <-receiptSub.StreamC:
+			hasRwd = true
+			break out
 		case rwd = <-rwdC:
 			hasRwd = true
 			break out
-		case err = <-slotSub.ErrorC:
-			break out
-		case slot = <-slotSub.StreamC:
 		}
 	}
 
 	if err != nil {
 		errorC <- err
+		return
 	}
 	if !hasRwd {
 		return
 	}
 
 	stakeStart := false
-
 	stakeCount := rwd.Data.StakerCounter
+	finish := period.Start + period.Length
 
-	end := period.Start + period.Length
+	slotSub := slotHome.OnSlot()
+	defer slotSub.Unsubscribe()
+	slot := uint64(0)
 
+	// 1. the stakeCount starts at 0
+	// 2. the stakeCount goes up as each staker reports their stake
+	// 3. the stakeCount goes down as each staker claims revenue
+	// 4. the validator can claim revenue, thereby closing this receipt account
 out2:
-	for !stakeStart || (stakeStart && 0 < stakeCount) || slot < end+100 {
+	for !stakeStart || (stakeStart && 0 < stakeCount) || slot < finish+RECEIPT_END_DELAY {
 		select {
 		case <-doneC:
 			break out2
 		case err = <-fetchErrorC:
 			break out2
-		case rwd = <-rwdC:
+		case err = <-receiptSub.ErrorC:
+			break out2
+		case rwd = <-receiptSub.StreamC:
+			hasRwd = true
 			if !stakeStart && 0 < rwd.Data.StakerCounter {
 				stakeStart = true
 			}
@@ -92,7 +116,9 @@ out2:
 	// TODO: validator claim payment
 	if err != nil {
 		log.Debug(err)
+		return
 	}
+
 }
 
 // find out if we need to create a receipt, then wait for a receipt to be created
@@ -116,25 +142,44 @@ func loopGetReceiptWithData(
 		}
 	}
 	if hasRwd {
-		errorC <- nil
-		rwdC <- rwd
-		return
+		// use selects to make sure we do not block
+		select {
+		case <-doneC:
+		case errorC <- nil:
+			select {
+			case <-doneC:
+			case rwdC <- rwd:
+			}
+		}
 	}
+}
 
-	receiptSub := p.OnReceipt(validatorId)
-	defer receiptSub.Unsubscribe()
-
-	select {
-	case <-doneC:
-		err = errors.New("canceled")
-	case err = <-receiptSub.ErrorC:
-	case rwd = <-receiptSub.StreamC:
-	}
-
+// claim rent back, also claim revenue
+func (pi *listenPeriodInternal) receipt_close(ri *receiptInfo) error {
+	err := pi.script.SetTx(pi.config.Admin)
 	if err != nil {
-		errorC <- err
-	} else {
-		errorC <- nil
-		rwdC <- rwd
+		return err
 	}
+	err = pi.script.ValidatorWithdrawReceipt(
+		pi.router.Controller,
+		ri.pwd.Id,
+		pi.pipeline,
+		pi.validator,
+		pi.config.Admin,
+		ri.receiptId,
+	)
+	if err != nil {
+		return err
+	}
+	err = pi.script.FinishTx(true)
+	if err != nil {
+		return err
+	}
+	return nil
+}
+
+func (pi *listenPeriodInternal) receipt_delete(ri *receiptInfo) {
+	log.Debugf("removing receipt for payout=%s", ri.pwd.Id.String())
+	ri.cancel()
+
 }

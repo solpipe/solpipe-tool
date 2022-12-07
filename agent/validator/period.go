@@ -15,22 +15,24 @@ import (
 )
 
 type listenPeriodInternal struct {
-	ctx           context.Context
-	errorC        chan<- error
-	setValidatorC chan<- sgo.PublicKey // payout id
-	slotHome      slot.SlotHome
-	router        rtr.Router
-	pipeline      pipe.Pipeline
-	pipelineData  cba.Pipeline
-	validator     val.Validator
-	validatorData cba.ValidatorManager
-	config        rly.Configuration
-	script        *script.Script
-	payoutMap     map[string]pipe.PayoutWithData
+	ctx    context.Context
+	errorC chan<- error
+	//setValidatorC chan<- sgo.PublicKey // payout id
+	slotHome       slot.SlotHome
+	router         rtr.Router
+	pipeline       pipe.Pipeline
+	pipelineData   cba.Pipeline
+	validator      val.Validator
+	validatorData  cba.ValidatorManager
+	config         rly.Configuration
+	script         *script.Script
+	payoutMap      map[string]*receiptInfo
+	closeReceiptC  chan<- sgo.PublicKey
+	deleteReceiptC chan<- sgo.PublicKey
 }
 
 // A pipeline has been selected, so listen for new Payout periods.
-func loopListenPeriod(
+func loopListenPipeline(
 	ctx context.Context,
 	errorC chan<- error,
 	config rly.Configuration,
@@ -38,15 +40,19 @@ func loopListenPeriod(
 	router rtr.Router,
 	pipeline pipe.Pipeline,
 	validator val.Validator,
+
 ) {
 	var err error
 	doneC := ctx.Done()
-	setValidatorOnPayoutC := make(chan sgo.PublicKey, 1)
+	closeReceiptC := make(chan sgo.PublicKey)
+	deleteReceiptC := make(chan sgo.PublicKey)
+	log.Debugf("on listen pipeline=%s", pipeline.Id.String())
 
 	pi := new(listenPeriodInternal)
 	pi.ctx = ctx
 	pi.errorC = errorC
-	pi.setValidatorC = setValidatorOnPayoutC
+	pi.closeReceiptC = closeReceiptC
+	pi.deleteReceiptC = deleteReceiptC
 	pi.config = config
 	pi.slotHome = slotHome
 	pi.router = router
@@ -62,7 +68,7 @@ func loopListenPeriod(
 		errorC <- err
 		return
 	}
-	pi.payoutMap = make(map[string]pipe.PayoutWithData)
+	pi.payoutMap = make(map[string]*receiptInfo)
 	pi.script, err = config.ScriptBuilder(pi.ctx)
 	if err != nil {
 		errorC <- err
@@ -71,23 +77,31 @@ func loopListenPeriod(
 
 	payoutSub := pi.pipeline.OnPayout()
 	defer payoutSub.Unsubscribe()
-	pwdStreamC := make(chan pipe.PayoutWithData)
-	go lookupPayoutWithData(pi.ctx, pi.pipeline, pi.errorC, pwdStreamC)
+	newPwdStreamC := make(chan pipe.PayoutWithData)
+	go lookupPayoutWithData(pi.ctx, pi.pipeline, pi.errorC, newPwdStreamC)
 
 out:
 	for {
 		select {
 		case <-doneC:
 			break out
-		case payoutId := <-setValidatorOnPayoutC:
-			// run the SetValidator instruction to cr
-			pi.validator_set(payoutId)
 		case err = <-payoutSub.ErrorC:
 			break out
 		case pwd := <-payoutSub.StreamC:
 			pi.on_payout(pwd)
-		case pwd := <-pwdStreamC:
+		case pwd := <-newPwdStreamC:
 			pi.on_payout(pwd)
+		case payoutId := <-closeReceiptC:
+			ri, present := pi.payoutMap[payoutId.String()]
+			if present {
+				pi.receipt_close(ri)
+			}
+		case payoutId := <-deleteReceiptC:
+			ri, present := pi.payoutMap[payoutId.String()]
+			if present {
+				delete(pi.payoutMap, payoutId.String())
+				pi.receipt_delete(ri)
+			}
 		}
 	}
 
@@ -121,13 +135,15 @@ func lookupPayoutWithData(
 	}
 }
 
-func (pi *listenPeriodInternal) validator_set(payoutId sgo.PublicKey) error {
-	err := pi.script.SetTx(pi.config.Admin)
+// create a receipt for some payout (corresponds to a single pipeline)
+func (pi *listenPeriodInternal) validator_set(payoutId sgo.PublicKey) (receiptId sgo.PublicKey, err error) {
+	log.Debugf("setting validator to payout=%s", payoutId.String())
+	err = pi.script.SetTx(pi.config.Admin)
 	if err != nil {
-		return err
+		return
 	}
 	//var receipt sgo.PublicKey
-	_, err = pi.script.ValidatorSetPipeline(
+	receiptId, err = pi.script.ValidatorSetPipeline(
 		pi.pipelineData.Controller,
 		payoutId,
 		pi.pipeline.Id,
@@ -135,27 +151,62 @@ func (pi *listenPeriodInternal) validator_set(payoutId sgo.PublicKey) error {
 		pi.config.Admin,
 	)
 	if err != nil {
-		return err
+		return
 	}
 	err = pi.script.FinishTx(true)
 	if err != nil {
-		return err
+		return
 	}
-	return nil
+	return
 }
 
 func (pi *listenPeriodInternal) on_payout(pwd pipe.PayoutWithData) {
 	_, present := pi.payoutMap[pwd.Id.String()]
 	if !present {
-		pi.payoutMap[pwd.Id.String()] = pwd
+		log.Debugf("on payout id=%s", pwd.Id.String())
+		ctxC, cancel := context.WithCancel(pi.ctx)
+
 		go loopReceipt(
-			pi.ctx,
+			ctxC,
+			cancel,
 			pi.errorC,
-			pi.setValidatorC,
 			pi.slotHome,
 			pwd.Data.Period,
 			pwd,
 			pi.validator.Id,
 		)
+
+		receiptId, err := pi.validator_set(pwd.Id)
+		ri := &receiptInfo{
+			pwd:       pwd,
+			cancel:    cancel,
+			receiptId: receiptId,
+		}
+		if err != nil {
+			log.Debug(err)
+			ri.cancel()
+		} else {
+			pi.payoutMap[ri.Id().String()] = ri
+			go loopDeleteReceipt(pi.ctx, ctxC, pi.deleteReceiptC, ri.pwd.Id)
+		}
+	}
+}
+
+func loopDeleteReceipt(
+	ctxParent context.Context,
+	ctxChild context.Context,
+	deleteC chan<- sgo.PublicKey,
+	payoutId sgo.PublicKey,
+) {
+	parentC := ctxParent.Done()
+	childC := ctxChild.Done()
+	select {
+	case <-parentC:
+		// we are turning off completely
+	case <-childC:
+		select {
+		case <-parentC:
+		case deleteC <- payoutId:
+		}
 	}
 }

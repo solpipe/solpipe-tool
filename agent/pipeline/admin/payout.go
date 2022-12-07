@@ -272,6 +272,7 @@ func (pi *payoutInternal) close_payout() error {
 	}
 	err = pi.script.FinishTx(true)
 	if err != nil {
+		log.Debug("failed to close payout id=%s", pi.payout.Id.String())
 		os.Stderr.WriteString(err.Error() + "\n")
 		return err
 	}

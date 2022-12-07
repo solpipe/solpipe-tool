@@ -107,3 +107,19 @@ func GetTokenAccount(ctx context.Context, rpcClient *sgorpc.Client, owner sgo.Pu
 	}
 	return a, nil
 }
+
+func (e1 *Script) token_account(
+	payer sgo.PrivateKey,
+	owner sgo.PublicKey,
+	mint sgo.PublicKey,
+) (accountId sgo.PublicKey, err error) {
+	accountId, _, err = sgo.FindAssociatedTokenAddress(owner, mint)
+	if err != nil {
+		return
+	}
+	_, err = e1.rpc.GetAccountInfo(e1.ctx, accountId)
+	if err != nil {
+		err = e1.CreateTokenAccount(payer, owner, mint)
+	}
+	return
+}

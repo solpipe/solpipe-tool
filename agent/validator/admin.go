@@ -9,7 +9,6 @@ import (
 	sgo "github.com/SolmateDev/solana-go"
 	log "github.com/sirupsen/logrus"
 	pba "github.com/solpipe/solpipe-tool/proto/admin"
-	pipe "github.com/solpipe/solpipe-tool/state/pipeline"
 	"github.com/solpipe/solpipe-tool/util"
 )
 
@@ -70,80 +69,34 @@ func (a adminExternal) SetDefault(
 ) (*pba.ValidatorSettings, error) {
 
 	log.Debug("validator settings - 1")
-	var err error
-	if len(req.PipelineId) == 0 {
-		log.Debug("validator settings - 2")
-		err = a.pipeline_blank(ctx)
+	newReq := new(pba.ValidatorSettings)
+	util.CopyMessage(req, newReq)
+
+	if 0 < len(req.PipelineId) {
+		// make sure a pipeline actually exists before interrupting loopInternal
+
+		pipelineId, err := sgo.PublicKeyFromBase58(req.PipelineId)
 		if err != nil {
 			return nil, err
-		} else {
-			log.Debug("validator settings - 3")
-			return a.GetDefault(ctx, &pba.Empty{})
+		}
+
+		_, err = a.agent.router.PipelineById(pipelineId)
+		if err != nil {
+			return nil, err
 		}
 	}
-	// the pipeline is not blank
-	pipelineId, err := sgo.PublicKeyFromBase58(req.PipelineId)
-	if err != nil {
-		return nil, err
-	}
-	pipeline, err := a.agent.router.PipelineById(pipelineId)
-	if err != nil {
-		return nil, err
-	}
-	log.Debugf("validator settings - 4 - pipeline=%s", pipelineId.String())
-	err = a.pipeline_set(ctx, pipeline)
-	if err != nil {
-		return nil, err
-	}
-
-	return a.GetDefault(ctx, &pba.Empty{})
-}
-
-func (a adminExternal) pipeline_set(ctx context.Context, pipeline pipe.Pipeline) error {
-	doneC := a.agent.ctx.Done()
-	errorC := make(chan error, 1)
-	err := a.send_cb(ctx, func(in *internal) {
-		errorC <- in.pipeline_set(pipeline)
-	})
-	if err != nil {
-		return err
-	}
+	var err error
+	doneC := ctx.Done()
+	errorC := make(chan error)
 	select {
 	case <-doneC:
 		err = errors.New("canceled")
-	case err = <-errorC:
+	case a.agent.internalC <- func(in *internal) {
+		errorC <- in.settings_change(newReq)
+	}:
 	}
 	if err != nil {
-		return err
+		return nil, err
 	}
-	return nil
-}
-
-func (a adminExternal) pipeline_blank(ctx context.Context) error {
-	doneC := a.agent.ctx.Done()
-	errorC := make(chan error, 1)
-	err := a.send_cb(ctx, func(in *internal) {
-		errorC <- in.pipeline_blank()
-	})
-	if err != nil {
-		return err
-	}
-	select {
-	case <-doneC:
-		err = errors.New("canceled")
-	case err = <-errorC:
-	}
-	if err != nil {
-		return err
-	}
-	return nil
-}
-
-func (in *internal) pipeline_blank() error {
-	in.hasPipeline = false
-	if in.payoutScannerCtx != nil {
-		in.payoutScannerCancel()
-		in.payoutScannerCtx = nil
-	}
-	return nil
+	return req, nil
 }
