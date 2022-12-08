@@ -156,6 +156,7 @@ func loopGetReceiptWithData(
 
 // claim rent back, also claim revenue
 func (pi *listenPeriodInternal) receipt_close(ri *receiptInfo) error {
+	log.Debugf("attemping to close receipt id=%s (payout=%s)", ri.receiptId.String(), ri.pwd.Id.String())
 	err := pi.script.SetTx(pi.config.Admin)
 	if err != nil {
 		return err

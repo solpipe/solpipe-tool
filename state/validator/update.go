@@ -49,7 +49,8 @@ type receiptHolder struct {
 func (in *internal) on_receipt(r rpt.Receipt, d cba.Receipt) {
 	_, present := in.receipts[d.Payout.String()]
 	if present {
-		log.Debug("receipt duplicate in validator")
+		log.Debugf("receipt duplicate in validator: id=%s", r.Id.String())
+		log.Debugf("%+v", d)
 		return
 	}
 

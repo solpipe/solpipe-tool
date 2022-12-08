@@ -2,6 +2,7 @@ package validator
 
 import (
 	"context"
+	"time"
 
 	sgo "github.com/SolmateDev/solana-go"
 	log "github.com/sirupsen/logrus"
@@ -29,6 +30,7 @@ type listenPeriodInternal struct {
 	payoutMap      map[string]*receiptInfo
 	closeReceiptC  chan<- sgo.PublicKey
 	deleteReceiptC chan<- sgo.PublicKey
+	tryCloseC      chan<- *tryInfo
 }
 
 // A pipeline has been selected, so listen for new Payout periods.
@@ -46,6 +48,7 @@ func loopListenPipeline(
 	doneC := ctx.Done()
 	closeReceiptC := make(chan sgo.PublicKey)
 	deleteReceiptC := make(chan sgo.PublicKey)
+	tryCloseC := make(chan *tryInfo, 2)
 	log.Debugf("on listen pipeline=%s", pipeline.Id.String())
 
 	pi := new(listenPeriodInternal)
@@ -53,6 +56,7 @@ func loopListenPipeline(
 	pi.errorC = errorC
 	pi.closeReceiptC = closeReceiptC
 	pi.deleteReceiptC = deleteReceiptC
+	pi.tryCloseC = tryCloseC
 	pi.config = config
 	pi.slotHome = slotHome
 	pi.router = router
@@ -80,11 +84,23 @@ func loopListenPipeline(
 	newPwdStreamC := make(chan pipe.PayoutWithData)
 	go lookupPayoutWithData(pi.ctx, pi.pipeline, pi.errorC, newPwdStreamC)
 
+	maxTriesToClose := 5
+	tryDelay := 30 * time.Second
 out:
 	for {
 		select {
 		case <-doneC:
 			break out
+		case try := <-tryCloseC:
+			if try.tries < maxTriesToClose {
+				try.err = pi.receipt_close(try.ri)
+				if try.err != nil {
+					go try.delay_send(pi.ctx, tryDelay, pi.tryCloseC)
+				}
+			} else {
+				err = try.err
+				break out
+			}
 		case err = <-payoutSub.ErrorC:
 			break out
 		case pwd := <-payoutSub.StreamC:
@@ -94,7 +110,11 @@ out:
 		case payoutId := <-closeReceiptC:
 			ri, present := pi.payoutMap[payoutId.String()]
 			if present {
-				pi.receipt_close(ri)
+				try := &tryInfo{
+					tries: 0,
+					ri:    ri,
+				}
+				go try.delay_send(pi.ctx, tryDelay, pi.tryCloseC)
 			}
 		case payoutId := <-deleteReceiptC:
 			ri, present := pi.payoutMap[payoutId.String()]
@@ -109,6 +129,27 @@ out:
 		log.Debug(err)
 		errorC <- err
 	}
+}
+
+type tryInfo struct {
+	tries int
+	ri    *receiptInfo
+	err   error
+}
+
+func (ti *tryInfo) delay_send(ctx context.Context, delay time.Duration, tryC chan<- *tryInfo) {
+	doneC := ctx.Done()
+	select {
+	case <-doneC:
+		return
+	case <-time.After(delay):
+	}
+	ti.tries++
+	select {
+	case <-doneC:
+	case tryC <- ti:
+	}
+
 }
 
 func lookupPayoutWithData(
