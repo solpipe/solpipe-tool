@@ -53,7 +53,7 @@ solpipe --verbose \
    --payer=./localconfig/single/faucet.json \
    ./localconfig/single/pipeline.json \
    ./localconfig/single/pipeline-admin.json \
-   1/240 1/10 1/2 100
+   1/240 1/10 100 20
 ```
 
 ### Pipeline Agent - Daemon
