@@ -66,13 +66,11 @@ solpipe --verbose  \
    --ws=ws://localhost:8900  \
    pipeline agent \
    --crank_rate=1/100 \
-   --decay_rate=1/100 \
    --payout_share=95/100 \
    --clear_listen=127.0.0.1:50051 \
-   --admin_url="unix:///tmp/pipeline.socket" \
+   --admin_url="tcp://127.0.0.1:30051" \
   $(solana-keygen pubkey ./localconfig/single/pipeline.json) \
-  ./localconfig/single/pipeline-admin.json \
-  ./localconfig/single/pipeline-config.json
+  ./localconfig/single/pipeline-admin.json  $(pwd)/localconfig/single/pipeline-config.json 100
 ```
 * make sure `/tmp/pipeline.socket` does not exist prior to running this command
 
@@ -189,4 +187,15 @@ solpipe --verbose \
   --rpc=http://localhost:8899 \
   --ws=ws://localhost:8900 \
   cranker 10 ./localconfig/single/faucet.json
+```
+
+# Debugging
+
+## Payouts
+
+```bash
+solpipe --verbose  \
+   --rpc=http://localhost:8899 \
+   --ws=ws://localhost:8900  \
+   payout status --help
 ```

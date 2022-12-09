@@ -43,7 +43,7 @@ func loopInsertDeleteValidator(
 	slotSub := slotHome.OnSlot()
 	defer slotSub.Unsubscribe()
 
-	statsSub := update.Validator.OnStats()
+	statsSub := update.Validator.OnData()
 	defer statsSub.Unsubscribe()
 
 	start := update.Start

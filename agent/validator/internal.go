@@ -9,11 +9,13 @@ import (
 	sgorpc "github.com/SolmateDev/solana-go/rpc"
 	sgows "github.com/SolmateDev/solana-go/rpc/ws"
 	log "github.com/sirupsen/logrus"
+	cba "github.com/solpipe/cba"
 	pba "github.com/solpipe/solpipe-tool/proto/admin"
 	rly "github.com/solpipe/solpipe-tool/proxy/relay"
 	"github.com/solpipe/solpipe-tool/script"
 	ctr "github.com/solpipe/solpipe-tool/state/controller"
 	pipe "github.com/solpipe/solpipe-tool/state/pipeline"
+	rpt "github.com/solpipe/solpipe-tool/state/receipt"
 	rtr "github.com/solpipe/solpipe-tool/state/router"
 	val "github.com/solpipe/solpipe-tool/state/validator"
 )
@@ -35,6 +37,15 @@ type internal struct {
 	pipeline       *pipe.Pipeline
 	pipelineCtx    context.Context // loopPeriod scoops up new payout accounts
 	pipelineCancel context.CancelFunc
+	receiptMap     map[uint64]*validatorReceiptInfo // start->vri
+	newPayoutC     chan<- pipe.PayoutWithData
+}
+
+type validatorReceiptInfo struct {
+	rsf    *cba.ReceiptWithStartFinish
+	ctx    context.Context
+	cancel context.CancelFunc
+	rwd    rpt.ReceiptWithData
 }
 
 func loopInternal(
@@ -54,6 +65,7 @@ func loopInternal(
 	var err error
 	errorC := make(chan error, 1)
 	doneC := ctx.Done()
+	newPayoutC := make(chan pipe.PayoutWithData)
 	in := new(internal)
 	in.ctx = ctx
 	in.errorC = errorC
@@ -68,6 +80,12 @@ func loopInternal(
 	in.router = router
 	in.validator = validator
 	in.settings = nil
+	in.receiptMap = make(map[uint64]*validatorReceiptInfo)
+	in.newPayoutC = newPayoutC
+	valSub := validator.OnData()
+	defer valSub.Unsubscribe()
+	dataFetchC := make(chan cba.ValidatorManager)
+	go loopFetchValidatorData(in.ctx, validator, in.errorC, dataFetchC)
 
 	if in.config_exists() {
 		err = in.config_load()
@@ -85,12 +103,67 @@ out:
 			break out
 		case <-doneC:
 			break out
+		case err = <-valSub.ErrorC:
+			break out
+		case x := <-dataFetchC:
+			in.on_data(x)
+		case x := <-valSub.StreamC:
+			in.on_data(x)
 		case req := <-internalC:
 			req(in)
+		case pwd := <-newPayoutC:
+			log.Debugf("new payout(%s)=%+v", pwd.Id.String(), pwd.Data)
 		}
 	}
 
 	in.finish(err)
+}
+
+func loopFetchValidatorData(
+	ctx context.Context,
+	validator val.Validator,
+	errorC chan<- error,
+	dataC chan<- cba.ValidatorManager,
+) {
+	doneC := ctx.Done()
+	data, err := validator.Data()
+	if err != nil {
+		select {
+		case <-doneC:
+		case errorC <- err:
+		}
+	} else {
+		select {
+		case <-doneC:
+		case dataC <- data:
+		}
+	}
+}
+
+func (in *internal) on_data(x cba.ValidatorManager) {
+	for _, r := range x.Ring {
+		y, present := in.receiptMap[r.Start]
+		if !present && !r.HasValidatorWithdrawn {
+			rwd, p := in.validator.ReceiptById(r.Receipt)
+			if p {
+				ctxC, cancel := context.WithCancel(in.ctx)
+				y = &validatorReceiptInfo{
+					rsf:    &r,
+					ctx:    ctxC,
+					cancel: cancel,
+					rwd:    rwd,
+				}
+				in.receiptMap[r.Start] = y
+				in.on_receipt(y)
+			} else {
+				in.errorC <- errors.New("failed to find receipt=" + r.Receipt.String())
+			}
+
+		} else if present && r.HasValidatorWithdrawn && !y.rsf.HasValidatorWithdrawn {
+			// false->true means receiptMap needs to be canceled
+			y.cancel()
+		}
+	}
 }
 
 func (in *internal) finish(err error) {

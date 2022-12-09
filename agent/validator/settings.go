@@ -65,11 +65,8 @@ func (in *internal) settings_change(newSettings *pba.ValidatorSettings) error {
 			go loopListenPipeline(
 				in.pipelineCtx,
 				in.errorC,
-				in.config,
-				in.controller.SlotHome(),
-				in.router,
 				*in.pipeline,
-				in.validator,
+				in.newPayoutC,
 			)
 		}
 	} else {

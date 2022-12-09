@@ -108,6 +108,7 @@ func (e1 *Script) AddPipelineDirect(
 	b.SetTickSize(tickSize)
 	log.Debugf("refund space=%d", refundSpace)
 	b.SetRefundSpace(refundSpace)
+	b.SetReceiptLimit(RECEIPT_LIMIT_DEFUALT)
 
 	e1.txBuilder.AddInstruction(b.Build())
 
@@ -147,6 +148,7 @@ func (e1 *Script) UpdatePipeline(
 	b.SetValidatorPayoutShareNum(validatorPayoutShare.N)
 	b.SetValidatorPayoutShareDen(validatorPayoutShare.D)
 	b.SetTickSize(tickSize)
+	b.SetReceiptLimit(RECEIPT_LIMIT_DEFUALT) //TODO: make this variable
 
 	e1.txBuilder.AddInstruction(b.Build())
 
@@ -156,3 +158,5 @@ func (e1 *Script) UpdatePipeline(
 const TICKSIZE_DEFAULT uint16 = 1
 
 const BIDSPACE_DEFAULT uint16 = 50
+
+const RECEIPT_LIMIT_DEFUALT uint8 = 20

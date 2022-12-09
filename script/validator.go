@@ -90,8 +90,8 @@ func (e1 *Script) ValidatorWithdrawReceipt(
 	payoutId sgo.PublicKey,
 	pipeline pipe.Pipeline,
 	validator val.Validator,
-	validatorAdmin sgo.PrivateKey,
 	receiptId sgo.PublicKey,
+	payer sgo.PrivateKey,
 ) (err error) {
 	if e1.txBuilder == nil {
 		err = errors.New("no tx builder")
@@ -105,6 +105,10 @@ func (e1 *Script) ValidatorWithdrawReceipt(
 	if err != nil {
 		return
 	}
+	validatorData, err := validator.Data()
+	if err != nil {
+		return
+	}
 
 	b := cba.NewValidatorWithdrawReceiptInstructionBuilder()
 	b.SetClockAccount(sgo.SysVarClockPubkey)
@@ -114,9 +118,8 @@ func (e1 *Script) ValidatorWithdrawReceipt(
 	b.SetPipelineAccount(pipeline.Id)
 	b.SetReceiptAccount(receiptId)
 	b.SetTokenProgramAccount(sgo.TokenProgramID)
-	b.SetValidatorAdminAccount(validatorAdmin.PublicKey())
-	e1.AppendKey(validatorAdmin)
-	fundAccountId, err := e1.token_account(validatorAdmin, validatorAdmin.PublicKey(), controllerData.PcMint)
+	b.SetValidatorAdminAccount(validatorData.Admin)
+	fundAccountId, err := e1.token_account(payer, validatorData.Admin, controllerData.PcMint)
 	if err != nil {
 		return
 	}

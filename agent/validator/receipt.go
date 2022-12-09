@@ -2,185 +2,129 @@ package validator
 
 import (
 	"context"
+	"time"
 
 	sgo "github.com/SolmateDev/solana-go"
-	log "github.com/sirupsen/logrus"
 	cba "github.com/solpipe/cba"
-	pyt "github.com/solpipe/solpipe-tool/state/payout"
-	pipe "github.com/solpipe/solpipe-tool/state/pipeline"
 	rpt "github.com/solpipe/solpipe-tool/state/receipt"
 	"github.com/solpipe/solpipe-tool/state/slot"
 )
 
+func (in *internal) on_receipt(vri *validatorReceiptInfo) {
+	vri.cancel()
+}
+
 type receiptInfo struct {
-	pwd       pipe.PayoutWithData
-	cancel    context.CancelFunc
-	receiptId sgo.PublicKey
+	ctx     context.Context
+	errorC  chan<- error
+	receipt rpt.Receipt
+	data    *cba.Receipt
+	slot    uint64
 }
 
-func (ri *receiptInfo) Id() sgo.PublicKey {
-	return ri.pwd.Id
-}
-
-const RECEIPT_END_DELAY uint64 = 100
-
-// listen for a receipt.
-// wait til stakers claim their payments, then delete the receipt account and claim validator payout
 func loopReceipt(
 	ctx context.Context,
 	cancel context.CancelFunc,
-	errorC chan<- error,
+	deleteC chan<- sgo.PublicKey,
+	parentErrorC chan<- error,
 	slotHome slot.SlotHome,
-	period cba.Period,
-	item pipe.PayoutWithData,
-	validatorId sgo.PublicKey,
+	rwd rpt.ReceiptWithData,
 ) {
 	defer cancel()
-	p := item.Payout
-	fetchErrorC := make(chan error, 1)
-	rwdC := make(chan rpt.ReceiptWithData, 1)
-	receiptSub := p.OnReceipt(validatorId)
-	defer receiptSub.Unsubscribe()
-	ctxC, cancelC := context.WithCancel(ctx)
-	defer cancelC()
-	go loopGetReceiptWithData(
-		ctxC,
-		validatorId,
-		p,
-		fetchErrorC,
-		rwdC,
-	)
+	var err error
+	errorC := make(chan error, 1)
 	doneC := ctx.Done()
 
-	var err error
-	var rwd rpt.ReceiptWithData
-	hasRwd := false
-out:
-	for {
-		select {
-		case <-doneC:
-			break out
-		case err = <-fetchErrorC:
-			break out
-		case err = <-receiptSub.ErrorC:
-			break out
-		case rwd = <-receiptSub.StreamC:
-			hasRwd = true
-			break out
-		case rwd = <-rwdC:
-			hasRwd = true
-			break out
-		}
-	}
+	ri := new(receiptInfo)
+	ri.ctx = ctx
+	ri.errorC = errorC
+	ri.receipt = rwd.Receipt
+	ri.data = &rwd.Data
+	ri.slot = 0
 
-	if err != nil {
-		errorC <- err
-		return
-	}
-	if !hasRwd {
-		return
-	}
+	closeC := rwd.Receipt.OnClose()
 
-	stakeStart := false
-	stakeCount := rwd.Data.StakerCounter
-	finish := period.Start + period.Length
+	dataC := rwd.Receipt.OnData()
+	defer dataC.Unsubscribe()
 
 	slotSub := slotHome.OnSlot()
 	defer slotSub.Unsubscribe()
-	slot := uint64(0)
+out:
+	for {
 
-	// 1. the stakeCount starts at 0
-	// 2. the stakeCount goes up as each staker reports their stake
-	// 3. the stakeCount goes down as each staker claims revenue
-	// 4. the validator can claim revenue, thereby closing this receipt account
-out2:
-	for !stakeStart || (stakeStart && 0 < stakeCount) || slot < finish+RECEIPT_END_DELAY {
 		select {
+		case <-closeC:
+			break out
 		case <-doneC:
-			break out2
-		case err = <-fetchErrorC:
-			break out2
-		case err = <-receiptSub.ErrorC:
-			break out2
-		case rwd = <-receiptSub.StreamC:
-			hasRwd = true
-			if !stakeStart && 0 < rwd.Data.StakerCounter {
-				stakeStart = true
-			}
-			stakeCount = rwd.Data.StakerCounter
+			break out
+		case err = <-errorC:
+			break out
+		case err = <-dataC.ErrorC:
+			break out
+		case x := <-dataC.StreamC:
+			ri.on_data(x)
 		case err = <-slotSub.ErrorC:
-			break out2
-		case slot = <-slotSub.StreamC:
+			break out
+		case ri.slot = <-slotSub.StreamC:
+			ri.check_close()
 		}
 	}
-	// TODO: validator claim payment
+
 	if err != nil {
-		log.Debug(err)
-		return
-	}
-
-}
-
-// find out if we need to create a receipt, then wait for a receipt to be created
-func loopGetReceiptWithData(
-	ctx context.Context,
-	validatorId sgo.PublicKey,
-	p pyt.Payout,
-	errorC chan<- error,
-	rwdC chan<- rpt.ReceiptWithData,
-) {
-	doneC := ctx.Done()
-	hasRwd := false
-	var rwd rpt.ReceiptWithData
-	list, err := p.Receipt()
-	if err == nil {
-		for _, z := range list {
-			if z.Data.Validator.Equals(validatorId) {
-				hasRwd = true
-				rwd = z
-			}
-		}
-	}
-	if hasRwd {
-		// use selects to make sure we do not block
 		select {
-		case <-doneC:
-		case errorC <- nil:
-			select {
-			case <-doneC:
-			case rwdC <- rwd:
-			}
+		case <-time.After(10 * time.Second):
+		case parentErrorC <- err:
+		}
+	} else {
+		select {
+		case <-time.After(10 * time.Second):
+		case parentErrorC <- err:
 		}
 	}
 }
 
+// figure out when to close the receipt
+func (ri *receiptInfo) on_data(x cba.Receipt) {
+	*ri.data = x
+	ri.check_close()
+}
+
+func (ri *receiptInfo) check_close() {
+	if ri.data.Limit < ri.slot {
+
+	}
+}
+
+/*
 // claim rent back, also claim revenue
-func (pi *listenPeriodInternal) receipt_close(ri *receiptInfo) error {
-	log.Debugf("attemping to close receipt id=%s (payout=%s)", ri.receiptId.String(), ri.pwd.Id.String())
-	err := pi.script.SetTx(pi.config.Admin)
+func (pi *listenPipelineInternal) receipt_close(rwd rpt.ReceiptWithData) error {
+	receiptId := rwd.Receipt.Id
+	log.Debugf("attemping to close receipt id=%s (payout=%s)", receiptId.String(), rwd.Data.Payout.String())
+	err := pi.scriptReceiptClose.SetTx(pi.config.Admin)
 	if err != nil {
 		return err
 	}
-	err = pi.script.ValidatorWithdrawReceipt(
+	err = pi.scriptReceiptClose.ValidatorWithdrawReceipt(
 		pi.router.Controller,
-		ri.pwd.Id,
+		rwd.Data.Payout,
 		pi.pipeline,
 		pi.validator,
+		receiptId,
 		pi.config.Admin,
-		ri.receiptId,
 	)
 	if err != nil {
 		return err
 	}
-	err = pi.script.FinishTx(true)
+	err = pi.scriptReceiptClose.FinishTx(true)
 	if err != nil {
 		return err
 	}
 	return nil
 }
 
-func (pi *listenPeriodInternal) receipt_delete(ri *receiptInfo) {
+func (pi *listenPipelineInternal) receipt_delete(ri *receiptInfo) {
 	log.Debugf("removing receipt for payout=%s", ri.pwd.Id.String())
 	ri.cancel()
 
 }
+*/

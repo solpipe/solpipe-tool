@@ -204,7 +204,7 @@ func (e1 Validator) Print() (string, error) {
 	return fmt.Sprintf("Validator:\n\tAdmin=%s\n\tReceipt=%+v\n\tVote=%s", data.Admin.String(), data.Ring, data.Vote.String()), nil
 }
 
-func (e1 Validator) OnStats() dssub.Subscription[cba.ValidatorManager] {
+func (e1 Validator) OnData() dssub.Subscription[cba.ValidatorManager] {
 	return dssub.SubscriptionRequest(e1.updateC, func(data cba.ValidatorManager) bool {
 		return true
 	})

@@ -216,17 +216,14 @@ type payoutChannelGroup struct {
 
 func (out payoutChannelGroup) writeData(d sub.PayoutWithData) error {
 	var err error
-	if d.Id.String() == "11111111111111111111111111111111" {
-		log.Debugf("websocket: sending d=%+v", &d)
-		panic("bad id")
-	}
+
 	select {
 	case <-out.serverCtx.Done():
 		err = errors.New("canceled")
 	case <-out.clientCtx.Done():
 		err = errors.New("canceled")
 	case out.dataC <- d:
-
+		log.Debugf("wrote payout=%s validator count=%d", d.Id.String(), d.Data.ValidatorCount)
 	}
 	return err
 }

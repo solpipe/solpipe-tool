@@ -1,7 +1,7 @@
 package sub
 
 import (
-	"errors"
+	"fmt"
 
 	log "github.com/sirupsen/logrus"
 )
@@ -61,9 +61,9 @@ func (sh *SubHome[T]) Broadcast(value T) {
 			select {
 			case v.streamC <- value:
 			default:
-				log.Debug("subscription timed out")
+				log.Debug("subscription timed out (sub type=%T)", value)
 				// errorC guaranteed to have 1 empty space
-				v.errorC <- errors.New("queue is full")
+				v.errorC <- fmt.Errorf("queue is full (sub type=%T)", value)
 				delete(sh.subs, id)
 			}
 		}
