@@ -6,29 +6,52 @@ import (
 
 	sgo "github.com/SolmateDev/solana-go"
 	cba "github.com/solpipe/cba"
+	spt "github.com/solpipe/solpipe-tool/script"
+	ctr "github.com/solpipe/solpipe-tool/state/controller"
+	pipe "github.com/solpipe/solpipe-tool/state/pipeline"
 	rpt "github.com/solpipe/solpipe-tool/state/receipt"
 	"github.com/solpipe/solpipe-tool/state/slot"
+	val "github.com/solpipe/solpipe-tool/state/validator"
 )
 
+// we just need to wait until the receipt
 func (in *internal) on_receipt(vri *validatorReceiptInfo) {
-	vri.cancel()
+	go loopReceipt(
+		vri.ctx,
+		vri.cancel,
+		in.errorC,
+		in.controller.SlotHome(),
+		in.scriptWrapper,
+		vri.rwd,
+		in.config.Admin,
+		in.controller,
+		vri.pipeline,
+		in.validator,
+	)
 }
 
 type receiptInfo struct {
-	ctx     context.Context
-	errorC  chan<- error
-	receipt rpt.Receipt
-	data    *cba.Receipt
-	slot    uint64
+	ctx           context.Context
+	errorC        chan<- error
+	receipt       rpt.Receipt
+	data          *cba.Receipt
+	slot          uint64
+	scriptWrapper spt.Wrapper
+	close         bool
+	admin         sgo.PrivateKey
 }
 
 func loopReceipt(
 	ctx context.Context,
 	cancel context.CancelFunc,
-	deleteC chan<- sgo.PublicKey,
 	parentErrorC chan<- error,
 	slotHome slot.SlotHome,
+	scriptWrapper spt.Wrapper,
 	rwd rpt.ReceiptWithData,
+	admin sgo.PrivateKey,
+	controller ctr.Controller,
+	pipeline pipe.Pipeline,
+	validator val.Validator,
 ) {
 	defer cancel()
 	var err error
@@ -41,6 +64,9 @@ func loopReceipt(
 	ri.receipt = rwd.Receipt
 	ri.data = &rwd.Data
 	ri.slot = 0
+	ri.scriptWrapper = scriptWrapper
+	ri.close = false
+	ri.admin = admin
 
 	closeC := rwd.Receipt.OnClose()
 
@@ -50,8 +76,7 @@ func loopReceipt(
 	slotSub := slotHome.OnSlot()
 	defer slotSub.Unsubscribe()
 out:
-	for {
-
+	for !ri.close {
 		select {
 		case <-closeC:
 			break out
@@ -71,15 +96,12 @@ out:
 	}
 
 	if err != nil {
-		select {
-		case <-time.After(10 * time.Second):
-		case parentErrorC <- err:
-		}
-	} else {
-		select {
-		case <-time.After(10 * time.Second):
-		case parentErrorC <- err:
-		}
+		parentErrorC <- err
+		return
+	}
+	err = ri.do_close(controller, pipeline, validator)
+	if err != nil {
+		parentErrorC <- err
 	}
 }
 
@@ -91,8 +113,37 @@ func (ri *receiptInfo) on_data(x cba.Receipt) {
 
 func (ri *receiptInfo) check_close() {
 	if ri.data.Limit < ri.slot {
-
+		ri.close = true
 	}
+}
+
+func (ri *receiptInfo) do_close(
+	controller ctr.Controller,
+	pipeline pipe.Pipeline,
+	validator val.Validator,
+) error {
+	return ri.scriptWrapper.Send(ri.ctx, 10, 30*time.Second, func(script *spt.Script) error {
+		err2 := script.SetTx(ri.admin)
+		if err2 != nil {
+			return err2
+		}
+		err2 = script.ValidatorWithdrawReceipt(
+			controller,
+			ri.data.Payout,
+			pipeline,
+			validator,
+			ri.receipt.Id,
+			ri.admin,
+		)
+		if err2 != nil {
+			return err2
+		}
+		err2 = script.FinishTx(true)
+		if err2 != nil {
+			return err2
+		}
+		return err2
+	})
 }
 
 /*

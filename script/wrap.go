@@ -4,36 +4,21 @@ import (
 	"context"
 	"errors"
 	"time"
-
-	sgorpc "github.com/SolmateDev/solana-go/rpc"
-	sgows "github.com/SolmateDev/solana-go/rpc/ws"
 )
 
 func Wrap(
-	ctx context.Context,
-	config *Configuration,
-	rpcClient *sgorpc.Client,
-	wsClient *sgows.Client,
-) (Wrapper, error) {
-	if config == nil {
-		return Wrapper{}, errors.New("no config")
-	}
+	script *Script,
+) Wrapper {
 
-	script := &Script{
-		ctx:    ctx,
-		rpc:    rpcClient,
-		ws:     wsClient,
-		config: config,
-	}
 	internalC := make(chan Callback, 10)
 
 	e1 := Wrapper{
-		ctx:       ctx,
+		ctx:       script.ctx,
 		internalC: internalC,
 	}
-	go loopInternal(ctx, script, internalC)
+	go loopInternal(script, internalC)
 
-	return e1, nil
+	return e1
 }
 
 type Wrapper struct {
@@ -56,11 +41,10 @@ type CallbackReplay struct {
 }
 
 func loopInternal(
-	ctx context.Context,
 	script *Script,
 	internalC <-chan Callback,
 ) {
-
+	ctx := script.ctx
 	doneC := ctx.Done()
 	replayC := make(chan Callback, 10)
 	in := new(internal)

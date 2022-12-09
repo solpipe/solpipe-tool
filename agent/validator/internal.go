@@ -12,7 +12,7 @@ import (
 	cba "github.com/solpipe/cba"
 	pba "github.com/solpipe/solpipe-tool/proto/admin"
 	rly "github.com/solpipe/solpipe-tool/proxy/relay"
-	"github.com/solpipe/solpipe-tool/script"
+	spt "github.com/solpipe/solpipe-tool/script"
 	ctr "github.com/solpipe/solpipe-tool/state/controller"
 	pipe "github.com/solpipe/solpipe-tool/state/pipeline"
 	rpt "github.com/solpipe/solpipe-tool/state/receipt"
@@ -28,24 +28,24 @@ type internal struct {
 	configFilePath   string
 	rpc              *sgorpc.Client
 	ws               *sgows.Client
-	script           *script.Script
-	//slot                uint64
-	controller     ctr.Controller
-	router         rtr.Router
-	validator      val.Validator
-	settings       *pba.ValidatorSettings
-	pipeline       *pipe.Pipeline
-	pipelineCtx    context.Context // loopPeriod scoops up new payout accounts
-	pipelineCancel context.CancelFunc
-	receiptMap     map[uint64]*validatorReceiptInfo // start->vri
-	newPayoutC     chan<- pipe.PayoutWithData
+	scriptWrapper    spt.Wrapper
+	controller       ctr.Controller
+	router           rtr.Router
+	validator        val.Validator
+	settings         *pba.ValidatorSettings
+	pipeline         *pipe.Pipeline
+	pipelineCtx      context.Context // loopPeriod scoops up new payout accounts
+	pipelineCancel   context.CancelFunc
+	receiptMap       map[uint64]*validatorReceiptInfo // start->vri
+	newPayoutC       chan<- payoutWithPipeline
 }
 
 type validatorReceiptInfo struct {
-	rsf    *cba.ReceiptWithStartFinish
-	ctx    context.Context
-	cancel context.CancelFunc
-	rwd    rpt.ReceiptWithData
+	rsf      *cba.ReceiptWithStartFinish
+	ctx      context.Context
+	cancel   context.CancelFunc
+	rwd      rpt.ReceiptWithData
+	pipeline pipe.Pipeline
 }
 
 func loopInternal(
@@ -56,7 +56,7 @@ func loopInternal(
 	config rly.Configuration,
 	rpcClient *sgorpc.Client,
 	wsClient *sgows.Client,
-	script *script.Script,
+	scriptWrapper spt.Wrapper,
 	router rtr.Router,
 	validator val.Validator,
 	configFilePath string,
@@ -65,7 +65,7 @@ func loopInternal(
 	var err error
 	errorC := make(chan error, 1)
 	doneC := ctx.Done()
-	newPayoutC := make(chan pipe.PayoutWithData)
+	newPayoutC := make(chan payoutWithPipeline)
 	in := new(internal)
 	in.ctx = ctx
 	in.errorC = errorC
@@ -74,7 +74,7 @@ func loopInternal(
 	in.config = config
 	in.rpc = rpcClient
 	in.ws = wsClient
-	in.script = script
+	in.scriptWrapper = scriptWrapper
 	//in.slot = 0
 	in.controller = router.Controller
 	in.router = router
@@ -111,8 +111,8 @@ out:
 			in.on_data(x)
 		case req := <-internalC:
 			req(in)
-		case pwd := <-newPayoutC:
-			log.Debugf("new payout(%s)=%+v", pwd.Id.String(), pwd.Data)
+		case pp := <-newPayoutC:
+			in.on_payout(pp)
 		}
 	}
 
@@ -140,18 +140,31 @@ func loopFetchValidatorData(
 	}
 }
 
+// The validator Receipt ring tells us if we have a new receipt.
+// We do not need to listen to payout.OnReceipt.
 func (in *internal) on_data(x cba.ValidatorManager) {
 	for _, r := range x.Ring {
 		y, present := in.receiptMap[r.Start]
 		if !present && !r.HasValidatorWithdrawn {
 			rwd, p := in.validator.ReceiptById(r.Receipt)
 			if p {
+				pwd, err := in.router.PayoutById(rwd.Data.Payout)
+				if err != nil {
+					in.errorC <- err
+					return
+				}
+				p, err := in.router.PipelineById(pwd.Data.Pipeline)
+				if err != nil {
+					in.errorC <- err
+					return
+				}
 				ctxC, cancel := context.WithCancel(in.ctx)
 				y = &validatorReceiptInfo{
-					rsf:    &r,
-					ctx:    ctxC,
-					cancel: cancel,
-					rwd:    rwd,
+					rsf:      &r,
+					ctx:      ctxC,
+					cancel:   cancel,
+					rwd:      rwd,
+					pipeline: p,
 				}
 				in.receiptMap[r.Start] = y
 				in.on_receipt(y)
@@ -159,9 +172,10 @@ func (in *internal) on_data(x cba.ValidatorManager) {
 				in.errorC <- errors.New("failed to find receipt=" + r.Receipt.String())
 			}
 
-		} else if present && r.HasValidatorWithdrawn && !y.rsf.HasValidatorWithdrawn {
+		} else if present && !y.rsf.HasValidatorWithdrawn && r.HasValidatorWithdrawn {
 			// false->true means receiptMap needs to be canceled
 			y.cancel()
+			delete(in.receiptMap, r.Start)
 		}
 	}
 }
@@ -211,18 +225,4 @@ func (in *internal) config_save() error {
 		return err
 	}
 	return nil
-}
-
-func (a adminExternal) send_cb(ctx context.Context, cb func(in *internal)) error {
-	doneC := ctx.Done()
-	err := ctx.Err()
-	if err != nil {
-		return err
-	}
-	select {
-	case <-doneC:
-		err = errors.New("canceled")
-	case a.agent.internalC <- cb:
-	}
-	return err
 }

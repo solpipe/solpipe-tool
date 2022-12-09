@@ -4,21 +4,14 @@ import (
 	"context"
 
 	log "github.com/sirupsen/logrus"
-	rly "github.com/solpipe/solpipe-tool/proxy/relay"
 	pipe "github.com/solpipe/solpipe-tool/state/pipeline"
-	rtr "github.com/solpipe/solpipe-tool/state/router"
-	"github.com/solpipe/solpipe-tool/state/slot"
 )
 
 type listenPipelineInternal struct {
-	ctx    context.Context
-	errorC chan<- error
-	//setValidatorC chan<- sgo.PublicKey // payout id
-	slotHome   slot.SlotHome
-	router     rtr.Router
+	ctx        context.Context
+	errorC     chan<- error
 	pipeline   pipe.Pipeline
-	config     rly.Configuration
-	newPayoutC chan<- pipe.PayoutWithData
+	newPayoutC chan<- payoutWithPipeline
 }
 
 // A pipeline has been selected, so listen for new Payout periods.
@@ -26,7 +19,7 @@ func loopListenPipeline(
 	ctx context.Context,
 	errorC chan<- error,
 	pipeline pipe.Pipeline,
-	newPayoutC chan<- pipe.PayoutWithData,
+	newPayoutC chan<- payoutWithPipeline,
 ) {
 	var err error
 	doneC := ctx.Done()
@@ -67,6 +60,9 @@ func (pi *listenPipelineInternal) on_payout(pwd pipe.PayoutWithData) {
 	doneC := pi.ctx.Done()
 	select {
 	case <-doneC:
-	case pi.newPayoutC <- pwd:
+	case pi.newPayoutC <- payoutWithPipeline{
+		pwd:      pwd,
+		pipeline: pi.pipeline,
+	}:
 	}
 }
