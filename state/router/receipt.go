@@ -23,7 +23,6 @@ func createLookupReceipt() *lookUpReceipt {
 
 func (in *internal) lookup_add_receipt(r rpt.Receipt, data cba.Receipt) {
 	in.l_receipt.byId[r.Id.String()] = r
-
 	// add receipt to validator
 	{
 		x, present := in.l_validator.receiptWithNoValidator[data.Validator.String()]
@@ -40,9 +39,9 @@ func (in *internal) lookup_add_receipt(r rpt.Receipt, data cba.Receipt) {
 	// TODO: add receipt to payout
 }
 
-func (in *internal) on_receipt(obj sub.ReceiptGroup) error {
-	id := obj.Id
-	if !obj.IsOpen {
+func (in *internal) on_receipt(d sub.ReceiptGroup) error {
+	id := d.Id
+	if !d.IsOpen {
 		y, present := in.l_receipt.byId[id.String()]
 		if present {
 			y.Close()
@@ -50,14 +49,14 @@ func (in *internal) on_receipt(obj sub.ReceiptGroup) error {
 		}
 		return nil
 	}
-	data := obj.Data
+	data := d.Data
 	var err error
 
 	newlyCreated := false
 
 	r, present := in.l_receipt.byId[id.String()]
 	if !present {
-		r, err = rpt.CreateReceipt(in.ctx, obj)
+		r, err = rpt.CreateReceipt(in.ctx, d)
 		if err != nil {
 			return err
 		}
@@ -78,6 +77,14 @@ func (in *internal) on_receipt(obj sub.ReceiptGroup) error {
 	if newlyCreated {
 		in.oa.receipt.Broadcast(r)
 		go loopDelete(in.ctx, r.OnClose(), in.reqClose.receiptCloseC, r.Id, in.ws)
+		pwd, present := in.l_payout.byId[data.Payout.String()]
+		if present {
+			pwd.p.UpdateReceipt(r)
+		}
+		vwd, present := in.l_validator.byId[data.Validator.String()]
+		if present {
+			vwd.v.UpdateReceipt(r)
+		}
 	}
 
 	return nil

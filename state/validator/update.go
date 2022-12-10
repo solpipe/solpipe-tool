@@ -31,7 +31,11 @@ func (e1 Validator) UpdateReceipt(r rpt.Receipt) {
 		log.Error(err)
 		return
 	}
+	log.Debugf("receipt-_____data=%+v", d)
 
+	if d.Payout.String() == "11111111111111111111111111111111" {
+		panic("bad payout")
+	}
 	select {
 	case <-doneC:
 	case e1.internalC <- func(in *internal) {

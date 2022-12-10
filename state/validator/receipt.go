@@ -61,10 +61,10 @@ func (e1 Validator) ReceiptById(id sgo.PublicKey) (rwd rpt.ReceiptWithData, pres
 		return
 	case present = <-presentC:
 	}
-	if !present {
-		return
+	if present {
+		rwd = <-ansC
 	}
-	rwd = <-ansC
+
 	return
 }
 

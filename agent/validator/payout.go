@@ -27,6 +27,7 @@ func (in *internal) on_payout(pp payoutWithPipeline) {
 		log.Debug("we already have a receipt")
 		return
 	}
+	log.Debugf("have list=%d;  d=%+v", len(list), list)
 	go loopReceiptOpen(
 		in.ctx,
 		in.errorC,
@@ -74,6 +75,7 @@ func loopReceiptOpen(
 		return nil
 	})
 	if err != nil {
+		// Custom(6032)
 		errorC <- err
 	} else {
 		receiptId := <-receiptC

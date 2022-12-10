@@ -146,15 +146,19 @@ func (in *internal) on_data(x cba.ValidatorManager) {
 	for _, r := range x.Ring {
 		y, present := in.receiptMap[r.Start]
 		if !present && !r.HasValidatorWithdrawn {
+
 			rwd, p := in.validator.ReceiptById(r.Receipt)
 			if p {
+				log.Debugf("evaluating receipt=%+v", rwd)
 				pwd, err := in.router.PayoutById(rwd.Data.Payout)
 				if err != nil {
+					log.Debugf("failed to find payout for receipt=%s", rwd.Data.Payout.String())
 					in.errorC <- err
 					return
 				}
 				p, err := in.router.PipelineById(pwd.Data.Pipeline)
 				if err != nil {
+					log.Debugf("failed to find pipeline for payout=%s", pwd.Payout.Id.String())
 					in.errorC <- err
 					return
 				}

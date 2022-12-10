@@ -181,7 +181,7 @@ func FetchProgramAll(ctx context.Context, rpcClient *sgorpc.Client, version vrs.
 					x := new(cba.Receipt)
 					err = c.Decode(x)
 					if err == nil {
-						log.Debugf("++++receipt=%+v", x)
+						log.Debugf("1____+++++++receipt=%+v", x)
 						ans.Receipt.Append(&ReceiptGroup{
 							Id:     r[i].Pubkey,
 							Data:   *x,
@@ -464,7 +464,7 @@ out:
 						Data:   *y,
 						IsOpen: true,
 					})
-					log.Debugf("+++++++receipt=%+v", y)
+					log.Debugf("2____+++++++receipt=%+v", y)
 					trackingAccounts[x.Value.Pubkey.String()] = TYPE_RECEIPT
 				case D_payout:
 					log.Debugf("update on payout with id=%s", x.Value.Pubkey.String())

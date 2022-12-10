@@ -91,6 +91,7 @@ func loopInternal(
 	in.totalStake = big.NewInt(1)
 	in.payoutLinkedList = ll.CreateGeneric[PayoutWithData]()
 	in.payoutById = make(map[string]*ll.Node[PayoutWithData])
+	in.validatorStakeSub = make(map[string]*validatorStakeSub)
 	in.pipelineHome = pipelineHome
 	defer pipelineHome.Close()
 	in.periodHome = periodHome
