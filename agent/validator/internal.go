@@ -5,11 +5,14 @@ import (
 	"encoding/json"
 	"errors"
 	"os"
+	"time"
 
+	sgo "github.com/SolmateDev/solana-go"
 	sgorpc "github.com/SolmateDev/solana-go/rpc"
 	sgows "github.com/SolmateDev/solana-go/rpc/ws"
 	log "github.com/sirupsen/logrus"
 	cba "github.com/solpipe/cba"
+	ll "github.com/solpipe/solpipe-tool/ds/list"
 	pba "github.com/solpipe/solpipe-tool/proto/admin"
 	rly "github.com/solpipe/solpipe-tool/proxy/relay"
 	spt "github.com/solpipe/solpipe-tool/script"
@@ -21,23 +24,26 @@ import (
 )
 
 type internal struct {
-	ctx              context.Context
-	errorC           chan<- error
-	closeSignalCList []chan<- error
-	config           rly.Configuration
-	configFilePath   string
-	rpc              *sgorpc.Client
-	ws               *sgows.Client
-	scriptWrapper    spt.Wrapper
-	controller       ctr.Controller
-	router           rtr.Router
-	validator        val.Validator
-	settings         *pba.ValidatorSettings
-	pipeline         *pipe.Pipeline
-	pipelineCtx      context.Context // loopPeriod scoops up new payout accounts
-	pipelineCancel   context.CancelFunc
-	receiptMap       map[uint64]*validatorReceiptInfo // start->vri
-	newPayoutC       chan<- payoutWithPipeline
+	ctx                   context.Context
+	errorC                chan<- error
+	closeSignalCList      []chan<- error
+	config                rly.Configuration
+	configFilePath        string
+	rpc                   *sgorpc.Client
+	ws                    *sgows.Client
+	scriptWrapper         spt.Wrapper
+	controller            ctr.Controller
+	router                rtr.Router
+	validator             val.Validator
+	settings              *pba.ValidatorSettings
+	pipeline              *pipe.Pipeline
+	pipelineCtx           context.Context // loopPeriod scoops up new payout accounts
+	pipelineCancel        context.CancelFunc
+	receiptMap            map[uint64]*validatorReceiptInfo // start->vri
+	receiptAttempt        map[string]context.CancelFunc    // payout id ->cancel()
+	deleteReceiptAttemptC chan<- sgo.PublicKey             // payout id->cancel()
+	newPayoutC            chan<- payoutWithPipeline
+	lastStartInPayout     uint64
 }
 
 type validatorReceiptInfo struct {
@@ -66,6 +72,7 @@ func loopInternal(
 	errorC := make(chan error, 1)
 	doneC := ctx.Done()
 	newPayoutC := make(chan payoutWithPipeline)
+	deleteReceiptAttemptC := make(chan sgo.PublicKey)
 	in := new(internal)
 	in.ctx = ctx
 	in.errorC = errorC
@@ -81,7 +88,10 @@ func loopInternal(
 	in.validator = validator
 	in.settings = nil
 	in.receiptMap = make(map[uint64]*validatorReceiptInfo)
+	in.receiptAttempt = make(map[string]context.CancelFunc)
 	in.newPayoutC = newPayoutC
+	in.deleteReceiptAttemptC = deleteReceiptAttemptC
+	in.lastStartInPayout = 0
 	valSub := validator.OnData()
 	defer valSub.Unsubscribe()
 	dataFetchC := make(chan cba.ValidatorManager)
@@ -94,6 +104,9 @@ func loopInternal(
 		}
 	}
 
+	delayInC := make(chan payoutWithPipeline)
+	delayOutC := make(chan payoutWithPipeline)
+	go loopDelayPayout(in.ctx, delayOutC, delayInC, 30*time.Second)
 out:
 	for {
 		select {
@@ -112,11 +125,81 @@ out:
 		case req := <-internalC:
 			req(in)
 		case pp := <-newPayoutC:
+			select {
+			case <-doneC:
+				break out
+			case delayOutC <- pp:
+				// need to delay calling payout to give a chance for the receipt to pop in
+			}
+		case pp := <-delayInC:
 			in.on_payout(pp)
+		case payoutId := <-deleteReceiptAttemptC:
+			in.receipt_delete_open_attempt(payoutId)
 		}
 	}
 
 	in.finish(err)
+}
+
+// tell the loopReceiptOpen goroutine to give up because a receipt has already been created
+func (in *internal) receipt_delete_open_attempt(payoutId sgo.PublicKey) {
+	log.Debugf("going to cancel receipt for payout=%s", payoutId.String())
+	c, present := in.receiptAttempt[payoutId.String()]
+	if present {
+		c()
+		delete(in.receiptAttempt, payoutId.String())
+	}
+}
+
+func loopDelayPayout(
+	ctx context.Context,
+	inC <-chan payoutWithPipeline,
+	outC chan<- payoutWithPipeline,
+	delay time.Duration,
+) {
+	list := ll.CreateGeneric[payoutWithPipeline]()
+	doneC := ctx.Done()
+
+	var x payoutWithPipeline
+	isBlank := true
+out:
+	for {
+
+		if 0 < list.Size {
+			n := time.Now()
+			if isBlank {
+				x, _ = list.Pop()
+				isBlank = false
+			}
+			diff := int64(0)
+			if x.t.After(n) {
+				diff = x.t.Unix() - n.Unix()
+			}
+
+			select {
+			case <-doneC:
+				break out
+			case <-time.After(time.Duration(diff) * time.Second):
+				isBlank = true
+				select {
+				case <-doneC:
+					break out
+				case outC <- x:
+				}
+			case pwp := <-inC:
+				list.Append(pwp)
+			}
+		} else {
+			select {
+			case <-doneC:
+				break out
+			case pwp := <-inC:
+				list.Append(pwp)
+			}
+		}
+
+	}
+
 }
 
 func loopFetchValidatorData(
@@ -145,11 +228,10 @@ func loopFetchValidatorData(
 func (in *internal) on_data(x cba.ValidatorManager) {
 	for _, r := range x.Ring {
 		y, present := in.receiptMap[r.Start]
-		if !present && !r.HasValidatorWithdrawn {
-
+		if !present && !r.HasValidatorWithdrawn && in.lastStartInPayout < r.Start {
 			rwd, p := in.validator.ReceiptById(r.Receipt)
 			if p {
-				log.Debugf("evaluating receipt=%+v", rwd)
+				log.Debugf("evaluating receipt(payout=%s)=%+v", rwd.Data.Payout.String(), rwd)
 				pwd, err := in.router.PayoutById(rwd.Data.Payout)
 				if err != nil {
 					log.Debugf("failed to find payout for receipt=%s", rwd.Data.Payout.String())
@@ -171,11 +253,17 @@ func (in *internal) on_data(x cba.ValidatorManager) {
 					pipeline: p,
 				}
 				in.receiptMap[r.Start] = y
+				in.lastStartInPayout = r.Start
 				in.on_receipt(y)
 			} else {
 				in.errorC <- errors.New("failed to find receipt=" + r.Receipt.String())
 			}
 
+		} else if !present && !r.HasValidatorWithdrawn {
+			rwd, p := in.validator.ReceiptById(r.Receipt)
+			if p {
+				log.Debugf("___we already added receipt for payout=%s", rwd.Data.Payout.String())
+			}
 		} else if present && !y.rsf.HasValidatorWithdrawn && r.HasValidatorWithdrawn {
 			// false->true means receiptMap needs to be canceled
 			y.cancel()

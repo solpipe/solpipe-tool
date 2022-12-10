@@ -13,6 +13,7 @@ import (
 type payoutWithPipeline struct {
 	pipeline pipe.Pipeline
 	pwd      pipe.PayoutWithData
+	t        time.Time
 }
 
 func (in *internal) on_payout(pp payoutWithPipeline) {
@@ -28,15 +29,18 @@ func (in *internal) on_payout(pp payoutWithPipeline) {
 		return
 	}
 	log.Debugf("have list=%d;  d=%+v", len(list), list)
+	ctxC, cancel := context.WithCancel(in.ctx)
+	in.receiptAttempt[pwd.Payout.Id.String()] = cancel
 	go loopReceiptOpen(
-		in.ctx,
+		ctxC,
 		in.errorC,
 		in.scriptWrapper,
 		in.controller.Id(),
-		pwd.Id,
+		pwd.Payout.Id,
 		pp.pipeline.Id,
 		in.validator.Id,
 		in.config.Admin,
+		in.deleteReceiptAttemptC,
 	)
 
 }
@@ -50,8 +54,17 @@ func loopReceiptOpen(
 	pipelineId sgo.PublicKey,
 	validatorId sgo.PublicKey,
 	admin sgo.PrivateKey,
+	deleteC chan<- sgo.PublicKey,
 ) {
+	doneC := ctx.Done()
 	receiptC := make(chan sgo.PublicKey, 1)
+	log.Debugf("attempting to create receipt for payout=%s", payoutId.String())
+	defer func() {
+		select {
+		case <-doneC:
+		case deleteC <- payoutId:
+		}
+	}()
 	err := scriptWrapper.Send(ctx, 5, 30*time.Second, func(script *spt.Script) error {
 		err2 := script.SetTx(admin)
 		if err2 != nil {
@@ -76,10 +89,15 @@ func loopReceiptOpen(
 	})
 	if err != nil {
 		// Custom(6032)
-		errorC <- err
+		select {
+		case <-doneC:
+		case errorC <- err:
+		}
 	} else {
-		receiptId := <-receiptC
-		log.Debugf("created receipt=%s", receiptId.String())
+		select {
+		case <-doneC:
+		case receiptId := <-receiptC:
+			log.Debugf("created receipt=%s", receiptId.String())
+		}
 	}
-
 }

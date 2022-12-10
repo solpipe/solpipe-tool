@@ -16,6 +16,7 @@ import (
 
 // we just need to wait until the receipt
 func (in *internal) on_receipt(vri *validatorReceiptInfo) {
+	in.receipt_delete_open_attempt(vri.rwd.Data.Payout)
 	go loopReceipt(
 		vri.ctx,
 		vri.cancel,

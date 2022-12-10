@@ -100,7 +100,7 @@ func (in *internal) update_validators(u validatorInsertInfo) {
 	}
 	vf := valconn.feed
 
-	if vf == nil {
+	if vf != nil {
 		select {
 		case <-doneC:
 		case <-vf.ctx.Done():

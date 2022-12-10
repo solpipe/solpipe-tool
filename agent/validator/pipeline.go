@@ -2,6 +2,7 @@ package validator
 
 import (
 	"context"
+	"time"
 
 	log "github.com/sirupsen/logrus"
 	pipe "github.com/solpipe/solpipe-tool/state/pipeline"
@@ -63,6 +64,7 @@ func (pi *listenPipelineInternal) on_payout(pwd pipe.PayoutWithData) {
 	case pi.newPayoutC <- payoutWithPipeline{
 		pwd:      pwd,
 		pipeline: pi.pipeline,
+		t:        time.Now(),
 	}:
 	}
 }
