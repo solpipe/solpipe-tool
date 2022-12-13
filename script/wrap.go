@@ -96,6 +96,28 @@ func loopReplay(
 
 }
 
+func (w Wrapper) SendDetached(
+	ctx context.Context,
+	maxTries int,
+	delay time.Duration,
+	cb func(*Script) error,
+) (<-chan error, context.CancelFunc) {
+	ctxC, cancel := context.WithCancel(ctx)
+	signalC := make(chan error, 1)
+	go w.loop(ctxC, maxTries, delay, cb, signalC)
+	return signalC, cancel
+}
+
+func (w Wrapper) loop(
+	ctx context.Context,
+	maxTries int,
+	delay time.Duration,
+	cb func(*Script) error,
+	errorC chan<- error,
+) {
+	errorC <- w.Send(ctx, maxTries, delay, cb)
+}
+
 func (w Wrapper) Send(
 	ctx context.Context,
 	maxTries int,

@@ -36,7 +36,6 @@ const RETRY_INTERVAL = uint64(50)
 
 func (in *internal) on_slot(slot uint64) {
 	in.slot = slot
-	var err error
 
 	tail := in.payoutInfo.tailSlot // start+length
 	lookaheadLimit := slot + in.periodSettings.Lookahead
@@ -46,12 +45,8 @@ func (in *internal) on_slot(slot uint64) {
 	if start < slot {
 		start = slot
 	}
-	if retryLimit < slot && start < lookaheadLimit {
+	if !in.appendInProgress && retryLimit < slot && start < lookaheadLimit {
 		log.Debugf("slot=%d; tail=%d; retry=%d; start=%d; lookahead=%d;", slot, tail, retryLimit, start, lookaheadLimit)
-		err = in.attempt_add_period(start)
-		if err != nil {
-			// this error condition does not include FinishTx();
-			in.addPeriodResultC <- addPeriodResult{err: err, attempt: in.lastAddPeriodAttemptToAddPeriod}
-		}
+		in.attempt_add_period(start)
 	}
 }

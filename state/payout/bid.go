@@ -15,11 +15,10 @@ func (e1 Payout) OnBidStatus() dssub.Subscription[BidStatus] {
 }
 
 type bidInfo struct {
-	is_final             bool
-	bandwidthDenominator uint64
-	totalDeposits        uint64
-	list                 *ll.Generic[*cba.Bid]
-	search               map[string]*ll.Node[*cba.Bid] // user.id->bid
+	is_final      bool
+	totalDeposits uint64
+	list          *ll.Generic[*cba.Bid]
+	search        map[string]*ll.Node[*cba.Bid] // user.id->bid
 }
 
 func (in *internal) init_bid() error {
@@ -38,7 +37,6 @@ func (in *internal) on_bid_list(bl cba.BidList) {
 		log.Error("we should not be here")
 		return
 	}
-	bi.bandwidthDenominator = bl.BandwidthDenominator
 	bi.totalDeposits = bl.TotalDeposits
 	bi.is_final = bl.BiddingFinished
 	newList := ll.CreateGeneric[*cba.Bid]()
@@ -78,10 +76,9 @@ func (in *internal) bid_broadcast() {
 		return nil
 	})
 	in.bidStatusHome.Broadcast(BidStatus{
-		Bid:                  list,
-		IsFinal:              bi.is_final,
-		TotalDeposits:        bi.totalDeposits,
-		BandwidthDenominator: bi.bandwidthDenominator,
+		Bid:           list,
+		IsFinal:       bi.is_final,
+		TotalDeposits: bi.totalDeposits,
 	})
 }
 
@@ -92,18 +89,16 @@ func (in *internal) bid_status() BidStatus {
 		return nil
 	})
 	return BidStatus{
-		Bid:                  list,
-		IsFinal:              in.bi.is_final,
-		TotalDeposits:        in.bi.totalDeposits,
-		BandwidthDenominator: in.bi.bandwidthDenominator,
+		Bid:           list,
+		IsFinal:       in.bi.is_final,
+		TotalDeposits: in.bi.totalDeposits,
 	}
 }
 
 type BidStatus struct {
-	Bid                  []cba.Bid // only contains active bids
-	IsFinal              bool
-	TotalDeposits        uint64
-	BandwidthDenominator uint64
+	Bid           []cba.Bid // only contains active bids
+	IsFinal       bool
+	TotalDeposits uint64
 }
 
 func (e1 Payout) BidStatus() (bs BidStatus, err error) {

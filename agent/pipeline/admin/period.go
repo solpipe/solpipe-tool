@@ -1,70 +1,150 @@
 package admin
 
 import (
+	"context"
 	"errors"
 	"math"
+	"time"
 
+	sgo "github.com/SolmateDev/solana-go"
 	log "github.com/sirupsen/logrus"
-	"github.com/solpipe/solpipe-tool/script"
+	spt "github.com/solpipe/solpipe-tool/script"
 	"github.com/solpipe/solpipe-tool/state"
+	ctr "github.com/solpipe/solpipe-tool/state/controller"
 	pipe "github.com/solpipe/solpipe-tool/state/pipeline"
 )
 
 func (in *internal) attempt_add_period(
 	start uint64,
-) error {
+) {
+
+	in.appendInProgress = true
 	in.lastAddPeriodAttemptToAddPeriod = in.slot
 	log.Debugf("(slot=%d) attempting to add a period; start=%d; end=%d; bid space=%d", in.slot, start, start+in.periodSettings.Length-1, in.periodSettings.BidSpace)
 	if math.MaxUint16 <= in.periodSettings.Withhold {
-		return errors.New("withhold is too large")
+		in.errorC <- errors.New("withhold is too large")
+		return
 	}
 	if math.MaxUint16 <= in.periodSettings.BidSpace {
-		return errors.New("bid space is too large")
+		in.errorC <- errors.New("bid space is too large")
+		return
 	}
 	if in.periodSettings.BidSpace <= 10 {
-		return errors.New("bid space is too small")
+		in.errorC <- errors.New("bid space is too small")
+		return
 	}
-	s1, err := script.Create(in.ctx, &script.Configuration{Version: in.controller.Version}, in.rpc, in.ws)
+
+	script, err := spt.Create(in.ctx, &spt.Configuration{Version: in.controller.Version}, in.rpc, in.ws)
 	if err != nil {
-		return err
+		in.errorC <- err
+		return
 	}
-	err = s1.SetTx(in.admin)
-	if err != nil {
-		return err
-	}
+	admin := in.admin
+	length := in.periodSettings.Length
 	withhold := uint16(in.periodSettings.Withhold)
-	err = s1.UpdatePipeline(
-		in.controller.Id(),
-		in.pipeline.Id,
-		in.admin,
-		state.RateFromProto(in.rateSettings.CrankFee),
-		pipe.ALLOTMENT_DEFAULT,
-		state.RateFromProto(in.rateSettings.PayoutShare),
-		uint16(in.periodSettings.TickSize),
-	)
-	if err != nil {
-		return err
-	}
+	bidSpace := uint16(in.periodSettings.BidSpace)
+	controller := in.controller
+	pipeline := in.pipeline
+	crankFee := state.RateFromProto(in.rateSettings.CrankFee)
+	payoutShare := state.RateFromProto(in.rateSettings.PayoutShare)
+	tickSize := uint16(in.periodSettings.TickSize)
+	wrapper := spt.Wrap(script)
+	signalC, cancel := wrapper.SendDetached(in.ctx, 10, 30*time.Second, func(s *spt.Script) error {
+		return runAppendPeriod(
+			s,
+			admin,
+			start,
+			length,
+			withhold,
+			bidSpace,
+			controller,
+			pipeline,
+			crankFee,
+			payoutShare,
+			tickSize,
+		)
+	})
+	go loopAppendErrorToError(in.ctx, cancel, in.appendInProgressC, signalC, in.errorC)
 
-	_, err = s1.AppendPeriod(
-		in.controller,
-		in.pipeline,
-		in.admin,
-		start,
-		in.periodSettings.Length,
-		withhold,
-		uint16(in.periodSettings.BidSpace),
-	)
-	if err != nil {
-		return err
-	}
-
-	go loopAttempAppendPeriod(s1, in.lastAddPeriodAttemptToAddPeriod, in.addPeriodResultC)
-
-	return nil
 }
 
-func loopAttempAppendPeriod(s1 *script.Script, attempt uint64, resultC chan<- addPeriodResult) {
-	err := s1.FinishTx(true)
-	resultC <- addPeriodResult{err: err, attempt: attempt}
+func loopAppendErrorToError(
+	ctx context.Context,
+	cancel context.CancelFunc,
+	progressC chan<- bool,
+	resultC <-chan error,
+	errorC chan<- error,
+) {
+	doneC := ctx.Done()
+	select {
+	case <-doneC:
+	case err := <-resultC:
+		if err != nil {
+			log.Debugf("failed to append: %s", err.Error())
+			select {
+			case <-doneC:
+			case errorC <- err:
+			}
+		} else {
+			log.Debug("append successful")
+			select {
+			case <-doneC:
+			case progressC <- false:
+			}
+		}
+	}
+}
+
+func runAppendPeriod(
+	script *spt.Script,
+	admin sgo.PrivateKey,
+	start uint64,
+	length uint64,
+	withhold uint16,
+	bidSpace uint16,
+	controller ctr.Controller,
+	pipeline pipe.Pipeline,
+	crankFee state.Rate,
+	payoutShare state.Rate,
+	tickSize uint16,
+) error {
+	var err error
+	err = script.SetTx(admin)
+	if err != nil {
+		return err
+	}
+
+	err = script.UpdatePipeline(
+		controller.Id(),
+		pipeline.Id,
+		admin,
+		crankFee,
+		pipe.ALLOTMENT_DEFAULT,
+		payoutShare,
+		tickSize,
+	)
+	if err != nil {
+		log.Debugf("update pipeline failure: %s", err.Error())
+		return err
+	}
+
+	_, err = script.AppendPeriod(
+		controller,
+		pipeline,
+		admin,
+		start,
+		length,
+		withhold,
+		bidSpace,
+	)
+	if err != nil {
+		log.Debugf("append error: %s", err.Error())
+		return err
+	}
+	err = script.FinishTx(true)
+	if err != nil {
+		log.Debugf("tx submit failure: %s", err.Error())
+		return err
+	}
+	return nil
 }

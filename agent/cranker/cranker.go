@@ -76,6 +76,10 @@ func (e1 Cranker) CloseSignal() <-chan error {
 		in.closeSignalCList = append(in.closeSignalCList, signalC)
 	}:
 	}
+	if err != nil {
+		signalC <- err
+		return signalC
+	}
 	return signalC
 }
 

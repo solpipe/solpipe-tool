@@ -59,10 +59,9 @@ func (in *internal) on_bid_status(s bidStatusWithStartTime) {
 					in.pipelineTpsHome.ReqC,
 					in.txFromBidderToValidatorC,
 					BidWithTotal{
-						Period:               v.Pwd.Data.Period,
-						Bid:                  bid,
-						TotalDeposit:         s.status.TotalDeposits,
-						BandwidthDenominator: s.status.BandwidthDenominator,
+						Period:       v.Pwd.Data.Period,
+						Bid:          bid,
+						TotalDeposit: s.status.TotalDeposits,
 					},
 				)
 				in.bidderMap[bid.User.String()] = bf
@@ -72,10 +71,9 @@ func (in *internal) on_bid_status(s bidStatusWithStartTime) {
 			select {
 			case <-doneC:
 			case bf.bidC <- BidWithTotal{
-				Period:               v.Pwd.Data.Period,
-				Bid:                  bid,
-				TotalDeposit:         s.status.TotalDeposits,
-				BandwidthDenominator: s.status.BandwidthDenominator,
+				Period:       v.Pwd.Data.Period,
+				Bid:          bid,
+				TotalDeposit: s.status.TotalDeposits,
 			}:
 			}
 		}
@@ -147,7 +145,7 @@ func loopBidderInternal(
 
 	// bid.BandwidthAllocation
 	//bi.allottedShare = float64(bid.BandwidthAllocation) / float64(initPayout.Period.BandwidthAllotment)
-	bi.allottedShare = float64(bt.Bid.BandwidthAllocation) / float64(bt.BandwidthDenominator)
+	bi.allottedShare = float64(bt.Bid.Deposit) / float64(bt.TotalDeposit)
 	bi.pipelineTps = float64(0)
 	bi.allotedTps = float64(0)
 	bi.txCount = float64(0)
@@ -169,7 +167,7 @@ out:
 			bi.keepReadingC <- true
 			bi.nextBoxC = time.After(bi.boxInterval)
 		case bt = <-bidC:
-			bi.allottedShare = float64(bt.Bid.BandwidthAllocation) / float64(bt.BandwidthDenominator)
+			bi.allottedShare = float64(bt.Bid.Deposit) / float64(bt.TotalDeposit)
 			bi.allotedTps = bi.pipelineTps * bi.allottedShare
 		case s := <-loopTxSubmitC:
 			select {
@@ -247,10 +245,9 @@ type BidderStatus struct {
 }
 
 type BidWithTotal struct {
-	Period               cba.Period
-	Bid                  cba.Bid
-	TotalDeposit         uint64
-	BandwidthDenominator uint64
+	Period       cba.Period
+	Bid          cba.Bid
+	TotalDeposit uint64
 }
 
 func (bwt BidWithTotal) User() sgo.PublicKey {
@@ -258,5 +255,5 @@ func (bwt BidWithTotal) User() sgo.PublicKey {
 }
 
 func (bwt BidWithTotal) AllocatedShare() float64 {
-	return float64(bwt.Bid.BandwidthAllocation) / float64(bwt.BandwidthDenominator)
+	return float64(bwt.Bid.Deposit) / float64(bwt.TotalDeposit)
 }

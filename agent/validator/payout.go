@@ -6,6 +6,7 @@ import (
 
 	sgo "github.com/SolmateDev/solana-go"
 	log "github.com/sirupsen/logrus"
+	ckr "github.com/solpipe/solpipe-tool/agent/cranker"
 	spt "github.com/solpipe/solpipe-tool/script"
 	pipe "github.com/solpipe/solpipe-tool/state/pipeline"
 )
@@ -30,7 +31,7 @@ func (in *internal) on_payout(pp payoutWithPipeline) {
 	}
 	log.Debugf("have list=%d;  d=%+v", len(list), list)
 	ctxC, cancel := context.WithCancel(in.ctx)
-	in.receiptAttempt[pwd.Payout.Id.String()] = cancel
+	in.receiptAttemptOpen[pwd.Data.Period.Start] = cancel
 	go loopReceiptOpen(
 		ctxC,
 		in.errorC,
@@ -39,9 +40,24 @@ func (in *internal) on_payout(pp payoutWithPipeline) {
 		pwd.Payout.Id,
 		pp.pipeline.Id,
 		in.validator.Id,
+		pwd.Data.Period.Start,
 		in.config.Admin,
 		in.deleteReceiptAttemptC,
 	)
+	if in.pipeline != nil {
+		// we don't care about the success or failure of the crank payout
+		signalC := make(chan error, 1)
+		go ckr.CrankPayout(
+			in.ctx,
+			in.config.Admin,
+			in.controller,
+			*in.pipeline,
+			in.scriptWrapper,
+			pwd.Payout,
+			signalC,
+		)
+
+	}
 
 }
 
@@ -53,8 +69,9 @@ func loopReceiptOpen(
 	payoutId sgo.PublicKey,
 	pipelineId sgo.PublicKey,
 	validatorId sgo.PublicKey,
+	start uint64,
 	admin sgo.PrivateKey,
-	deleteC chan<- sgo.PublicKey,
+	deleteC chan<- uint64,
 ) {
 	doneC := ctx.Done()
 	receiptC := make(chan sgo.PublicKey, 1)
@@ -62,7 +79,7 @@ func loopReceiptOpen(
 	defer func() {
 		select {
 		case <-doneC:
-		case deleteC <- payoutId:
+		case deleteC <- start:
 		}
 	}()
 	err := scriptWrapper.Send(ctx, 5, 30*time.Second, func(script *spt.Script) error {

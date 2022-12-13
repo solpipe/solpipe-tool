@@ -7,7 +7,6 @@ import (
 	"os"
 	"time"
 
-	sgo "github.com/SolmateDev/solana-go"
 	sgorpc "github.com/SolmateDev/solana-go/rpc"
 	sgows "github.com/SolmateDev/solana-go/rpc/ws"
 	log "github.com/sirupsen/logrus"
@@ -40,10 +39,11 @@ type internal struct {
 	pipelineCtx           context.Context // loopPeriod scoops up new payout accounts
 	pipelineCancel        context.CancelFunc
 	receiptMap            map[uint64]*validatorReceiptInfo // start->vri
-	receiptAttempt        map[string]context.CancelFunc    // payout id ->cancel()
-	deleteReceiptAttemptC chan<- sgo.PublicKey             // payout id->cancel()
+	receiptAttemptOpen    map[uint64]context.CancelFunc    // start ->cancel()
+	deleteReceiptAttemptC chan<- uint64                    // start->cancel()
 	newPayoutC            chan<- payoutWithPipeline
 	lastStartInPayout     uint64
+	slot                  uint64
 }
 
 type validatorReceiptInfo struct {
@@ -53,6 +53,8 @@ type validatorReceiptInfo struct {
 	rwd      rpt.ReceiptWithData
 	pipeline pipe.Pipeline
 }
+
+const START_BUFFER = uint64(10)
 
 func loopInternal(
 	ctx context.Context,
@@ -72,7 +74,7 @@ func loopInternal(
 	errorC := make(chan error, 1)
 	doneC := ctx.Done()
 	newPayoutC := make(chan payoutWithPipeline)
-	deleteReceiptAttemptC := make(chan sgo.PublicKey)
+	deleteReceiptAttemptC := make(chan uint64)
 	in := new(internal)
 	in.ctx = ctx
 	in.errorC = errorC
@@ -88,10 +90,11 @@ func loopInternal(
 	in.validator = validator
 	in.settings = nil
 	in.receiptMap = make(map[uint64]*validatorReceiptInfo)
-	in.receiptAttempt = make(map[string]context.CancelFunc)
+	in.receiptAttemptOpen = make(map[uint64]context.CancelFunc)
 	in.newPayoutC = newPayoutC
 	in.deleteReceiptAttemptC = deleteReceiptAttemptC
 	in.lastStartInPayout = 0
+	in.slot = 0
 	valSub := validator.OnData()
 	defer valSub.Unsubscribe()
 	dataFetchC := make(chan cba.ValidatorManager)
@@ -104,9 +107,12 @@ func loopInternal(
 		}
 	}
 
+	slotSub := in.controller.SlotHome().OnSlot()
+	defer slotSub.Unsubscribe()
+
 	delayInC := make(chan payoutWithPipeline)
 	delayOutC := make(chan payoutWithPipeline)
-	go loopDelayPayout(in.ctx, delayOutC, delayInC, 30*time.Second)
+	go loopDelayPayout(in.ctx, delayOutC, delayInC, 10*time.Second)
 out:
 	for {
 		select {
@@ -124,31 +130,27 @@ out:
 			in.on_data(x)
 		case req := <-internalC:
 			req(in)
+		case err = <-slotSub.ErrorC:
+			break out
+		case in.slot = <-slotSub.StreamC:
 		case pp := <-newPayoutC:
-			select {
-			case <-doneC:
-				break out
-			case delayOutC <- pp:
-				// need to delay calling payout to give a chance for the receipt to pop in
+			if in.slot+START_BUFFER < pp.pwd.Data.Period.Start && in.lastStartInPayout < pp.pwd.Data.Period.Start {
+				select {
+				case <-doneC:
+					break out
+				case delayOutC <- pp:
+					// need to delay calling payout to give a chance for the receipt to pop in
+				}
 			}
+
 		case pp := <-delayInC:
 			in.on_payout(pp)
-		case payoutId := <-deleteReceiptAttemptC:
-			in.receipt_delete_open_attempt(payoutId)
+		case start := <-deleteReceiptAttemptC:
+			in.receipt_delete_open_attempt(start)
 		}
 	}
 
 	in.finish(err)
-}
-
-// tell the loopReceiptOpen goroutine to give up because a receipt has already been created
-func (in *internal) receipt_delete_open_attempt(payoutId sgo.PublicKey) {
-	log.Debugf("going to cancel receipt for payout=%s", payoutId.String())
-	c, present := in.receiptAttempt[payoutId.String()]
-	if present {
-		c()
-		delete(in.receiptAttempt, payoutId.String())
-	}
 }
 
 func loopDelayPayout(
@@ -259,12 +261,7 @@ func (in *internal) on_data(x cba.ValidatorManager) {
 				in.errorC <- errors.New("failed to find receipt=" + r.Receipt.String())
 			}
 
-		} else if !present && !r.HasValidatorWithdrawn {
-			rwd, p := in.validator.ReceiptById(r.Receipt)
-			if p {
-				log.Debugf("___we already added receipt for payout=%s", rwd.Data.Payout.String())
-			}
-		} else if present && !y.rsf.HasValidatorWithdrawn && r.HasValidatorWithdrawn {
+		} else if present && r.HasValidatorWithdrawn {
 			// false->true means receiptMap needs to be canceled
 			y.cancel()
 			delete(in.receiptMap, r.Start)

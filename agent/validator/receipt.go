@@ -5,6 +5,7 @@ import (
 	"time"
 
 	sgo "github.com/SolmateDev/solana-go"
+	log "github.com/sirupsen/logrus"
 	cba "github.com/solpipe/cba"
 	spt "github.com/solpipe/solpipe-tool/script"
 	ctr "github.com/solpipe/solpipe-tool/state/controller"
@@ -14,9 +15,19 @@ import (
 	val "github.com/solpipe/solpipe-tool/state/validator"
 )
 
+// tell the loopReceiptOpen goroutine to give up because a receipt has already been created
+func (in *internal) receipt_delete_open_attempt(start uint64) {
+	c, present := in.receiptAttemptOpen[start]
+	if present {
+		c()
+		log.Debugf("going to cancel receipt for payout=%d", start)
+		delete(in.receiptAttemptOpen, start)
+	}
+}
+
 // we just need to wait until the receipt
 func (in *internal) on_receipt(vri *validatorReceiptInfo) {
-	in.receipt_delete_open_attempt(vri.rwd.Data.Payout)
+	in.receipt_delete_open_attempt(vri.rsf.Start)
 	go loopReceipt(
 		vri.ctx,
 		vri.cancel,
@@ -123,9 +134,13 @@ func (ri *receiptInfo) do_close(
 	pipeline pipe.Pipeline,
 	validator val.Validator,
 ) error {
+	attempt := 0
 	return ri.scriptWrapper.Send(ri.ctx, 10, 30*time.Second, func(script *spt.Script) error {
+		attempt++
+		log.Debugf("closing receipt=%s; attempt=%d", ri.receipt.Id.String(), attempt)
 		err2 := script.SetTx(ri.admin)
 		if err2 != nil {
+			log.Debugf("closing receipt error(1): %s", err2.Error())
 			return err2
 		}
 		err2 = script.ValidatorWithdrawReceipt(
@@ -137,10 +152,12 @@ func (ri *receiptInfo) do_close(
 			ri.admin,
 		)
 		if err2 != nil {
+			log.Debugf("closing receipt error(2): %s", err2.Error())
 			return err2
 		}
 		err2 = script.FinishTx(true)
 		if err2 != nil {
+			log.Debugf("closing receipt error(3): %s", err2.Error())
 			return err2
 		}
 		return err2

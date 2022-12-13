@@ -8,8 +8,9 @@ import (
 	sgo "github.com/SolmateDev/solana-go"
 	log "github.com/sirupsen/logrus"
 	cba "github.com/solpipe/cba"
+	ckr "github.com/solpipe/solpipe-tool/agent/cranker"
 	ll "github.com/solpipe/solpipe-tool/ds/list"
-	"github.com/solpipe/solpipe-tool/script"
+	spt "github.com/solpipe/solpipe-tool/script"
 	ctr "github.com/solpipe/solpipe-tool/state/controller"
 	pyt "github.com/solpipe/solpipe-tool/state/payout"
 	pipe "github.com/solpipe/solpipe-tool/state/pipeline"
@@ -33,6 +34,7 @@ func (pi *payoutInfo) update_tail_slot() {
 	} else {
 		pi.tailSlot = 0
 	}
+	log.Debugf("updating tail slot=%d", pi.tailSlot)
 }
 
 func (pi *payoutInfo) delete(start uint64) {
@@ -55,13 +57,17 @@ func (pi *payoutInfo) insert(ps *payoutSingle) *ll.Node[*payoutSingle] {
 	head := pi.list.HeadNode()
 	tail := pi.list.TailNode()
 	if head == nil {
+		log.Debugf("insert - 1")
 		node = pi.list.Append(ps)
 	} else if start < head.Value().pwd.Data.Period.Start {
+		log.Debugf("insert - 2")
 		node = pi.list.Prepend(ps)
 	} else if tail.Value().pwd.Data.Period.Start < start {
 		// this is covered in the next condition.  Keep this block anyway as a shortcut
+		log.Debugf("insert - 3")
 		node = pi.list.Append(ps)
 	} else {
+		log.Debugf("insert - 4")
 		for n := pi.list.HeadNode(); n != nil; n = n.Next() {
 			if n.Value().pwd.Data.Period.Start < start {
 				node = pi.list.Insert(ps, n)
@@ -101,15 +107,25 @@ func (in *internal) on_payout(pwd pipe.PayoutWithData) {
 	ctxC, cancel := context.WithCancel(in.ctx)
 	ps.cancel = cancel
 
-	script, err := script.Create(
+	script, err := spt.Create(
 		ctxC,
-		&script.Configuration{Version: in.controller.Version},
+		&spt.Configuration{Version: in.controller.Version},
 		in.rpc,
 		in.ws,
 	)
 	if err != nil {
 		in.errorC <- err
 	}
+	wrapper := spt.Wrap(script)
+	go ckr.CrankPayout(
+		in.ctx,
+		in.admin,
+		in.controller,
+		in.pipeline,
+		wrapper,
+		pwd.Payout,
+		in.errorC,
+	)
 
 	go loopPayout(
 		ctxC,
@@ -119,7 +135,7 @@ func (in *internal) on_payout(pwd pipe.PayoutWithData) {
 		in.controller,
 		in.pipeline,
 		pwd,
-		script,
+		wrapper,
 		in.admin,
 	)
 
@@ -134,7 +150,7 @@ type payoutInternal struct {
 	pipeline   pipe.Pipeline
 	data       *cba.Payout
 	payout     pyt.Payout
-	script     *script.Script
+	wrapper    spt.Wrapper
 	admin      sgo.PrivateKey
 	bidStatus  *pyt.BidStatus
 }
@@ -147,7 +163,7 @@ func loopPayout(
 	controller ctr.Controller,
 	pipeline pipe.Pipeline,
 	pwd pipe.PayoutWithData,
-	script *script.Script,
+	wrapper spt.Wrapper,
 	admin sgo.PrivateKey,
 ) {
 	var err error
@@ -169,7 +185,7 @@ func loopPayout(
 	pi.pipeline = pipeline
 	pi.data = &pwd.Data
 	pi.payout = pwd.Payout
-	pi.script = script
+	pi.wrapper = wrapper
 	pi.admin = admin
 
 	pi.bidStatus = new(pyt.BidStatus)
@@ -181,9 +197,10 @@ func loopPayout(
 
 	finish := pi.data.Period.Start + pi.data.Period.Length + pyt.PAYOUT_CLOSE_DELAY
 
-	log.Debugf("finish for payout=%s is slot=%d", pi.payout.Id.String(), finish)
+	log.Debugf("finish for payout=%s is slot=(%d), validator count=%d ,with bid status=%+v", pi.payout.Id.String(), finish, pi.data.ValidatorCount, pi.bidStatus)
+
 out:
-	for pi.slot < pwd.Data.Period.Start+pwd.Data.Period.Length+pyt.PAYOUT_CLOSE_DELAY {
+	for !(pi.bidStatus.IsFinal && finish <= pi.slot && pi.data.StakerCount == 0 && pi.data.ValidatorCount == 0) {
 		select {
 		case <-doneC:
 			break out
@@ -193,7 +210,7 @@ out:
 		case err = <-bidSub.ErrorC:
 			break out
 		case x := <-bidSub.StreamC:
-			pi.on_bid(&x)
+			pi.on_bid(x)
 		case err = <-slotSub.ErrorC:
 			break out
 		case pi.slot = <-slotSub.StreamC:
@@ -202,26 +219,62 @@ out:
 			}
 		}
 	}
-	log.Debugf("payout id=%s has finished at slot=%d", pi.payout.Id.String(), pi.slot)
-
-	if err == nil {
-		delay := 1 * time.Second
-	close:
-		for tries := 0; tries < CLOSE_PAYOUT_MAX_TRIES; tries++ {
-			time.Sleep(delay)
-			delay = 30 * time.Second
-			err = pi.close_payout()
-			if err == nil {
-				break close
-			}
-		}
-
+	if err != nil {
+		pi.finish(err)
+		return
 	}
+	log.Debugf("payout id=%s has finished at slot=%d", pi.payout.Id.String(), pi.slot)
+	payout := pi.payout
+	err = pi.wrapper.Send(pi.ctx, CLOSE_PAYOUT_MAX_TRIES, 30*time.Second, func(s *spt.Script) error {
+		return runClose(s, admin, controller, pipeline, payout)
+	})
 	pi.finish(err)
 }
 
-func (pi *payoutInternal) on_bid(newStatus *pyt.BidStatus) {
-	pi.bidStatus = newStatus
+func runClose(
+	script *spt.Script,
+	admin sgo.PrivateKey,
+	controller ctr.Controller,
+	pipeline pipe.Pipeline,
+	payout pyt.Payout,
+) error {
+	err := script.SetTx(admin)
+	if err != nil {
+		return err
+	}
+	err = script.CloseBids(
+		controller,
+		pipeline,
+		payout,
+		admin,
+	)
+	if err != nil {
+		return err
+	}
+	err = script.ClosePayout(
+		controller,
+		pipeline,
+		payout,
+		admin,
+	)
+	if err != nil {
+		return err
+	}
+	err = script.FinishTx(true)
+	if err != nil {
+		log.Debug("failed to close payout id=%s", payout.Id.String())
+		os.Stderr.WriteString(err.Error() + "\n")
+		return err
+	}
+	log.Debugf("payout id=%s has successfully been closed", payout.Id.String())
+	return nil
+}
+
+func (pi *payoutInternal) on_bid(newStatus pyt.BidStatus) {
+	*pi.bidStatus = newStatus
+	if pi.bidStatus.IsFinal {
+		log.Debugf("bid status for payout=%s is final", pi.payout.Id.String())
+	}
 }
 
 func (pi *payoutInternal) finish(err error) {
@@ -245,37 +298,3 @@ func (pi *payoutInternal) finish(err error) {
 }
 
 const CLOSE_PAYOUT_MAX_TRIES = 10
-
-func (pi *payoutInternal) close_payout() error {
-	log.Debugf("attempting to close payout=%s", pi.payout.Id.String())
-	err := pi.script.SetTx(pi.admin)
-	if err != nil {
-		return err
-	}
-	err = pi.script.CloseBids(
-		pi.controller,
-		pi.pipeline,
-		pi.payout,
-		pi.admin,
-	)
-	if err != nil {
-		return err
-	}
-	err = pi.script.ClosePayout(
-		pi.controller,
-		pi.pipeline,
-		pi.payout,
-		pi.admin,
-	)
-	if err != nil {
-		return err
-	}
-	err = pi.script.FinishTx(true)
-	if err != nil {
-		log.Debug("failed to close payout id=%s", pi.payout.Id.String())
-		os.Stderr.WriteString(err.Error() + "\n")
-		return err
-	}
-	log.Debugf("payout id=%s has successfully been closed", pi.payout.Id.String())
-	return nil
-}

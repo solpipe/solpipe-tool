@@ -37,7 +37,8 @@ type internal struct {
 	payoutInfo                      *payoutInfo
 	nextAttemptToAddPeriod          uint64
 	lastAddPeriodAttemptToAddPeriod uint64
-	addPeriodResultC                chan<- addPeriodResult
+	appendInProgress                bool
+	appendInProgressC               chan<- bool
 	list                            *ll.Generic[cba.PeriodWithPayout]
 	slot                            uint64
 	admin                           sgo.PrivateKey
@@ -48,11 +49,6 @@ type internal struct {
 type SettingsForFile struct {
 	RateSettings   *pba.RateSettings   `json:"rate"`
 	PeriodSettings *pba.PeriodSettings `json:"period"`
-}
-
-type addPeriodResult struct {
-	err     error
-	attempt uint64 // keep this only for logging purposes
 }
 
 func DefaultRateSettings() *pba.RateSettings {
@@ -95,12 +91,13 @@ func loopInternal(
 	var err error
 	doneC := ctx.Done()
 	errorC := make(chan error, 1)
-	addPeriodResultC := make(chan addPeriodResult, 1)
+	appendInProgressC := make(chan bool, 1)
 	deletePayoutC := make(chan uint64)
 	in := new(internal)
 	in.ctx = ctx
 	in.errorC = errorC
 	in.deletePayoutC = deletePayoutC
+	in.appendInProgressC = appendInProgressC
 	in.configFilePath = configFilePath
 	in.rpc = rpcClient
 	in.ws = wsClient
@@ -116,7 +113,6 @@ func loopInternal(
 	//in.lastAddPeriod = 0
 	in.nextAttemptToAddPeriod = 0
 	in.lastAddPeriodAttemptToAddPeriod = 0
-	in.addPeriodResultC = addPeriodResultC
 	in.list = ll.CreateGeneric[cba.PeriodWithPayout]()
 	in.slot = 0
 	in.admin = admin
@@ -125,6 +121,7 @@ func loopInternal(
 	in.pipeline = pipeline
 	//in.payoutMap = make(map[string]pipe.PayoutWithData)
 	in.homeLog = homeLog
+	in.appendInProgress = false
 
 	slotSubChannelGroup := subSlot.OnSlot()
 	defer slotSubChannelGroup.Unsubscribe()
@@ -154,18 +151,6 @@ out:
 			break out
 		case start := <-deletePayoutC:
 			in.payoutInfo.delete(start)
-		case result := <-addPeriodResultC:
-			if result.err != nil {
-				os.Stderr.WriteString(result.err.Error())
-				//log.Debug(result.err)
-				failedAttempts++
-				log.Debugf("failed attempts=%d; last attempt=%d", failedAttempts, result.attempt)
-				//in.calculate_next_attempt_to_add_period(false)
-				//log.Debugf("failed to add period: %+v", result.err)
-			} else {
-				log.Debugf("successfully added period at slot=%d", result.attempt)
-				failedAttempts = 0
-			}
 		case err = <-payoutSub.ErrorC:
 			break out
 		case x := <-payoutSub.StreamC:
@@ -188,6 +173,7 @@ out:
 			in.on_slot(slot)
 		case req := <-internalC:
 			req(in)
+		case in.appendInProgress = <-appendInProgressC:
 		}
 	}
 
