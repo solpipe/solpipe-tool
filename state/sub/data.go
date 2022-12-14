@@ -92,6 +92,9 @@ func (tu StakeUpdate) Tps(networkTps *big.Float) *big.Float {
 	activatedStake.SetInt(tu.ActivatedStake)
 	totalStake := big.NewFloat(0)
 	totalStake.SetInt(tu.TotalStake)
+	if tu.TotalStake == big.NewInt(0) {
+		return big.NewFloat(0)
+	}
 	ans := big.NewFloat(0)
 	ans.Mul(networkTps, activatedStake)
 	return ans.Quo(ans, totalStake)

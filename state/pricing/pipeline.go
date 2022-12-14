@@ -16,10 +16,16 @@ type pipelineInfo struct {
 	data       cba.Pipeline
 	cancel     context.CancelFunc
 	periodList *ll.Generic[*periodInfo]
+	tps        float64
 }
 
 func (pi *pipelineInfo) Id() sgo.PublicKey {
 	return pi.p.Id
+}
+
+type stakeUpdate struct {
+	pipelineId sgo.PublicKey
+	relative   sub.StakeUpdate
 }
 
 func (in *internal) on_pipeline(
@@ -41,6 +47,7 @@ func (in *internal) on_pipeline(
 		cancel:     cancel,
 		periodList: ll.CreateGeneric[*periodInfo](),
 	}
+
 	in.pipelineM[pi.Id().String()] = pi
 
 	go loopPipeline(
@@ -48,6 +55,7 @@ func (in *internal) on_pipeline(
 		pipeline,
 		in.errorC,
 		in.pipelineDataC,
+		in.stakeC,
 		in.periodC,
 		in.bidC,
 	)
@@ -58,6 +66,7 @@ func loopPipeline(
 	pipeline pipe.Pipeline,
 	errorC chan<- error,
 	dataC chan<- sub.PipelineGroup,
+	stakeC chan<- stakeUpdate,
 	periodC chan<- periodUpdate,
 	bidC chan<- bidUpdate,
 ) {
@@ -72,6 +81,10 @@ func loopPipeline(
 	payoutM := make(map[string]bool)
 	payoutSub := pipeline.OnPayout()
 	defer payoutSub.Unsubscribe()
+	stakeSub := pipeline.OnRelativeStake()
+	defer stakeSub.Unsubscribe()
+	var relstake sub.StakeUpdate
+
 	var pwd pipe.PayoutWithData
 	{
 		pwdList, err := pipeline.AllPayouts()
@@ -118,6 +131,17 @@ out:
 		select {
 		case <-doneC:
 			break out
+		case err = <-stakeSub.ErrorC:
+			break out
+		case relstake = <-stakeSub.StreamC:
+			select {
+			case <-doneC:
+				break out
+			case stakeC <- stakeUpdate{
+				pipelineId: pipeline.Id,
+				relative:   relstake,
+			}:
+			}
 		case err = <-dataSub.ErrorC:
 			break out
 		case data = <-dataSub.StreamC:
