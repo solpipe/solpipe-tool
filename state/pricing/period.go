@@ -4,6 +4,10 @@ import (
 	ll "github.com/solpipe/solpipe-tool/ds/list"
 )
 
+func (pi *periodInfo) tps() float64 {
+	return pi.pipelineInfo.stats.tps
+}
+
 func (pi *periodInfo) start() uint64 {
 	return pi.period.Start
 }
@@ -25,8 +29,10 @@ func (in *internal) on_period(update periodUpdate) {
 	start := update.period.Start
 	finish := update.period.Start + update.period.Length - 1
 	info := &periodInfo{
-		period: update.period,
-		bs:     update.bs,
+		period:        update.period,
+		bs:            update.bs,
+		pipelineInfo:  pi,
+		pipelineStats: nil,
 	}
 	tail := list.TailNode()
 	head := list.HeadNode()

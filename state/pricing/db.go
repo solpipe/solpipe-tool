@@ -1,5 +1,8 @@
 package pricing
 
+import "github.com/solpipe/solpipe-tool/util"
+
 type Handle interface {
-	Save() error
+	util.Base
+	Initialize() error
 }

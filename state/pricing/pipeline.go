@@ -11,23 +11,6 @@ import (
 	"github.com/solpipe/solpipe-tool/state/sub"
 )
 
-type pipelineInfo struct {
-	p          pipe.Pipeline
-	data       cba.Pipeline
-	cancel     context.CancelFunc
-	periodList *ll.Generic[*periodInfo]
-	tps        float64
-}
-
-func (pi *pipelineInfo) Id() sgo.PublicKey {
-	return pi.p.Id
-}
-
-type stakeUpdate struct {
-	pipelineId sgo.PublicKey
-	relative   sub.StakeUpdate
-}
-
 func (in *internal) on_pipeline(
 	pipeline pipe.Pipeline,
 ) {
@@ -46,6 +29,7 @@ func (in *internal) on_pipeline(
 		data:       data,
 		cancel:     cancel,
 		periodList: ll.CreateGeneric[*periodInfo](),
+		stats:      new(pipelineStats),
 	}
 
 	in.pipelineM[pi.Id().String()] = pi
@@ -199,4 +183,28 @@ out:
 		}:
 		}
 	}
+}
+
+type pipelineInfo struct {
+	p          pipe.Pipeline
+	data       cba.Pipeline
+	cancel     context.CancelFunc
+	periodList *ll.Generic[*periodInfo]
+	stats      *pipelineStats
+}
+
+type pipelineStats struct {
+	tps float64
+}
+
+// Change something in stats, but maintain
+// periodInfo still references the old stats
+func (pi *pipelineInfo) stats_migrate() {
+	newStats := new(pipelineStats)
+	*newStats = *pi.stats
+	pi.stats = newStats
+}
+
+func (pi *pipelineInfo) Id() sgo.PublicKey {
+	return pi.p.Id
 }

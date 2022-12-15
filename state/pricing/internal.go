@@ -2,7 +2,9 @@ package pricing
 
 import (
 	"context"
+	"errors"
 
+	sgo "github.com/SolmateDev/solana-go"
 	log "github.com/sirupsen/logrus"
 	ll "github.com/solpipe/solpipe-tool/ds/list"
 	ntk "github.com/solpipe/solpipe-tool/state/network"
@@ -11,23 +13,29 @@ import (
 )
 
 type internal struct {
-	ctx              context.Context
-	errorC           chan<- error
-	closeSignalCList []chan<- error
-	router           rtr.Router
-	pipelineM        map[string]*pipelineInfo
-	stakeC           chan<- stakeUpdate
-	pipelineDataC    chan<- sub.PipelineGroup
-	periodC          chan<- periodUpdate
-	periodM          map[string]*ll.Node[*periodInfo]
-	bidC             chan<- bidUpdate
-	ns               ntk.NetworkStatus
+	ctx                           context.Context
+	bidder                        sgo.PublicKey
+	errorC                        chan<- error
+	closeSignalCList              []chan<- error
+	router                        rtr.Router
+	pipelineM                     map[string]*pipelineInfo
+	pipelineMixM                  map[string]float64 // pipeline id->% of total required capacity
+	capacityRequirement           []CapacityPoint
+	capacityRequirement_i         int // reference capacityRequirement array
+	capacityRequirementDelayReadC chan int
+	stakeC                        chan<- stakeUpdate
+	pipelineDataC                 chan<- sub.PipelineGroup
+	periodC                       chan<- periodUpdate
+	periodM                       map[string]*ll.Node[*periodInfo]
+	bidC                          chan<- bidUpdate
+	ns                            ntk.NetworkStatus
 }
 
 func loopInternal(
 	ctx context.Context,
 	internalC <-chan func(*internal),
 	router rtr.Router,
+	bidder sgo.PublicKey,
 ) {
 	var err error
 	doneC := ctx.Done()
@@ -36,14 +44,17 @@ func loopInternal(
 	pipelineDataC := make(chan sub.PipelineGroup)
 	periodC := make(chan periodUpdate)
 	bidC := make(chan bidUpdate)
+	capacityRequirementDelayReadC := make(chan int)
 
 	in := new(internal)
 	in.ctx = ctx
+	in.bidder = bidder
 	in.errorC = errorC
 	in.stakeC = stakeC
 	in.pipelineDataC = pipelineDataC
 	in.periodC = periodC
 	in.bidC = bidC
+	in.capacityRequirementDelayReadC = capacityRequirementDelayReadC
 	in.closeSignalCList = make([]chan<- error, 0)
 	in.router = router
 	in.pipelineM = make(map[string]*pipelineInfo)
@@ -54,6 +65,8 @@ func loopInternal(
 		AverageTransactionsPerSecond:     0,
 		AverageTransactionsSizePerSecond: 0,
 	}
+	in.pipelineMixM = make(map[string]float64)
+	in.capacityRequirement = []CapacityPoint{}
 
 	var relStake stakeUpdate
 
@@ -96,6 +109,12 @@ out:
 			in.on_period(update)
 		case update := <-bidC:
 			in.on_bid(update)
+		case i := <-capacityRequirementDelayReadC:
+			if i < 0 || len(in.capacityRequirement) <= i {
+				in.errorC <- errors.New("i out of range")
+			} else {
+				in.capacityRequirement_i = i
+			}
 		}
 	}
 	in.finish(err)
