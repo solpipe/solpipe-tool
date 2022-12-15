@@ -129,3 +129,47 @@ func (in *internal) finish(err error) {
 		pi.cancel()
 	}
 }
+
+// use the period start and finish to find out what the capacity is for the period
+func (in *internal) capacity_requirement(pr *periodInfo) (float64, error) {
+	start := pr.period.Start
+	finish := start + pr.period.Length - 1
+	if finish <= start {
+		return 0, errors.New("bound is malformed")
+	}
+	if in.capacityRequirement == nil {
+		return 0, nil
+	}
+
+	midpoint := start + finish
+	r := midpoint % 2
+	midpoint = (midpoint - r) / 2
+
+	target_i := -1
+
+gotit:
+	for i := in.capacityRequirement_i; i < len(in.capacityRequirement); i++ {
+		if i+1 < len(in.capacityRequirement) {
+			// check ahead
+			if in.capacityRequirement[i].Start <= midpoint && midpoint <= in.capacityRequirement[i+1].Start {
+				target_i = i
+				break gotit
+			}
+		} else if i == 0 {
+			// first element
+			if midpoint < in.capacityRequirement[i].Start {
+				target_i = i
+				break gotit
+			}
+		} else {
+			// last element
+			target_i = i
+		}
+	}
+	if target_i < 0 {
+		return 0, errors.New("failed to find a capacity requirement")
+	}
+
+	return in.capacityRequirement[target_i].Tps, nil
+
+}

@@ -25,6 +25,8 @@ func (in *internal) on_pipeline(
 	}
 	ctxC, cancel := context.WithCancel(in.ctx)
 	pi := &pipelineInfo{
+		in:         in,
+		bidder:     in.bidder,
 		p:          pipeline,
 		data:       data,
 		cancel:     cancel,
@@ -186,6 +188,8 @@ out:
 }
 
 type pipelineInfo struct {
+	in         *internal
+	bidder     sgo.PublicKey
 	p          pipe.Pipeline
 	data       cba.Pipeline
 	cancel     context.CancelFunc
@@ -199,10 +203,12 @@ type pipelineStats struct {
 
 // Change something in stats, but maintain
 // periodInfo still references the old stats
-func (pi *pipelineInfo) stats_migrate() {
+func (pi *pipelineInfo) stats_migrate() *pipelineStats {
 	newStats := new(pipelineStats)
 	*newStats = *pi.stats
+	oldStats := pi.stats
 	pi.stats = newStats
+	return oldStats
 }
 
 func (pi *pipelineInfo) Id() sgo.PublicKey {

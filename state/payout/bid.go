@@ -3,10 +3,12 @@ package payout
 import (
 	"errors"
 
+	sgo "github.com/SolmateDev/solana-go"
 	log "github.com/sirupsen/logrus"
 	cba "github.com/solpipe/cba"
 	ll "github.com/solpipe/solpipe-tool/ds/list"
 	dssub "github.com/solpipe/solpipe-tool/ds/sub"
+	"github.com/solpipe/solpipe-tool/util"
 )
 
 // get alerted when a bid has been inserted
@@ -119,4 +121,26 @@ func (e1 Payout) BidStatus() (bs BidStatus, err error) {
 	}
 
 	return
+}
+
+func (bs BidStatus) Share(bidder sgo.PublicKey) (float64, error) {
+
+	if bs.TotalDeposits == 0 {
+		return 0, nil
+	}
+
+	for _, bid := range bs.Bid {
+		if bid.User.Equals(bidder) {
+			total, err := util.SafeConvertUIntToFloat(bs.TotalDeposits)
+			if err != nil {
+				return 0, err
+			}
+			deposit, err := util.SafeConvertUIntToFloat(bid.Deposit)
+			if err != nil {
+				return 0, err
+			}
+			return deposit / total, nil
+		}
+	}
+	return 0, nil
 }
