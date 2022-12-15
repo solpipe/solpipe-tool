@@ -132,6 +132,9 @@ func (in *internal) finish(err error) {
 
 // use the period start and finish to find out what the capacity is for the period
 func (in *internal) capacity_requirement(pr *periodInfo) (float64, error) {
+	if in.capacityRequirement == nil {
+		return 0, nil
+	}
 	start := pr.period.Start
 	finish := start + pr.period.Length - 1
 	if finish <= start {
@@ -170,6 +173,10 @@ gotit:
 		return 0, errors.New("failed to find a capacity requirement")
 	}
 
-	return in.capacityRequirement[target_i].Tps, nil
+	totalTps := in.capacityRequirement[target_i].Tps
+
+	if totalTps == 0 {
+		return 0, nil
+	}
 
 }

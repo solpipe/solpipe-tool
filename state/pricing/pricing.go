@@ -65,6 +65,7 @@ func (in *internal) capacity_set(curve []CapacityPoint) {
 	in.capacityRequirement = curve
 }
 
+// set the
 func (e1 Pricing) PipelineMixSet(mix map[string]float64) error {
 
 	doneC := e1.ctx.Done()
@@ -75,6 +76,8 @@ func (e1 Pricing) PipelineMixSet(mix map[string]float64) error {
 			return errors.New("cannot have negative tps value")
 		} else if v == 0 {
 			delete(mix, k)
+		} else if 1 < v {
+			return errors.New("cannot have weight greater than 1 for a pipeline")
 		} else {
 			total += v
 			_, err = sgo.PublicKeyFromBase58(k)
@@ -82,7 +85,6 @@ func (e1 Pricing) PipelineMixSet(mix map[string]float64) error {
 				return err
 			}
 		}
-
 	}
 	if total != 1 {
 		return errors.New("weights do not sum to 1")
