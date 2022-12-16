@@ -12,7 +12,7 @@ func (pi *periodInfo) finish() uint64 {
 }
 
 func (in *internal) on_period(update periodUpdate) {
-	if update.period.IsBlank {
+	if update.data.Period.IsBlank {
 		return
 	}
 	pi, present := in.pipelineM[update.pipelineId.String()]
@@ -22,10 +22,10 @@ func (in *internal) on_period(update periodUpdate) {
 
 	list := pi.periodList
 
-	start := update.period.Start
-	finish := update.period.Start + update.period.Length - 1
+	start := update.data.Period.Start
+	finish := update.data.Period.Start + update.data.Period.Length - 1
 	info := &periodInfo{
-		period:       update.period,
+		period:       update.data.Period,
 		bs:           update.bs,
 		pipelineInfo: pi,
 		projectedTps: 0,
@@ -59,5 +59,5 @@ func (in *internal) on_period(update periodUpdate) {
 			panic("bad algorithm")
 		}
 	}
-	in.periodM[update.payoutId.String()] = targetNode
+	in.periodM[update.payout.Id.String()] = targetNode
 }

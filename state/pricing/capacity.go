@@ -20,10 +20,6 @@ func (pr *periodInfo) calculate_tps() (float64, error) {
 
 func (in *internal) update_tps(pr *periodInfo) error {
 	var err error
-	pr.requiredTps, err = in.capacity_requirement(pr)
-	if err != nil {
-		return err
-	}
 	pr.projectedTps, err = pr.calculate_tps()
 	if err != nil {
 		return err

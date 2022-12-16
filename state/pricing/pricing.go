@@ -5,6 +5,7 @@ import (
 	"errors"
 
 	sgo "github.com/SolmateDev/solana-go"
+	ts "github.com/solpipe/solpipe-tool/ds/ts"
 	rtr "github.com/solpipe/solpipe-tool/state/router"
 )
 
@@ -13,12 +14,14 @@ type Pricing struct {
 	router    rtr.Router
 	internalC chan<- func(*internal)
 	bidder    sgo.PublicKey
+	handler   ts.Handle
 }
 
 func Create(
 	ctx context.Context,
 	router rtr.Router,
 	bidder sgo.PublicKey,
+	handler ts.Handle,
 ) Pricing {
 	internalC := make(chan func(*internal))
 	go loopInternal(
@@ -26,6 +29,7 @@ func Create(
 		internalC,
 		router,
 		bidder,
+		handler,
 	)
 
 	return Pricing{
@@ -33,6 +37,7 @@ func Create(
 		router:    router,
 		internalC: internalC,
 		bidder:    bidder,
+		handler:   handler,
 	}
 }
 

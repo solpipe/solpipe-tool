@@ -18,8 +18,8 @@ type bidUpdate struct {
 
 type periodUpdate struct {
 	pipelineId sgo.PublicKey
-	payoutId   sgo.PublicKey
-	period     cba.Period
+	payout     pyt.Payout
+	data       cba.Payout
 	bs         pyt.BidStatus
 }
 

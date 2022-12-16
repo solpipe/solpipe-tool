@@ -11,7 +11,6 @@ type periodInfo struct {
 	bs           pyt.BidStatus
 	pipelineInfo *pipelineInfo
 	projectedTps float64
-	requiredTps  float64
 }
 
 func (in *internal) on_bid(update bidUpdate) {

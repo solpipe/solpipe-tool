@@ -14,7 +14,7 @@ import (
 
 func TestBasic(t *testing.T) {
 
-	fp := "/tmp/test.db"
+	fp := "file:solpipe?mode=memory&cache=shared"
 	os.Remove(fp)
 	ctx, cancel := context.WithCancel(context.Background())
 	handle, err := lite.Create(ctx, fp, true)

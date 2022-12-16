@@ -21,6 +21,7 @@ func (e1 external) inside_pipeline_add(tx *sql.Tx, idList []sgo.PublicKey) error
 	if err != nil {
 		return err
 	}
+	defer insertStmt.Close()
 	for _, id := range idList {
 		_, err = insertStmt.Exec(id.String())
 		if err != nil {
@@ -46,6 +47,7 @@ func (e1 external) PipelineList() (list []sgo.PublicKey, err error) {
 	if err != nil {
 		return
 	}
+	defer results.Close()
 	list = make([]sgo.PublicKey, 0)
 	var pubkey sgo.PublicKey
 	var id string

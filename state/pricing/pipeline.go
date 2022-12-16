@@ -103,8 +103,8 @@ func loopPipeline(
 					return
 				case periodC <- periodUpdate{
 					pipelineId: pipeline.Id,
-					payoutId:   pwd.Id,
-					period:     pwd.Data.Period,
+					payout:     pwd.Payout,
+					data:       pwd.Data,
 					bs:         bs,
 				}:
 				}
@@ -162,8 +162,8 @@ out:
 					return
 				case periodC <- periodUpdate{
 					pipelineId: pipeline.Id,
-					payoutId:   pwd.Id,
-					period:     pwd.Data.Period,
+					payout:     pwd.Payout,
+					data:       pwd.Data,
 					bs:         bs,
 				}:
 				}

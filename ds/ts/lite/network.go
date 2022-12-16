@@ -6,12 +6,6 @@ import (
 	ts "github.com/solpipe/solpipe-tool/ds/ts"
 )
 
-func (sg *sqlGroup) stake() error {
-	var err error
-	sg.stake_select_all, err = sg.db.PrepareContext(sg.ctx, SQL_STAKE_SELECT_ALL)
-	return err
-}
-
 const SQL_NETWORK_INSERT_1 string = `
 INSERT INTO "network" (slot,tps) VALUES ($1,$2);
 `
@@ -27,6 +21,7 @@ func (e1 external) inside_network_append(tx *sql.Tx, list []ts.NetworkPoint) err
 	if err != nil {
 		return err
 	}
+	defer insertStmt.Close()
 	for _, s := range list {
 		_, err = insertStmt.Exec(s.Slot, s.Status.AverageTransactionsPerSecond)
 		if err != nil {
