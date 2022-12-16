@@ -5,17 +5,26 @@ Test Solpipe using a single validator and a single staker.
 
 # Setup
 
+
+
 ## Terminal 1 - Test Validator
 
 Run the test validator.
 
 ```bash
-mkdir $HOME/tmp
-cd $HOME/tmp
+mkdir -p $HOME/work/tmp
+cd $HOME/work/tmp
 solana-test-validator
 ```
 
 Press `ctrl+C` to stop the validator.  Do `rm -r $HOME/tmp/test-ledger` and restart `solana-test-validator` to reset all of the data.
+
+
+## Terminal 0 - Shortcut
+
+```bash
+./contrib/test.sh reset $HOME/work/tmp/test-ledger
+```
 
 ## Terminal 2 - Deploy Program
 

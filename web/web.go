@@ -7,6 +7,9 @@ import (
 	"net/url"
 	"time"
 
+	sgo "github.com/SolmateDev/solana-go"
+	"github.com/solpipe/solpipe-tool/ds/ts/lite"
+	prc "github.com/solpipe/solpipe-tool/state/pricing"
 	rtr "github.com/solpipe/solpipe-tool/state/router"
 )
 
@@ -18,6 +21,7 @@ type external struct {
 	rpcUrl      *url.URL
 	wsUrl       *url.URL
 	grpcWebUrl  *url.URL
+	pc          prc.Pricing
 }
 
 type Configuration struct {
@@ -45,6 +49,18 @@ func Run(
 			return
 		}
 	}
+
+	handle, err := lite.Create(ctx)
+	if err != nil {
+		errorC <- err
+		return
+	}
+	fakeBidder, err := sgo.NewRandomPrivateKey()
+	if err != nil {
+		errorC <- err
+		return
+	}
+	pc := prc.Create(ctx, router, fakeBidder.PublicKey(), handle)
 
 	var rpcUrl *url.URL
 	rpcUrl, err = url.Parse(config.RpcUrl)
@@ -75,6 +91,7 @@ func Run(
 		rpcUrl:      rpcUrl,
 		wsUrl:       wsUrl,
 		grpcWebUrl:  grpcWebUrl,
+		pc:          pc,
 	}
 
 	server := &http.Server{

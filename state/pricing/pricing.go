@@ -21,7 +21,7 @@ func Create(
 	ctx context.Context,
 	router rtr.Router,
 	bidder sgo.PublicKey,
-	handler ts.Handle,
+	handle ts.Handle,
 ) Pricing {
 	internalC := make(chan func(*internal))
 	go loopInternal(
@@ -29,7 +29,7 @@ func Create(
 		internalC,
 		router,
 		bidder,
-		handler,
+		handle,
 	)
 
 	return Pricing{
@@ -37,7 +37,7 @@ func Create(
 		router:    router,
 		internalC: internalC,
 		bidder:    bidder,
-		handler:   handler,
+		handler:   handle,
 	}
 }
 

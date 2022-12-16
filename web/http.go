@@ -46,6 +46,11 @@ func (e1 external) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	// Implement route forwarding
 	// by default, send all requests to the React front end
 	//log.Debugf("url path=%s", r.URL.Path)
+	if strings.HasPrefix(r.URL.Path, "/pricing") {
+		log.Debug("pricing")
+		e1.pricing(w, r)
+		return
+	}
 	switch r.URL.Path {
 	case "/health/startup":
 		log.Debug("start up")
