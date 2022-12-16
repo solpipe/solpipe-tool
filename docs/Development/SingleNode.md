@@ -26,6 +26,12 @@ Press `ctrl+C` to stop the validator.  Do `rm -r $HOME/tmp/test-ledger` and rest
 ./contrib/test.sh reset $HOME/work/tmp/test-ledger
 ```
 
+### Run another Validator
+
+```bash
+./contrib/test.sh prepval $HOME/work/tmp/validator-2 18899
+```
+
 ## Terminal 2 - Deploy Program
 
 Deploy the program locally.  We assume the `solpipe-tool.tar.gz` files is in `$HOME/Downloads`.

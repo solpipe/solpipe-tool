@@ -66,6 +66,41 @@ setup_validator(){
 
 }
 
+prep_validator(){
+    DIR=$1
+    PORT=$2
+    mkdir -p $DIR/ledger
+    echo $PORT >$DIR/port.txt
+    solana-keygen new --no-bip39-passphrase -o $DIR/id.json
+    solana-keygen new --no-bip39-passphrase -o $DIR/vote.json
+    solana-keygen new --no-bip39-passphrase -o $DIR/vote-admin.json
+    solana-keygen new --no-bip39-passphrase -o $DIR/validator.json
+    solana-keygen new --no-bip39-passphrase -o $DIR/validator-admin.json
+
+    solana -u localhost airdrop 24 $DIR/id.json
+    solana -u localhost airdrop 24 $DIR/validator-admin.json
+    # account, identity, withdrawer
+    solana -u localhost -k $DIR/validator-admin.json create-vote-account $DIR/vote.json $DIR/id.json $DIR/vote-admin.json
+}
+
+run_validator(){
+    DIR=$1
+    ls $DIR/id.json
+    ls $DIR/vote.json
+    ls $DIR/ledger
+    PORT=$(cat $DIR/port.txt)
+    
+    solana-validator \
+		-l $DIR/ledger \
+		--log $DIR/out.log \
+		--private-rpc \
+		--full-rpc-api \
+		--rpc-port $PORT \
+		--entrypoint 127.0.0.1:8001 \
+		--tpu-use-quic \
+		-i $DIR/id.json \
+		--vote-account $DIR/vote.json
+}
 
 
 CMD=$1
@@ -76,6 +111,15 @@ case $CMD in
         setup_controller
         setup_pipeline
         setup_validator
+    ;;
+    prepval)
+        DIR=$2
+        PORT=$3
+        prep_validator $DIR $PORT
+    ;;
+    runval)
+        DIR=$2
+        run_validator $DIR
     ;;
     *)
         decho "no such CMD=$CMD"
