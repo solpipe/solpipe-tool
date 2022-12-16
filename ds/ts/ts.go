@@ -1,6 +1,8 @@
 package db
 
 import (
+	"database/sql"
+
 	sgo "github.com/SolmateDev/solana-go"
 	ntk "github.com/solpipe/solpipe-tool/state/network"
 	pyt "github.com/solpipe/solpipe-tool/state/payout"
@@ -10,7 +12,8 @@ import (
 
 type Handle interface {
 	util.Base
-	Initialize(initialState InitialState) error
+	Type() DbType
+	Db() *sql.DB
 	TimeAppend(length uint64) (high uint64, err error)
 	PipelineAdd(idList []sgo.PublicKey) error
 	PayoutAppend(list []sub.PayoutWithData) error
@@ -41,3 +44,9 @@ type BidPoint struct {
 	PayoutId sgo.PublicKey
 	Status   pyt.BidStatus
 }
+
+type DbType = string
+
+const (
+	DB_TYPE_LITE DbType = "lite"
+)

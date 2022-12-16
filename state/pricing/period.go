@@ -1,9 +1,5 @@
 package pricing
 
-import (
-	ll "github.com/solpipe/solpipe-tool/ds/list"
-)
-
 func (pi *periodInfo) start() uint64 {
 	return pi.period.Start
 }
@@ -15,49 +11,24 @@ func (in *internal) on_period(update periodUpdate) {
 	if update.data.Period.IsBlank {
 		return
 	}
+	pr, present := in.payoutM[update.payout.Id.String()]
+	if present {
+		return
+	}
 	pi, present := in.pipelineM[update.pipelineId.String()]
 	if !present {
 		return
 	}
 
-	list := pi.periodList
-
-	start := update.data.Period.Start
-	finish := update.data.Period.Start + update.data.Period.Length - 1
-	info := &periodInfo{
+	bs, err := update.payout.BidStatus()
+	if err != nil {
+		in.errorC <- err
+		return
+	}
+	pr = &periodInfo{
 		period:       update.data.Period,
-		bs:           update.bs,
+		bs:           bs,
 		pipelineInfo: pi,
-		projectedTps: 0,
 	}
-	tail := list.TailNode()
-	head := list.HeadNode()
-	didNotFind := false
-	var targetNode *ll.Node[*periodInfo]
-	if tail == nil {
-		targetNode = list.Append(info)
-	} else if tail.Value().finish() < start {
-		targetNode = list.Append(info)
-	} else if finish < head.Value().start() {
-		targetNode = list.Prepend(info)
-	} else {
-		// need to cycle from head
-		didNotFind = true
-	foundNode:
-		for node := head; node != nil; node = node.Next() {
-			if finish < node.Value().start() {
-				targetNode = list.Insert(info, node)
-				didNotFind = false
-				break foundNode
-			} else if start == node.Value().start() {
-				// duplicate
-				//didNotFind = false
-				return
-			}
-		}
-		if didNotFind {
-			panic("bad algorithm")
-		}
-	}
-	in.periodM[update.payout.Id.String()] = targetNode
+	in.payoutM[update.payout.Id.String()] = pr
 }

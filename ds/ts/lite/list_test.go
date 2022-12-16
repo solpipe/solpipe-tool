@@ -2,7 +2,6 @@ package lite_test
 
 import (
 	"context"
-	"os"
 	"testing"
 	"time"
 
@@ -14,10 +13,8 @@ import (
 
 func TestBasic(t *testing.T) {
 
-	fp := "file:solpipe?mode=memory&cache=shared"
-	os.Remove(fp)
 	ctx, cancel := context.WithCancel(context.Background())
-	handle, err := lite.Create(ctx, fp, true)
+	handle, err := lite.Create(ctx)
 	if err != nil {
 		cancel()
 		t.Fatal(err)
@@ -27,23 +24,10 @@ func TestBasic(t *testing.T) {
 		cancel()
 		<-finishC
 	})
-	is := ts.InitialState{
-		Start:  1,
-		Finish: 10 ^ 9,
-	}
-	err = handle.Initialize(is)
-	if err != nil {
-		t.Fatal(err)
-	}
-	handle, err = lite.Create(ctx, fp, false)
-	if err != nil {
-		t.Fatal(err)
-	}
 
 	count := 50
 	var idList []sgo.PublicKey
 	{
-
 		var key sgo.PrivateKey
 		idList = make([]sgo.PublicKey, count)
 		for i := 0; i < len(idList); i++ {

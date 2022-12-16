@@ -2,11 +2,9 @@ package pricing
 
 import (
 	"context"
-	"errors"
 
 	sgo "github.com/SolmateDev/solana-go"
 	log "github.com/sirupsen/logrus"
-	ll "github.com/solpipe/solpipe-tool/ds/list"
 	ts "github.com/solpipe/solpipe-tool/ds/ts"
 	ntk "github.com/solpipe/solpipe-tool/state/network"
 	rtr "github.com/solpipe/solpipe-tool/state/router"
@@ -14,24 +12,20 @@ import (
 )
 
 type internal struct {
-	ctx                           context.Context
-	bidder                        sgo.PublicKey
-	handle                        ts.Handle
-	errorC                        chan<- error
-	closeSignalCList              []chan<- error
-	router                        rtr.Router
-	pipelineM                     map[string]*pipelineInfo
-	pipelineMixM                  map[string]float64 // pipeline id->% of total required capacity
-	capacityRequirement           []CapacityPoint
-	capacityRequirement_i         int // reference capacityRequirement array
-	capacityRequirementDelayReadC chan int
-	stakeC                        chan<- stakeUpdate
-	pipelineDataC                 chan<- sub.PipelineGroup
-	periodC                       chan<- periodUpdate
-	periodM                       map[string]*ll.Node[*periodInfo]
-	bidC                          chan<- bidUpdate
-	ns                            ntk.NetworkStatus
-	slot                          uint64
+	ctx              context.Context
+	bidder           sgo.PublicKey
+	handle           ts.Handle
+	errorC           chan<- error
+	closeSignalCList []chan<- error
+	router           rtr.Router
+	pipelineM        map[string]*pipelineInfo
+	payoutM          map[string]*periodInfo
+	stakeC           chan<- stakeUpdate
+	pipelineDataC    chan<- sub.PipelineGroup
+	periodC          chan<- periodUpdate
+	bidC             chan<- bidUpdate
+	ns               ntk.NetworkStatus
+	slot             uint64
 }
 
 func loopInternal(
@@ -48,7 +42,6 @@ func loopInternal(
 	pipelineDataC := make(chan sub.PipelineGroup)
 	periodC := make(chan periodUpdate)
 	bidC := make(chan bidUpdate)
-	capacityRequirementDelayReadC := make(chan int)
 
 	in := new(internal)
 	in.ctx = ctx
@@ -59,20 +52,17 @@ func loopInternal(
 	in.pipelineDataC = pipelineDataC
 	in.periodC = periodC
 	in.bidC = bidC
-	in.capacityRequirementDelayReadC = capacityRequirementDelayReadC
 	in.closeSignalCList = make([]chan<- error, 0)
 	in.router = router
 	in.slot = 0
 	in.pipelineM = make(map[string]*pipelineInfo)
-	in.periodM = make(map[string]*ll.Node[*periodInfo])
+	in.payoutM = make(map[string]*periodInfo)
 	in.ns = ntk.NetworkStatus{
 		WindowSize:                       0,
 		AverageTransactionsPerBlock:      0,
 		AverageTransactionsPerSecond:     0,
 		AverageTransactionsSizePerSecond: 0,
 	}
-	in.pipelineMixM = make(map[string]float64)
-	in.capacityRequirement = []CapacityPoint{}
 
 	var relStake stakeUpdate
 
@@ -128,7 +118,6 @@ out:
 			if err != nil {
 				break out
 			}
-			in.on_stake(relStake)
 		case err = <-pipelineSub.ErrorC:
 			break out
 		case p := <-pipelineSub.StreamC:
@@ -168,13 +157,6 @@ out:
 			})
 			if err != nil {
 				break out
-			}
-			in.on_bid(update)
-		case i := <-capacityRequirementDelayReadC:
-			if i < 0 || len(in.capacityRequirement) <= i {
-				in.errorC <- errors.New("i out of range")
-			} else {
-				in.capacityRequirement_i = i
 			}
 		}
 	}
