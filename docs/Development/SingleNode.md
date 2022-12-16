@@ -30,6 +30,7 @@ Press `ctrl+C` to stop the validator.  Do `rm -r $HOME/tmp/test-ledger` and rest
 
 ```bash
 ./contrib/test.sh prepval $HOME/work/tmp/validator-2 18899
+./contrib/test.sh runval $HOME/work/tmp/validator-2
 ```
 
 ## Terminal 2 - Deploy Program

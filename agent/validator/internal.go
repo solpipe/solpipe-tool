@@ -228,9 +228,11 @@ func loopFetchValidatorData(
 // The validator Receipt ring tells us if we have a new receipt.
 // We do not need to listen to payout.OnReceipt.
 func (in *internal) on_data(x cba.ValidatorManager) {
+
 	for _, r := range x.Ring {
 		y, present := in.receiptMap[r.Start]
 		if !present && !r.HasValidatorWithdrawn && in.lastStartInPayout < r.Start {
+
 			rwd, p := in.validator.ReceiptById(r.Receipt)
 			if p {
 				log.Debugf("evaluating receipt(payout=%s)=%+v", rwd.Data.Payout.String(), rwd)

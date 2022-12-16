@@ -29,6 +29,7 @@ func (in *internal) on_payout(pp payoutWithPipeline) {
 		log.Debug("we already have a receipt")
 		return
 	}
+
 	log.Debugf("have list=%d;  d=%+v", len(list), list)
 	ctxC, cancel := context.WithCancel(in.ctx)
 	in.receiptAttemptOpen[pwd.Data.Period.Start] = cancel
