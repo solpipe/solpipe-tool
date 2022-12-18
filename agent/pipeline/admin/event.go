@@ -32,7 +32,8 @@ func (in *internal) on_period2(list *ll.Generic[cba.PeriodWithPayout]) {
 }
 */
 
-const RETRY_INTERVAL = uint64(50)
+const RETRY_INTERVAL = uint64(1500)
+const START_SLOT_BUFFER = uint64(150)
 
 func (in *internal) on_slot(slot uint64) {
 	in.slot = slot
@@ -43,7 +44,7 @@ func (in *internal) on_slot(slot uint64) {
 
 	start := tail
 	if start < slot {
-		start = slot
+		start = slot + START_SLOT_BUFFER // add buffer to give time for us to get the tx to the validator before the slot passes the start
 	}
 	if !in.appendInProgress && retryLimit < slot && start < lookaheadLimit {
 		log.Debugf("slot=%d; tail=%d; retry=%d; start=%d; lookahead=%d;", slot, tail, retryLimit, start, lookaheadLimit)
