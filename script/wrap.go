@@ -116,7 +116,15 @@ func (w Wrapper) loop(
 	cb func(*Script) error,
 	errorC chan<- error,
 ) {
-	errorC <- w.Send(ctx, maxTries, delay, cb)
+	select {
+	case <-ctx.Done():
+		select {
+		case <-time.After(30 * time.Second):
+		case errorC <- nil:
+		}
+	case errorC <- w.Send(ctx, maxTries, delay, cb):
+	}
+
 }
 
 func (w Wrapper) Send(
@@ -138,6 +146,7 @@ func (w Wrapper) Send(
 	case <-doneC:
 	case w.internalC <- func(in *internal) (CallbackReplay, error) {
 		replay.Count++
+		in.script.ctx = ctx
 		return *replay, cb(in.script)
 	}:
 	}

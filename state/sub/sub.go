@@ -467,12 +467,13 @@ out:
 					log.Debugf("2____+++++++receipt=%+v", y)
 					trackingAccounts[x.Value.Pubkey.String()] = TYPE_RECEIPT
 				case D_payout:
-					log.Debugf("update on payout with id=%s", x.Value.Pubkey.String())
+
 					y := new(cba.Payout)
 					err = bin.UnmarshalBorsh(y, data)
 					if err != nil {
 						break out
 					}
+					log.Debugf("update on payout with id=%s; data=%+v", x.Value.Pubkey.String(), y)
 					in.payout.Broadcast(PayoutWithData{
 						Id:     x.Value.Pubkey,
 						Data:   *y,

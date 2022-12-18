@@ -4,10 +4,12 @@ import (
 	"errors"
 
 	sgo "github.com/SolmateDev/solana-go"
+	log "github.com/sirupsen/logrus"
 	cba "github.com/solpipe/cba"
 	ctr "github.com/solpipe/solpipe-tool/state/controller"
 	pyt "github.com/solpipe/solpipe-tool/state/payout"
 	pipe "github.com/solpipe/solpipe-tool/state/pipeline"
+	"github.com/solpipe/solpipe-tool/util"
 )
 
 func (e1 *Script) Crank(
@@ -48,6 +50,9 @@ func (e1 *Script) Crank(
 
 	b := cba.NewCrankInstructionBuilder()
 	b.SetBidsAccount(payoutData.Bids)
+	if payoutData.Bids.Equals(util.Zero()) {
+		return errors.New("bid account does not exist")
+	}
 	b.SetClockAccount(sgo.SysVarClockPubkey)
 	b.SetControllerAccount(controller.Id())
 	b.SetCrankerAccount(cranker.PublicKey())
@@ -57,6 +62,7 @@ func (e1 *Script) Crank(
 	b.SetPipelineAccount(pipeline.Id)
 	b.SetTokenProgramAccount(sgo.TokenProgramID)
 	e1.txBuilder.AddInstruction(b.Build())
+	log.Debugf("crank bid payout_data=(%+v)", payoutData)
 	e1.AppendKey(cranker)
 	return nil
 }

@@ -1,7 +1,5 @@
 package admin
 
-import log "github.com/sirupsen/logrus"
-
 // when is the earliest slot to which a period can be appended
 func (in *internal) next_slot() uint64 {
 	openSlot := in.slot
@@ -32,22 +30,7 @@ func (in *internal) on_period2(list *ll.Generic[cba.PeriodWithPayout]) {
 }
 */
 
-const RETRY_INTERVAL = uint64(1500)
-const START_SLOT_BUFFER = uint64(150)
-
 func (in *internal) on_slot(slot uint64) {
 	in.slot = slot
-
-	tail := in.payoutInfo.tailSlot // start+length
-	lookaheadLimit := slot + in.periodSettings.Lookahead
-	retryLimit := in.lastAddPeriodAttemptToAddPeriod + RETRY_INTERVAL
-
-	start := tail
-	if start < slot {
-		start = slot + START_SLOT_BUFFER // add buffer to give time for us to get the tx to the validator before the slot passes the start
-	}
-	if !in.appendInProgress && retryLimit < slot && start < lookaheadLimit {
-		log.Debugf("slot=%d; tail=%d; retry=%d; start=%d; lookahead=%d;", slot, tail, retryLimit, start, lookaheadLimit)
-		in.attempt_add_period(start)
-	}
+	in.attempt_add_period()
 }

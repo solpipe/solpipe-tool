@@ -10,6 +10,7 @@ import (
 	ctr "github.com/solpipe/solpipe-tool/state/controller"
 	pyt "github.com/solpipe/solpipe-tool/state/payout"
 	pipe "github.com/solpipe/solpipe-tool/state/pipeline"
+	"github.com/solpipe/solpipe-tool/util"
 )
 
 type PureCranker struct {
@@ -36,30 +37,36 @@ func CrankPayout(
 
 	slotSub := controller.SlotHome().OnSlot()
 	defer slotSub.Unsubscribe()
-	log.Debugf("cranking(2) payout=%s", payout.Id.String())
+	//log.Debugf("cranking(2) payout=%s", payout.Id.String())
 	bidSub := payout.OnBidStatus()
 	defer bidSub.Unsubscribe()
-	log.Debugf("cranking(3) payout=%s", payout.Id.String())
+	//log.Debugf("cranking(3) payout=%s", payout.Id.String())
+	dataSub := payout.OnData()
+	defer dataSub.Unsubscribe()
 	data, err := payout.Data()
 	if err != nil {
 		sendError(errorC, err)
-		log.Debugf("cranking(4) payout=%s", payout.Id.String())
+		//log.Debugf("cranking(4) payout=%s", payout.Id.String())
 		return
 	}
 	bidStatus, err := payout.BidStatus()
 	if err != nil {
 		sendError(errorC, err)
-		log.Debugf("cranking(5) payout=%s", payout.Id.String())
+		//log.Debugf("cranking(5) payout=%s", payout.Id.String())
 		return
 	}
 
 	finish := data.Period.Start + data.Period.Length - 1
-	log.Debugf("cranking(6) payout=%s", payout.Id.String())
+	//log.Debugf("cranking(6) payout=%s", payout.Id.String())
+	zero := util.Zero()
 out:
-	for !(bidStatus.IsFinal || finish < slot) {
+	for !bidStatus.IsFinal && slot <= finish && !data.Bids.Equals(zero) {
 		select {
 		case <-doneC:
 			break out
+		case err = <-dataSub.ErrorC:
+			break out
+		case data = <-dataSub.StreamC:
 		case err = <-slotSub.ErrorC:
 			break out
 		case slot = <-slotSub.StreamC:
@@ -68,16 +75,16 @@ out:
 		case bidStatus = <-bidSub.StreamC:
 		}
 	}
-	log.Debugf("cranking(7) payout=%s", payout.Id.String())
+	//log.Debugf("cranking(7) payout=%s", payout.Id.String())
 	if err != nil {
 		sendError(errorC, err)
 		return
 	}
-	if bidStatus.IsFinal {
+	if bidStatus.IsFinal || data.Bids.Equals(zero) {
 		log.Debugf("someone else already cranked payout=%s", payout.Id.String())
 		return
 	}
-	log.Debugf("cranking(8) payout=%s", payout.Id.String())
+	//log.Debugf("cranking(8) payout=%s", payout.Id.String())
 
 	log.Debugf("now attempting to crank payout=%s with bidstatus=(%s,%d) and slots (finish=%d; slot=%d) ", payout.Id.String(), bidStatus.IsFinal, bidStatus.TotalDeposits, finish, slot)
 	ctxC, cancel := context.WithCancel(ctx)
@@ -90,6 +97,11 @@ out:
 	if err != nil {
 		log.Debugf("cranking(10) payout=%s", payout.Id.String())
 		log.Debug(err)
+
+		bs, err := payout.BidStatus()
+		if err == nil {
+			log.Debugf("____payout=%+v\n\nbid status=%+v", data, bs)
+		}
 		return
 	}
 	log.Debugf("successfully cranked payout=%s", payout.Id.String())

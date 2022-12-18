@@ -35,7 +35,8 @@ func (in *internal) init_bid() error {
 }
 
 func (in *internal) close_bid_list() {
-	log.Debugf("closing bid account for payout=%s", in.id.String())
+	zero := util.Zero()
+	log.Debugf("closing bid account for payout=%s vs zero=%s", in.id.String(), zero.String())
 	in.bi.is_closed = true
 	in.bid_broadcast()
 }
@@ -47,6 +48,7 @@ func (in *internal) on_bid_list(bl cba.BidList) {
 		log.Error("we should not be here")
 		return
 	}
+
 	bi.totalDeposits = bl.TotalDeposits
 	bi.is_final = bl.BiddingFinished
 	newList := ll.CreateGeneric[*cba.Bid]()
@@ -108,6 +110,7 @@ func getBlankBidStatus() BidStatus {
 
 func (in *internal) bid_status() BidStatus {
 	if in.bi.is_closed {
+		log.Debugf("__bid is closed")
 		return getBlankBidStatus()
 	}
 	list := make([]cba.Bid, in.bi.list.Size)
@@ -115,6 +118,7 @@ func (in *internal) bid_status() BidStatus {
 		list[index] = *obj
 		return nil
 	})
+
 	return BidStatus{
 		Bid:           list,
 		IsFinal:       in.bi.is_final,
@@ -141,6 +145,9 @@ func (e1 Payout) BidStatus() (bs BidStatus, err error) {
 		errorC <- nil
 		ansC <- in.bid_status()
 	}:
+	}
+	if err != nil {
+		return
 	}
 	select {
 	case err = <-errorC:

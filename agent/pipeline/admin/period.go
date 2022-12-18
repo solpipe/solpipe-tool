@@ -14,10 +14,22 @@ import (
 	pipe "github.com/solpipe/solpipe-tool/state/pipeline"
 )
 
-func (in *internal) attempt_add_period(
-	start uint64,
-) {
+const RETRY_INTERVAL = uint64(1500)
+const START_SLOT_BUFFER = uint64(150)
 
+func (in *internal) attempt_add_period() {
+
+	tail := in.payoutInfo.tailSlot // start+length
+	lookaheadLimit := in.slot + in.periodSettings.Lookahead
+	start := tail
+	if start < in.slot {
+		// add buffer to give time for us to get the tx to the validator before the slot passes the start
+		start = in.slot + START_SLOT_BUFFER
+	}
+	if !(!in.appendInProgress && start < lookaheadLimit) {
+		return
+	}
+	log.Debugf("slot=%d; tail=%d; start=%d; lookahead=%d;", in.slot, tail, start, lookaheadLimit)
 	in.appendInProgress = true
 	in.lastAddPeriodAttemptToAddPeriod = in.slot
 	log.Debugf("(slot=%d) attempting to add a period; start=%d; end=%d; bid space=%d", in.slot, start, start+in.periodSettings.Length-1, in.periodSettings.BidSpace)
@@ -65,33 +77,49 @@ func (in *internal) attempt_add_period(
 			tickSize,
 		)
 	}, signalC)
-	go loopAppendErrorToError(in.ctx, cancel, in.appendInProgressC, signalC, in.errorC)
+	go loopAppendErrorToError(in.ctx, cancel, in.pipeline, in.appendInProgressC, signalC, in.errorC)
 
 }
 
 func loopAppendErrorToError(
 	ctx context.Context,
 	cancel context.CancelFunc,
+	pipeline pipe.Pipeline,
 	progressC chan<- bool,
 	resultC <-chan error,
 	errorC chan<- error,
 ) {
 	doneC := ctx.Done()
+	// subscribe to OnPeriod change to give time for the state router to get all the relevant updates from the
+	periodSub := pipeline.OnPeriod()
+	defer periodSub.Unsubscribe()
+	var err error
+
 	select {
 	case <-doneC:
-	case err := <-resultC:
-		if err != nil {
-			log.Debugf("failed to append: %s", err.Error())
-			select {
-			case <-doneC:
-			case errorC <- err:
-			}
-		} else {
-			log.Debug("append successful")
-			select {
-			case <-doneC:
-			case progressC <- false:
-			}
+	case err = <-periodSub.ErrorC:
+	case err = <-resultC:
+	}
+
+	if err == nil {
+		select {
+		case err = <-periodSub.ErrorC:
+		case <-doneC:
+		case <-periodSub.StreamC:
+		}
+	}
+
+	if err != nil {
+		log.Debugf("failed to append: %s", err.Error())
+		select {
+		case <-doneC:
+		case errorC <- err:
+		}
+	} else {
+		log.Debug("append successful")
+		select {
+		case <-doneC:
+		case progressC <- false:
 		}
 	}
 }
@@ -142,10 +170,12 @@ func runAppendPeriod(
 		log.Debugf("append error: %s", err.Error())
 		return err
 	}
+	// a successful transaction here does not imply that the transaction has made it into a block and run without error
 	err = script.FinishTx(true)
 	if err != nil {
 		log.Debugf("tx submit failure: %s", err.Error())
 		return err
 	}
+
 	return nil
 }

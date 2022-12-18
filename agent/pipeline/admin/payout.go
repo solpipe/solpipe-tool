@@ -14,6 +14,7 @@ import (
 	ctr "github.com/solpipe/solpipe-tool/state/controller"
 	pyt "github.com/solpipe/solpipe-tool/state/payout"
 	pipe "github.com/solpipe/solpipe-tool/state/pipeline"
+	"github.com/solpipe/solpipe-tool/util"
 )
 
 type payoutInfo struct {
@@ -218,6 +219,10 @@ func loopPayout(
 
 	attemptedCloseBid := false
 	var closeBidCancel context.CancelFunc
+	closeBidSignalC := make(chan error, 1)
+	zero := util.Zero()
+
+	// REDO THE WHOLE THING!!!!!!!!!!!
 out:
 	for !(pi.bidStatus.IsFinal && finish <= pi.slot && pi.data.StakerCount == 0 && pi.data.ValidatorCount == 0) {
 		select {
@@ -228,21 +233,33 @@ out:
 		case err = <-dataSub.ErrorC:
 			break out
 		case *pi.data = <-dataSub.StreamC:
+			if pi.data.Bids.Equals(zero) {
+				log.Debugf("bid account has closed for payout=%s", pi.payout.Id.String())
+				if closeBidCancel != nil {
+					closeBidCancel()
+					closeBidCancel = nil
+				}
+			}
 		case err = <-bidSub.ErrorC:
 			break out
 		case x := <-bidSub.StreamC:
 			pi.on_bid(x)
 		case err = <-slotSub.ErrorC:
 			break out
+		case err = <-closeBidSignalC:
+			if err != nil {
+				log.Debugf("close bid error: %s", err.Error())
+				break out
+			}
 		case pi.slot = <-slotSub.StreamC:
 			if !attemptedCloseBid && pi.data.Period.Start <= pi.slot && pi.bidStatus.IsFinal {
 				attemptedCloseBid = true
 				// ignore errors from here
 				// TODO: why does this instruction run even if the BidAccount has been closed?
-				signalC := make(chan error, 1)
+
 				closeBidCancel = pi.wrapper.SendDetached(pi.ctx, CLOSE_PAYOUT_MAX_TRIES, 30*time.Second, func(script *spt.Script) error {
 					return runCloseBids(script, admin, controller, pipeline, pwd.Payout)
-				}, signalC)
+				}, closeBidSignalC)
 			}
 			if pi.slot%50 == 0 {
 				bm := "true"
@@ -294,7 +311,7 @@ func runCloseBids(
 	}
 	err = script.FinishTx(true)
 	if err != nil {
-		log.Debug("failed to close payout id=%s", payout.Id.String())
+		log.Debugf("failed to close bids payout=%s", payout.Id.String())
 		os.Stderr.WriteString(err.Error() + "\n")
 		return err
 	}
