@@ -3,6 +3,7 @@ package payout
 import (
 	"context"
 
+	sgo "github.com/SolmateDev/solana-go"
 	log "github.com/sirupsen/logrus"
 	cba "github.com/solpipe/cba"
 	dssub "github.com/solpipe/solpipe-tool/ds/sub"
@@ -12,6 +13,7 @@ import (
 
 type internal struct {
 	ctx              context.Context
+	id               sgo.PublicKey
 	errorC           chan<- error
 	closeSignalCList []chan<- error
 	data             *cba.Payout
@@ -25,6 +27,7 @@ type internal struct {
 func loopInternal(
 	ctx context.Context,
 	internalC <-chan func(*internal),
+	id sgo.PublicKey,
 	data *cba.Payout,
 	dataC <-chan sub.PayoutWithData,
 	payoutHome *dssub.SubHome[cba.Payout],
@@ -38,6 +41,7 @@ func loopInternal(
 	in := new(internal)
 	in.ctx = ctx
 	in.errorC = errorC
+	in.id = id
 	in.data = data
 	in.receipts = make(map[string]rpt.ReceiptWithData)
 	in.payoutHome = payoutHome

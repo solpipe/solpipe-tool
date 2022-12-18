@@ -2,6 +2,7 @@ package validator
 
 import (
 	"context"
+	"errors"
 	"time"
 
 	sgo "github.com/SolmateDev/solana-go"
@@ -19,7 +20,16 @@ type payoutWithPipeline struct {
 
 func (in *internal) on_payout(pp payoutWithPipeline) {
 	pwd := pp.pwd
-	log.Debugf("new payout(%s)=%+v", pwd.Id.String(), pwd.Data)
+
+	if pp.pwd.Data.Period.Start <= in.lastStartInPayout {
+		log.Debugf("duplicate payout(%s)=%+v", pwd.Id.String(), pwd.Data)
+		//if 0 < pp.pwd.Data.ValidatorCount {
+		// maybe we need to crank this one
+		//}
+		return
+	} else {
+		log.Debugf("new payout to which to create a receipt(%s)=%+v", pwd.Id.String(), pwd.Data)
+	}
 	list, err := pwd.Payout.Receipt()
 	if err != nil {
 		in.errorC <- err
@@ -27,6 +37,12 @@ func (in *internal) on_payout(pp payoutWithPipeline) {
 	}
 	if 0 < len(list) {
 		log.Debug("we already have a receipt")
+		return
+	}
+	_, present := in.receiptAttemptOpen[pwd.Data.Period.Start]
+	if present {
+		log.Debugf("double receipt payout=%s", pwd.Id.String())
+		in.errorC <- errors.New("receipt attempt already in progress despite new payout")
 		return
 	}
 
@@ -57,13 +73,24 @@ func (in *internal) on_payout(pp payoutWithPipeline) {
 			pwd.Payout,
 			signalC,
 		)
+	}
 
+	// check again to make sure we have not already sent a receipt request
+	list, err = pwd.Payout.Receipt()
+	if err != nil {
+		in.errorC <- err
+		return
+	}
+	if 0 < len(list) {
+		log.Debug("we have a receipt now")
+		cancel()
+		delete(in.receiptAttemptOpen, pwd.Data.Period.Start)
 	}
 
 }
 
 func loopReceiptOpen(
-	ctx context.Context,
+	ctxParent context.Context,
 	errorC chan<- error,
 	scriptWrapper spt.Wrapper,
 	controllerId sgo.PublicKey,
@@ -74,9 +101,13 @@ func loopReceiptOpen(
 	admin sgo.PrivateKey,
 	deleteC chan<- uint64,
 ) {
-	doneC := ctx.Done()
+
 	receiptC := make(chan sgo.PublicKey, 1)
 	log.Debugf("attempting to create receipt for payout=%s", payoutId.String())
+	ctx, cancel := context.WithCancel(ctxParent)
+	defer cancel()
+	doneC := ctx.Done()
+	// we must delete the attempt once this goroutine exists
 	defer func() {
 		select {
 		case <-doneC:

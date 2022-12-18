@@ -19,6 +19,10 @@ func (e1 Payout) Update(pwd sub.PayoutWithData) {
 
 // If you get IsOpen=true, then router will call e1.Close() for us. Do not close Payout here.
 func (in *internal) on_data(pwd sub.PayoutWithData) {
+	log.Debugf("zero? bid=%s", pwd.Data.Bids.String())
+	if pwd.Data.Bids.Equals(util.Zero()) {
+		in.close_bid_list()
+	}
 	in.payoutHome.Broadcast(pwd.Data)
 	in.data = &pwd.Data
 }

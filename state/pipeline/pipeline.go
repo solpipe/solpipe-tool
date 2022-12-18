@@ -8,7 +8,6 @@ import (
 	sgo "github.com/SolmateDev/solana-go"
 	sgorpc "github.com/SolmateDev/solana-go/rpc"
 	sgows "github.com/SolmateDev/solana-go/rpc/ws"
-	log "github.com/sirupsen/logrus"
 	cba "github.com/solpipe/cba"
 	ll "github.com/solpipe/solpipe-tool/ds/list"
 	dssub "github.com/solpipe/solpipe-tool/ds/sub"
@@ -332,19 +331,10 @@ func (e1 Pipeline) AllPayouts() ([]PayoutWithData, error) {
 
 func (in *internal) payout_list(ansC chan<- []PayoutWithData) {
 	doneC := in.ctx.Done()
-	list := make([]PayoutWithData, in.payoutLinkedList.Size)
 
-	err := in.payoutLinkedList.Iterate(func(obj PayoutWithData, index uint32, delete func()) error {
-		log.Debugf("index=%d with id=%s", index, obj.Id.String())
-		list[index] = obj
-		return nil
-	})
-	if err != nil {
-		return
-	}
 	select {
 	case <-doneC:
-	case ansC <- list:
+	case ansC <- in.payoutLinkedList.Array():
 	}
 
 }

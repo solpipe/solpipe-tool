@@ -115,17 +115,30 @@ func (in *internal) on_payout(pwd pipe.PayoutWithData) {
 	)
 	if err != nil {
 		in.errorC <- err
+		return
 	}
 	wrapper := spt.Wrap(script)
-	go ckr.CrankPayout(
-		in.ctx,
-		in.admin,
-		in.controller,
-		in.pipeline,
-		wrapper,
-		pwd.Payout,
-		in.errorC,
-	)
+	{
+		bs, err := pwd.Payout.BidStatus()
+		if err != nil {
+			in.errorC <- err
+			return
+		}
+		if !bs.IsFinal {
+			log.Debugf("bid for payout=%s is NOT final", pwd.Id.String())
+			go ckr.CrankPayout(
+				in.ctx,
+				in.admin,
+				in.controller,
+				in.pipeline,
+				wrapper,
+				pwd.Payout,
+				in.errorC,
+			)
+		} else {
+			log.Debugf("bid for payout=%s is final, skipping Crank", pwd.Id.String())
+		}
+	}
 
 	go loopPayout(
 		ctxC,
@@ -142,17 +155,18 @@ func (in *internal) on_payout(pwd pipe.PayoutWithData) {
 }
 
 type payoutInternal struct {
-	ctx        context.Context
-	slot       uint64
-	errorC     chan<- error
-	deleteC    chan<- uint64
-	controller ctr.Controller
-	pipeline   pipe.Pipeline
-	data       *cba.Payout
-	payout     pyt.Payout
-	wrapper    spt.Wrapper
-	admin      sgo.PrivateKey
-	bidStatus  *pyt.BidStatus
+	ctx            context.Context
+	slot           uint64
+	errorC         chan<- error
+	internalErrorC chan<- error
+	deleteC        chan<- uint64
+	controller     ctr.Controller
+	pipeline       pipe.Pipeline
+	data           *cba.Payout
+	payout         pyt.Payout
+	wrapper        spt.Wrapper
+	admin          sgo.PrivateKey
+	bidStatus      *pyt.BidStatus
 }
 
 func loopPayout(
@@ -170,6 +184,7 @@ func loopPayout(
 	defer cancel()
 	slotHome := controller.SlotHome()
 	doneC := ctx.Done()
+	internalErrorC := make(chan error, 1)
 	slotSub := slotHome.OnSlot()
 	defer slotSub.Unsubscribe()
 	dataSub := pwd.Payout.OnData()
@@ -180,6 +195,7 @@ func loopPayout(
 	pi := new(payoutInternal)
 	pi.ctx = ctx
 	pi.errorC = errorC
+	pi.internalErrorC = internalErrorC
 	pi.deleteC = deletePayoutC
 	pi.controller = controller
 	pi.pipeline = pipeline
@@ -187,6 +203,7 @@ func loopPayout(
 	pi.payout = pwd.Payout
 	pi.wrapper = wrapper
 	pi.admin = admin
+	pi.slot = 0
 
 	pi.bidStatus = new(pyt.BidStatus)
 	*pi.bidStatus, err = pi.payout.BidStatus()
@@ -195,14 +212,18 @@ func loopPayout(
 		return
 	}
 
-	finish := pi.data.Period.Start + pi.data.Period.Length + pyt.PAYOUT_CLOSE_DELAY
+	finish := pi.data.Period.Start + pi.data.Period.Length + pyt.PAYOUT_CLOSE_DELAY + 1
 
 	log.Debugf("finish for payout=%s is slot=(%d), validator count=%d ,with bid status=%+v", pi.payout.Id.String(), finish, pi.data.ValidatorCount, pi.bidStatus)
 
+	attemptedCloseBid := false
+	var closeBidCancel context.CancelFunc
 out:
 	for !(pi.bidStatus.IsFinal && finish <= pi.slot && pi.data.StakerCount == 0 && pi.data.ValidatorCount == 0) {
 		select {
 		case <-doneC:
+			break out
+		case err = <-internalErrorC:
 			break out
 		case err = <-dataSub.ErrorC:
 			break out
@@ -214,10 +235,26 @@ out:
 		case err = <-slotSub.ErrorC:
 			break out
 		case pi.slot = <-slotSub.StreamC:
-			if pi.slot%100 == 0 {
-				log.Debugf("pi.slot(%s)=%d", pi.payout.Id.String(), pi.slot)
+			if !attemptedCloseBid && pi.data.Period.Start <= pi.slot && pi.bidStatus.IsFinal {
+				attemptedCloseBid = true
+				// ignore errors from here
+				// TODO: why does this instruction run even if the BidAccount has been closed?
+				signalC := make(chan error, 1)
+				closeBidCancel = pi.wrapper.SendDetached(pi.ctx, CLOSE_PAYOUT_MAX_TRIES, 30*time.Second, func(script *spt.Script) error {
+					return runCloseBids(script, admin, controller, pipeline, pwd.Payout)
+				}, signalC)
+			}
+			if pi.slot%50 == 0 {
+				bm := "true"
+				if !pi.bidStatus.IsFinal {
+					bm = "false"
+				}
+				log.Debugf("pi (payout=%s)(final=%s)(slot=%d)(valcount=%d)(staker=%d)(finish=%d)", pi.payout.Id.String(), bm, pi.slot, pi.data.ValidatorCount, pi.data.StakerCount, finish)
 			}
 		}
+	}
+	if closeBidCancel != nil {
+		closeBidCancel()
 	}
 	if err != nil {
 		pi.finish(err)
@@ -226,12 +263,46 @@ out:
 	log.Debugf("payout id=%s has finished at slot=%d", pi.payout.Id.String(), pi.slot)
 	payout := pi.payout
 	err = pi.wrapper.Send(pi.ctx, CLOSE_PAYOUT_MAX_TRIES, 30*time.Second, func(s *spt.Script) error {
-		return runClose(s, admin, controller, pipeline, payout)
+		return runClosePayout(s, admin, controller, pipeline, payout)
 	})
 	pi.finish(err)
 }
 
-func runClose(
+func runCloseBids(
+	script *spt.Script,
+	admin sgo.PrivateKey,
+	controller ctr.Controller,
+	pipeline pipe.Pipeline,
+	payout pyt.Payout,
+) error {
+	err := script.SetTx(admin)
+	if err != nil {
+		return err
+	}
+	err = script.CloseBids(
+		controller,
+		pipeline,
+		payout,
+		admin,
+	)
+	if err != nil {
+		return err
+	}
+
+	if err != nil {
+		return err
+	}
+	err = script.FinishTx(true)
+	if err != nil {
+		log.Debug("failed to close payout id=%s", payout.Id.String())
+		os.Stderr.WriteString(err.Error() + "\n")
+		return err
+	}
+	log.Debugf("payout id=%s has successfully been closed", payout.Id.String())
+	return nil
+}
+
+func runClosePayout(
 	script *spt.Script,
 	admin sgo.PrivateKey,
 	controller ctr.Controller,

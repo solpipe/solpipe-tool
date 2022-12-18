@@ -77,6 +77,10 @@ prep_validator(){
     solana-keygen new --no-bip39-passphrase -o $DIR/validator.json
     solana-keygen new --no-bip39-passphrase -o $DIR/validator-admin.json
 
+    cp -r $DIR/vote.json ./localconfig/single/vote-$PORT.json
+    cp -r $DIR/validator.json ./localconfig/single/validator-$PORT.json
+    cp -r $DIR/validator-admin.json ./localconfig/single/validator-admin-$PORT.json
+
     solana -u localhost airdrop 24 $DIR/id.json
     solana -u localhost airdrop 24 $DIR/validator-admin.json
     # account, identity, withdrawer
@@ -90,7 +94,7 @@ run_validator(){
     ls $DIR/ledger
     PORT=$(cat $DIR/port.txt)
     
-    solana-validator \
+    exec solana-validator \
 		-l $DIR/ledger \
 		--log $DIR/out.log \
 		--private-rpc \
@@ -99,13 +103,13 @@ run_validator(){
 		--entrypoint 127.0.0.1:8001 \
 		--tpu-use-quic \
 		-i $DIR/id.json \
-		--vote-account $DIR/vote.json
+		--vote-account $DIR/vote.json 
 }
 
 
 CMD=$1
 case $CMD in
-    reset)
+    init)
         TEST_LEDGER_DIR=$2
         copy_keys $TEST_LEDGER_DIR
         setup_controller
@@ -116,6 +120,11 @@ case $CMD in
         DIR=$2
         PORT=$3
         prep_validator $DIR $PORT
+    ;;
+    run)
+        DIR=$2
+        echo "type the following command:"
+        exec echo solana-test-validator --ledger $DIR --gossip-port 8001 
     ;;
     runval)
         DIR=$2

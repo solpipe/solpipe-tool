@@ -23,10 +23,16 @@ Press `ctrl+C` to stop the validator.  Do `rm -r $HOME/tmp/test-ledger` and rest
 ## Terminal 0 - Shortcut
 
 ```bash
-./contrib/test.sh reset $HOME/work/tmp/test-ledger
+rm -r $HOME/work/tmp/validator-8899
+./contrib/test.sh run $HOME/work/tmp/validator-8899
+```
+
+```bash
+./contrib/test.sh init $HOME/work/tmp/validator-8899
 ```
 
 ### Run another Validator
+
 
 ```bash
 ./contrib/test.sh prepval $HOME/work/tmp/validator-2 18899

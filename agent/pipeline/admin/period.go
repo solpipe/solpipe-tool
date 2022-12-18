@@ -49,7 +49,8 @@ func (in *internal) attempt_add_period(
 	payoutShare := state.RateFromProto(in.rateSettings.PayoutShare)
 	tickSize := uint16(in.periodSettings.TickSize)
 	wrapper := spt.Wrap(script)
-	signalC, cancel := wrapper.SendDetached(in.ctx, 10, 30*time.Second, func(s *spt.Script) error {
+	signalC := make(chan error, 1)
+	cancel := wrapper.SendDetached(in.ctx, 1, 0*time.Second, func(s *spt.Script) error {
 		return runAppendPeriod(
 			s,
 			admin,
@@ -63,7 +64,7 @@ func (in *internal) attempt_add_period(
 			payoutShare,
 			tickSize,
 		)
-	})
+	}, signalC)
 	go loopAppendErrorToError(in.ctx, cancel, in.appendInProgressC, signalC, in.errorC)
 
 }

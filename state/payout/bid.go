@@ -18,6 +18,7 @@ func (e1 Payout) OnBidStatus() dssub.Subscription[BidStatus] {
 
 type bidInfo struct {
 	is_final      bool
+	is_closed     bool
 	totalDeposits uint64
 	list          *ll.Generic[*cba.Bid]
 	search        map[string]*ll.Node[*cba.Bid] // user.id->bid
@@ -28,8 +29,15 @@ func (in *internal) init_bid() error {
 	bi.list = ll.CreateGeneric[*cba.Bid]()
 	bi.search = make(map[string]*ll.Node[*cba.Bid])
 	bi.is_final = false
+	bi.is_closed = false
 	in.bi = bi
 	return nil
+}
+
+func (in *internal) close_bid_list() {
+	log.Debugf("closing bid account for payout=%s", in.id.String())
+	in.bi.is_closed = true
+	in.bid_broadcast()
 }
 
 // update the linked list so that it only contains up-to-date
@@ -72,6 +80,10 @@ func (in *internal) on_bid_list(bl cba.BidList) {
 
 func (in *internal) bid_broadcast() {
 	bi := in.bi
+	if bi.is_closed {
+		in.bidStatusHome.Broadcast(getBlankBidStatus())
+		return
+	}
 	list := make([]cba.Bid, bi.list.Size)
 	bi.list.Iterate(func(obj *cba.Bid, index uint32, deleteNode func()) error {
 		list[index] = *obj
@@ -81,10 +93,23 @@ func (in *internal) bid_broadcast() {
 		Bid:           list,
 		IsFinal:       bi.is_final,
 		TotalDeposits: bi.totalDeposits,
+		IsOpen:        true,
 	})
 }
 
+func getBlankBidStatus() BidStatus {
+	return BidStatus{
+		Bid:           make([]cba.Bid, 0),
+		IsFinal:       true,
+		TotalDeposits: 0,
+		IsOpen:        false,
+	}
+}
+
 func (in *internal) bid_status() BidStatus {
+	if in.bi.is_closed {
+		return getBlankBidStatus()
+	}
 	list := make([]cba.Bid, in.bi.list.Size)
 	in.bi.list.Iterate(func(obj *cba.Bid, index uint32, delete func()) error {
 		list[index] = *obj
@@ -94,6 +119,7 @@ func (in *internal) bid_status() BidStatus {
 		Bid:           list,
 		IsFinal:       in.bi.is_final,
 		TotalDeposits: in.bi.totalDeposits,
+		IsOpen:        true,
 	}
 }
 
@@ -101,6 +127,7 @@ type BidStatus struct {
 	Bid           []cba.Bid // only contains active bids
 	IsFinal       bool
 	TotalDeposits uint64
+	IsOpen        bool
 }
 
 func (e1 Payout) BidStatus() (bs BidStatus, err error) {

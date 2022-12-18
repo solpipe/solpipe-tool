@@ -101,11 +101,12 @@ func (w Wrapper) SendDetached(
 	maxTries int,
 	delay time.Duration,
 	cb func(*Script) error,
-) (<-chan error, context.CancelFunc) {
+	signalC chan<- error,
+) context.CancelFunc {
 	ctxC, cancel := context.WithCancel(ctx)
-	signalC := make(chan error, 1)
+	//signalC := make(chan error, 1)
 	go w.loop(ctxC, maxTries, delay, cb, signalC)
-	return signalC, cancel
+	return cancel
 }
 
 func (w Wrapper) loop(
