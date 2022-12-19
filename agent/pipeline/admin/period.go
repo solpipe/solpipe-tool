@@ -62,7 +62,7 @@ func (in *internal) attempt_add_period() {
 	tickSize := uint16(in.periodSettings.TickSize)
 	wrapper := spt.Wrap(script)
 	signalC := make(chan error, 1)
-	cancel := wrapper.SendDetached(in.ctx, 5, 10*time.Second, func(s *spt.Script) error {
+	_, cancel := wrapper.SendDetached(in.ctx, 5, 10*time.Second, func(s *spt.Script) error {
 		return runAppendPeriod(
 			s,
 			admin,

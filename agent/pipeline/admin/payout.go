@@ -4,7 +4,6 @@ import (
 	"context"
 	"errors"
 	"os"
-	"time"
 
 	sgo "github.com/SolmateDev/solana-go"
 	log "github.com/sirupsen/logrus"
@@ -157,18 +156,26 @@ func (in *internal) on_payout(pwd pipe.PayoutWithData) {
 }
 
 type payoutInternal struct {
-	ctx            context.Context
-	slot           uint64
-	errorC         chan<- error
-	internalErrorC chan<- error
-	deleteC        chan<- uint64
-	controller     ctr.Controller
-	pipeline       pipe.Pipeline
-	data           *cba.Payout
-	payout         pyt.Payout
-	wrapper        spt.Wrapper
-	admin          sgo.PrivateKey
-	bidStatus      *pyt.BidStatus
+	ctx                       context.Context
+	slot                      uint64
+	errorC                    chan<- error
+	internalErrorC            chan<- error
+	deleteC                   chan<- uint64
+	controller                ctr.Controller
+	pipeline                  pipe.Pipeline
+	data                      *cba.Payout
+	payout                    pyt.Payout
+	wrapper                   spt.Wrapper
+	admin                     sgo.PrivateKey
+	hasStarted                bool
+	hasFinished               bool
+	isReadyToClose            bool
+	bidIsFinal                bool
+	bidHasClosed              bool
+	validatorAddingHasStarted bool
+	validatorAddingIsDone     bool
+	cancelCrank               context.CancelFunc
+	cancelCloseBid            context.CancelFunc
 }
 
 func loopPayout(
@@ -195,7 +202,9 @@ func loopPayout(
 	defer bidSub.Unsubscribe()
 
 	eventC := make(chan PayoutEvent)
-	go loopClock(ctx, controller, eventC, errorC, pwd.Data)
+	clockPeriodStartC := make(chan bool, 1)
+	go loopClock(ctx, controller, eventC, errorC, clockPeriodStartC, pwd.Data)
+	go loopPayoutEvent(ctx, pwd, errorC, eventC, clockPeriodStartC)
 
 	pi := new(payoutInternal)
 	pi.ctx = ctx
@@ -209,196 +218,62 @@ func loopPayout(
 	pi.wrapper = wrapper
 	pi.admin = admin
 	pi.slot = 0
+	pi.hasStarted = false
+	pi.hasFinished = false
+	pi.isReadyToClose = false
+	pi.bidIsFinal = false
+	pi.bidHasClosed = false
+	pi.validatorAddingHasStarted = false
+	pi.validatorAddingIsDone = false
 
-	pi.bidStatus = new(pyt.BidStatus)
-	*pi.bidStatus, err = pi.payout.BidStatus()
-	if err != nil {
-		pi.errorC <- err
-		return
-	}
+	// pi.errorC will return a nil error in pi.errorC from pi.run_close_payout()
+	// thereby exiting this forloop
 
-	go loopPayoutEvent(ctx, pwd, pi.errorC, eventC)
-
-out2:
+	var isTrans string
+out:
 	for {
 		select {
 		case <-doneC:
-			break out2
+			break out
 		case event := <-eventC:
+			if event.IsStateChange {
+				isTrans = "change"
+			} else {
+				isTrans = "static"
+			}
+			log.Debugf("event payout=%s  type=%s  isTransition=%s", pi.payout.Id.String(), event.Type, isTrans)
 			switch event.Type {
 			case EVENT_START:
+				err = pi.on_start(event.IsStateChange)
 			case EVENT_FINISH:
+				err = pi.on_finish(event.IsStateChange)
 			case EVENT_CLOSE_OUT:
+				err = pi.on_close_out(event.IsStateChange)
+			case EVENT_BID_CLOSED:
+				err = pi.on_bid_closed(event.IsStateChange)
+			case EVENT_BID_FINAL:
+				err = pi.on_bid_final(event.IsStateChange)
+			case EVENT_VALIDATOR_IS_ADDING:
+				err = pi.on_validator_is_adding(event.IsStateChange)
+			case EVENT_VALIDATOR_HAVE_WITHDRAWN:
+				err = pi.on_validator_have_withdrawn(event.IsStateChange)
 			default:
 				err = errors.New("unknown event")
-				break out2
-			}
-		}
-	}
-
-	finish := pi.data.Period.Start + pi.data.Period.Length + pyt.PAYOUT_CLOSE_DELAY + 1
-
-	log.Debugf("finish for payout=%s is slot=(%d), validator count=%d ,with bid status=%+v", pi.payout.Id.String(), finish, pi.data.ValidatorCount, pi.bidStatus)
-
-	attemptedCloseBid := false
-	var closeBidCancel context.CancelFunc
-	closeBidSignalC := make(chan error, 1)
-	zero := util.Zero()
-
-	// REDO THE WHOLE THING!!!!!!!!!!!
-out:
-	for !(pi.bidStatus.IsFinal && finish <= pi.slot && pi.data.StakerCount == 0 && pi.data.ValidatorCount == 0) {
-		select {
-		case <-doneC:
-			break out
-		case err = <-internalErrorC:
-			break out
-		case err = <-dataSub.ErrorC:
-			break out
-		case *pi.data = <-dataSub.StreamC:
-			if pi.data.Bids.Equals(zero) {
-				log.Debugf("bid account has closed for payout=%s", pi.payout.Id.String())
-				if closeBidCancel != nil {
-					closeBidCancel()
-					closeBidCancel = nil
-				}
-			}
-		case err = <-bidSub.ErrorC:
-			break out
-		case x := <-bidSub.StreamC:
-			pi.on_bid(x)
-		case err = <-slotSub.ErrorC:
-			break out
-		case err = <-closeBidSignalC:
-			if err != nil {
-				log.Debugf("close bid error: %s", err.Error())
 				break out
 			}
-		case pi.slot = <-slotSub.StreamC:
-			if !attemptedCloseBid && pi.data.Period.Start <= pi.slot && pi.bidStatus.IsFinal {
-				attemptedCloseBid = true
-				// ignore errors from here
-				// TODO: why does this instruction run even if the BidAccount has been closed?
-
-				closeBidCancel = pi.wrapper.SendDetached(pi.ctx, CLOSE_PAYOUT_MAX_TRIES, 30*time.Second, func(script *spt.Script) error {
-					return runCloseBids(script, admin, controller, pipeline, pwd.Payout)
-				}, closeBidSignalC)
-			}
-			if pi.slot%50 == 0 {
-				bm := "true"
-				if !pi.bidStatus.IsFinal {
-					bm = "false"
-				}
-				log.Debugf("pi (payout=%s)(final=%s)(slot=%d)(valcount=%d)(staker=%d)(finish=%d)", pi.payout.Id.String(), bm, pi.slot, pi.data.ValidatorCount, pi.data.StakerCount, finish)
-			}
 		}
+
 	}
-	if closeBidCancel != nil {
-		closeBidCancel()
-	}
-	if err != nil {
-		pi.finish(err)
-		return
-	}
-	log.Debugf("payout id=%s has finished at slot=%d", pi.payout.Id.String(), pi.slot)
-	payout := pi.payout
-	err = pi.wrapper.Send(pi.ctx, CLOSE_PAYOUT_MAX_TRIES, 30*time.Second, func(s *spt.Script) error {
-		return runClosePayout(s, admin, controller, pipeline, payout)
-	})
 	pi.finish(err)
 }
 
-type PayoutEventType = int
-
-const (
-	EVENT_START      PayoutEventType = 0
-	EVENT_FINISH     PayoutEventType = 1
-	EVENT_CLOSE_OUT  PayoutEventType = 2
-	EVENT_BID_CLOSED PayoutEventType = 3
-	EVENT_BID_FINAL  PayoutEventType = 4
-)
-
-const PAYOUT_POST_FINISH_DELAY uint64 = 100
-
-type PayoutEvent struct {
-	Slot          uint64
-	IsStateChange bool // true means the state changed; false means this is the existing state
-	Type          PayoutEventType
-}
-
-func pevent(eventType PayoutEventType, isStateChange bool, slot uint64) PayoutEvent {
-	return PayoutEvent{
-		Slot:          0,
-		IsStateChange: isStateChange,
-		Type:          eventType,
-	}
-}
-
-func loopClock(
-	ctx context.Context,
-	controller ctr.Controller,
-	eventC chan<- PayoutEvent,
-	errorC chan<- error,
-	payoutData cba.Payout,
-) {
-	var err error
-	var slot uint64
-	doneC := ctx.Done()
-	slotSub := controller.SlotHome().OnSlot()
-	defer slotSub.Unsubscribe()
-	start := payoutData.Period.Start
-	sentStart := false
-	finish := start + payoutData.Period.Length - 1
-	sentFinish := false
-	closeOut := finish + PAYOUT_POST_FINISH_DELAY
-	sentClose := false
-out:
-	for !sentStart && !sentFinish && !sentClose {
-		select {
-		case <-doneC:
-			break out
-		case err = <-slotSub.ErrorC:
-			break out
-		case slot = <-slotSub.StreamC:
-			if !sentStart && start <= slot {
-				sentStart = true
-				select {
-				case <-doneC:
-					break out
-				case eventC <- pevent(EVENT_START, true, slot):
-				}
-			}
-			if !sentFinish && finish <= slot {
-				sentFinish = true
-				select {
-				case <-doneC:
-					break out
-				case eventC <- pevent(EVENT_FINISH, true, slot):
-				}
-			}
-			if !sentClose && closeOut <= slot {
-				sentClose = true
-				select {
-				case <-doneC:
-					break out
-				case eventC <- pevent(EVENT_CLOSE_OUT, true, slot):
-				}
-			}
-		}
-	}
-	if err != nil {
-		select {
-		case errorC <- err:
-		default:
-		}
-	}
-}
-
+// clockPeriodStartC bool indicates if this is a state transition
 func loopPayoutEvent(
 	ctx context.Context,
 	pwd pipe.PayoutWithData,
 	errorC chan<- error,
 	eventC chan<- PayoutEvent,
+	clockPeriodStartC <-chan bool,
 ) {
 	var err error
 	doneC := ctx.Done()
@@ -406,14 +281,13 @@ func loopPayoutEvent(
 	dataSub := pwd.Payout.OnData()
 	defer dataSub.Unsubscribe()
 
-	oldData := pwd.Data
-	var newData cba.Payout
+	newData := pwd.Data
 
 	zero := util.Zero()
 	ctxBid, cancelBid := context.WithCancel(ctx)
 	defer cancelBid()
 	bidsAreClosed := false
-	if oldData.Bids.Equals(zero) {
+	if newData.Bids.Equals(zero) {
 		bidsAreClosed = true
 		select {
 		case <-doneC:
@@ -425,13 +299,37 @@ func loopPayoutEvent(
 		go loopBidSubIsFinal(ctxBid, pwd, errorC, eventC)
 	}
 
+	validatorHasAdded := false
+	if 0 < pwd.Data.ValidatorCount {
+		validatorHasAdded = true
+	}
+	validatorHasWithdrawn := false
+
 out:
-	for !bidsAreClosed {
+	for !bidsAreClosed && !validatorHasAdded && !validatorHasWithdrawn {
 		select {
 		case <-doneC:
 			break out
 		case err = <-dataSub.ErrorC:
 			break out
+		case isStateTransition := <-clockPeriodStartC:
+			// period has started
+			if !validatorHasAdded {
+				validatorHasAdded = true
+				select {
+				case <-doneC:
+					return
+				case eventC <- pevent(EVENT_VALIDATOR_IS_ADDING, isStateTransition, 0):
+				}
+				if newData.ValidatorCount == 0 {
+					validatorHasWithdrawn = true
+					select {
+					case <-doneC:
+						return
+					case eventC <- pevent(EVENT_VALIDATOR_HAVE_WITHDRAWN, isStateTransition, 0):
+					}
+				}
+			}
 		case newData = <-dataSub.StreamC:
 			// check if BidClosed
 			if !bidsAreClosed && newData.Bids.Equals(zero) {
@@ -442,6 +340,24 @@ out:
 				case eventC <- pevent(EVENT_BID_CLOSED, true, 0):
 				}
 				cancelBid()
+			}
+
+			// check if validators are signing up or cashing out
+			if !validatorHasAdded && 0 < newData.ValidatorCount {
+				validatorHasAdded = true
+				select {
+				case <-doneC:
+					return
+				case eventC <- pevent(EVENT_VALIDATOR_IS_ADDING, true, 0):
+				}
+			}
+			if validatorHasAdded && !validatorHasWithdrawn && newData.ValidatorCount == 0 {
+				validatorHasWithdrawn = true
+				select {
+				case <-doneC:
+					return
+				case eventC <- pevent(EVENT_VALIDATOR_HAVE_WITHDRAWN, true, 0):
+				}
 			}
 		}
 	}
@@ -508,6 +424,110 @@ out:
 	}
 }
 
+func loopClock(
+	ctx context.Context,
+	controller ctr.Controller,
+	eventC chan<- PayoutEvent,
+	errorC chan<- error,
+	clockPeriodStartC chan<- bool,
+	payoutData cba.Payout,
+) {
+	var err error
+	var slot uint64
+	doneC := ctx.Done()
+	slotSub := controller.SlotHome().OnSlot()
+	defer slotSub.Unsubscribe()
+	start := payoutData.Period.Start
+	sentStart := false
+	isStartStateTransition := false
+	finish := start + payoutData.Period.Length - 1
+	sentFinish := false
+	isFinishStateTransition := false
+	closeOut := finish + PAYOUT_POST_FINISH_DELAY
+	sentClose := false
+	isCloseStateTransition := false
+out:
+	for !sentStart && !sentFinish && !sentClose {
+		select {
+		case <-doneC:
+			break out
+		case err = <-slotSub.ErrorC:
+			break out
+		case slot = <-slotSub.StreamC:
+			if !sentStart && start <= slot {
+				sentStart = true
+				select {
+				case <-doneC:
+					break out
+				case eventC <- pevent(EVENT_START, isStartStateTransition, slot):
+				}
+			} else if !isStartStateTransition {
+				isStartStateTransition = true
+			}
+			if !sentFinish && finish <= slot {
+				sentFinish = true
+				select {
+				case <-doneC:
+					break out
+				case eventC <- pevent(EVENT_FINISH, isFinishStateTransition, slot):
+				}
+			} else if !isFinishStateTransition {
+				isFinishStateTransition = true
+			}
+			if !sentClose && closeOut <= slot {
+				sentClose = true
+				select {
+				case <-doneC:
+					break out
+				case eventC <- pevent(EVENT_CLOSE_OUT, isCloseStateTransition, slot):
+				}
+			} else if !isCloseStateTransition {
+				isCloseStateTransition = true
+			}
+		}
+	}
+	if err != nil {
+		select {
+		case errorC <- err:
+		default:
+		}
+	}
+}
+
+func runCrank(
+	script *spt.Script,
+	admin sgo.PrivateKey,
+	controller ctr.Controller,
+	pipeline pipe.Pipeline,
+	payout pyt.Payout,
+) error {
+	err := script.SetTx(admin)
+	if err != nil {
+		return err
+	}
+	err = script.Crank(
+		controller,
+		pipeline,
+		payout,
+		admin,
+	)
+	if err != nil {
+		return err
+	}
+
+	if err != nil {
+		return err
+	}
+	err = script.FinishTx(true)
+	if err != nil {
+		log.Debugf("failed to crank payout=%s", payout.Id.String())
+		os.Stderr.WriteString(err.Error() + "\n")
+		return err
+	}
+	log.Debugf("payout id=%s has successfully been cranked (bid is final)", payout.Id.String())
+	return nil
+}
+
 func runCloseBids(
 	script *spt.Script,
 	admin sgo.PrivateKey,
@@ -553,15 +573,7 @@ func runClosePayout(
 	if err != nil {
 		return err
 	}
-	err = script.CloseBids(
-		controller,
-		pipeline,
-		payout,
-		admin,
-	)
-	if err != nil {
-		return err
-	}
+
 	err = script.ClosePayout(
 		controller,
 		pipeline,
@@ -579,13 +591,6 @@ func runClosePayout(
 	}
 	log.Debugf("payout id=%s has successfully been closed", payout.Id.String())
 	return nil
-}
-
-func (pi *payoutInternal) on_bid(newStatus pyt.BidStatus) {
-	*pi.bidStatus = newStatus
-	if pi.bidStatus.IsFinal {
-		log.Debugf("bid status for payout=%s is final", pi.payout.Id.String())
-	}
 }
 
 func (pi *payoutInternal) finish(err error) {
@@ -609,3 +614,5 @@ func (pi *payoutInternal) finish(err error) {
 }
 
 const CLOSE_PAYOUT_MAX_TRIES = 10
+const CLOSE_BIDS_MAX_TRIES = 10
+const CRANK_MAX_TRIES = 10
