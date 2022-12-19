@@ -2,6 +2,7 @@ package admin
 
 import (
 	"context"
+	"errors"
 	"os"
 	"time"
 
@@ -193,6 +194,9 @@ func loopPayout(
 	bidSub := pwd.Payout.OnBidStatus()
 	defer bidSub.Unsubscribe()
 
+	eventC := make(chan PayoutEvent)
+	go loopClock(ctx, controller, eventC, errorC, pwd.Data)
+
 	pi := new(payoutInternal)
 	pi.ctx = ctx
 	pi.errorC = errorC
@@ -211,6 +215,25 @@ func loopPayout(
 	if err != nil {
 		pi.errorC <- err
 		return
+	}
+
+	go loopPayoutEvent(ctx, pwd, pi.errorC, eventC)
+
+out2:
+	for {
+		select {
+		case <-doneC:
+			break out2
+		case event := <-eventC:
+			switch event.Type {
+			case EVENT_START:
+			case EVENT_FINISH:
+			case EVENT_CLOSE_OUT:
+			default:
+				err = errors.New("unknown event")
+				break out2
+			}
+		}
 	}
 
 	finish := pi.data.Period.Start + pi.data.Period.Length + pyt.PAYOUT_CLOSE_DELAY + 1
@@ -283,6 +306,206 @@ out:
 		return runClosePayout(s, admin, controller, pipeline, payout)
 	})
 	pi.finish(err)
+}
+
+type PayoutEventType = int
+
+const (
+	EVENT_START      PayoutEventType = 0
+	EVENT_FINISH     PayoutEventType = 1
+	EVENT_CLOSE_OUT  PayoutEventType = 2
+	EVENT_BID_CLOSED PayoutEventType = 3
+	EVENT_BID_FINAL  PayoutEventType = 4
+)
+
+const PAYOUT_POST_FINISH_DELAY uint64 = 100
+
+type PayoutEvent struct {
+	Slot          uint64
+	IsStateChange bool // true means the state changed; false means this is the existing state
+	Type          PayoutEventType
+}
+
+func pevent(eventType PayoutEventType, isStateChange bool, slot uint64) PayoutEvent {
+	return PayoutEvent{
+		Slot:          0,
+		IsStateChange: isStateChange,
+		Type:          eventType,
+	}
+}
+
+func loopClock(
+	ctx context.Context,
+	controller ctr.Controller,
+	eventC chan<- PayoutEvent,
+	errorC chan<- error,
+	payoutData cba.Payout,
+) {
+	var err error
+	var slot uint64
+	doneC := ctx.Done()
+	slotSub := controller.SlotHome().OnSlot()
+	defer slotSub.Unsubscribe()
+	start := payoutData.Period.Start
+	sentStart := false
+	finish := start + payoutData.Period.Length - 1
+	sentFinish := false
+	closeOut := finish + PAYOUT_POST_FINISH_DELAY
+	sentClose := false
+out:
+	for !sentStart && !sentFinish && !sentClose {
+		select {
+		case <-doneC:
+			break out
+		case err = <-slotSub.ErrorC:
+			break out
+		case slot = <-slotSub.StreamC:
+			if !sentStart && start <= slot {
+				sentStart = true
+				select {
+				case <-doneC:
+					break out
+				case eventC <- pevent(EVENT_START, true, slot):
+				}
+			}
+			if !sentFinish && finish <= slot {
+				sentFinish = true
+				select {
+				case <-doneC:
+					break out
+				case eventC <- pevent(EVENT_FINISH, true, slot):
+				}
+			}
+			if !sentClose && closeOut <= slot {
+				sentClose = true
+				select {
+				case <-doneC:
+					break out
+				case eventC <- pevent(EVENT_CLOSE_OUT, true, slot):
+				}
+			}
+		}
+	}
+	if err != nil {
+		select {
+		case errorC <- err:
+		default:
+		}
+	}
+}
+
+func loopPayoutEvent(
+	ctx context.Context,
+	pwd pipe.PayoutWithData,
+	errorC chan<- error,
+	eventC chan<- PayoutEvent,
+) {
+	var err error
+	doneC := ctx.Done()
+
+	dataSub := pwd.Payout.OnData()
+	defer dataSub.Unsubscribe()
+
+	oldData := pwd.Data
+	var newData cba.Payout
+
+	zero := util.Zero()
+	ctxBid, cancelBid := context.WithCancel(ctx)
+	defer cancelBid()
+	bidsAreClosed := false
+	if oldData.Bids.Equals(zero) {
+		bidsAreClosed = true
+		select {
+		case <-doneC:
+			return
+		case eventC <- pevent(EVENT_BID_CLOSED, false, 0):
+		}
+		cancelBid()
+	} else {
+		go loopBidSubIsFinal(ctxBid, pwd, errorC, eventC)
+	}
+
+out:
+	for !bidsAreClosed {
+		select {
+		case <-doneC:
+			break out
+		case err = <-dataSub.ErrorC:
+			break out
+		case newData = <-dataSub.StreamC:
+			// check if BidClosed
+			if !bidsAreClosed && newData.Bids.Equals(zero) {
+				bidsAreClosed = true
+				select {
+				case <-doneC:
+					return
+				case eventC <- pevent(EVENT_BID_CLOSED, true, 0):
+				}
+				cancelBid()
+			}
+		}
+	}
+
+	if err != nil {
+		select {
+		case errorC <- err:
+		default:
+		}
+	}
+}
+
+func loopBidSubIsFinal(
+	ctx context.Context,
+	pwd pipe.PayoutWithData,
+	errorC chan<- error,
+	eventC chan<- PayoutEvent,
+) {
+	var err error
+	doneC := ctx.Done()
+	bidSub := pwd.Payout.OnBidStatus()
+	defer bidSub.Unsubscribe()
+
+	bsIsFinal := false
+	bs, err := pwd.Payout.BidStatus()
+	if err != nil {
+		errorC <- err
+		return
+	} else if bs.IsFinal {
+		bsIsFinal = true
+		select {
+		case <-doneC:
+			return
+		case eventC <- PayoutEvent{
+			Slot: 0, Type: EVENT_BID_FINAL,
+		}:
+		}
+	}
+out:
+	for bsIsFinal {
+		select {
+		case <-doneC:
+			break out
+		case err = <-bidSub.ErrorC:
+			break out
+		case bs = <-bidSub.StreamC:
+			if !bsIsFinal && bs.IsFinal {
+				bsIsFinal = true
+				select {
+				case <-doneC:
+					break out
+				case eventC <- PayoutEvent{
+					Slot: 0,
+					Type: EVENT_BID_FINAL,
+				}:
+				}
+
+			}
+		}
+	}
+	if err != nil {
+		errorC <- err
+		return
+	}
 }
 
 func runCloseBids(
