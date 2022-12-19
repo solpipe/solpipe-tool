@@ -5,6 +5,8 @@ import (
 
 	dssub "github.com/solpipe/solpipe-tool/ds/sub"
 	sch "github.com/solpipe/solpipe-tool/scheduler"
+	pipe "github.com/solpipe/solpipe-tool/state/pipeline"
+	rtr "github.com/solpipe/solpipe-tool/state/router"
 )
 
 type external struct {
@@ -16,6 +18,8 @@ type external struct {
 
 func Schedule(
 	ctx context.Context,
+	router rtr.Router,
+	pwd pipe.PayoutWithData,
 ) sch.Schedule {
 	ctxC, cancel := context.WithCancel(ctx)
 	eventHome := dssub.CreateSubHome[sch.Event]()
@@ -27,7 +31,14 @@ func Schedule(
 		internalC: internalC,
 		eventReqC: eventHome.ReqC,
 	}
-	go loopInternal(ctxC, cancel, internalC, eventHome)
+	go loopInternal(
+		ctxC,
+		cancel,
+		internalC,
+		eventHome,
+		router,
+		pwd,
+	)
 
 	return e1
 }

@@ -198,8 +198,8 @@ func loopPayout(
 	defer slotSub.Unsubscribe()
 	dataSub := pwd.Payout.OnData()
 	defer dataSub.Unsubscribe()
-	bidSub := pwd.Payout.OnBidStatus()
-	defer bidSub.Unsubscribe()
+	//bidSub := pwd.Payout.OnBidStatus()
+	//defer bidSub.Unsubscribe()
 
 	eventC := make(chan PayoutEvent)
 	clockPeriodStartC := make(chan bool, 1)
