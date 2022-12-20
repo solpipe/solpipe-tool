@@ -49,13 +49,6 @@ func (in *internal) run_crank() {
 }
 
 func (in *internal) run_close_bids() {
-	if !in.bidIsFinal {
-		return
-	}
-
-	if in.bidHasClosed {
-		return
-	}
 
 	var trigger *Trigger
 	trigger, in.cancelCloseBid = in.generic_trigger()
@@ -72,7 +65,7 @@ func (in *internal) run_close_payout() {
 	if !in.bidHasClosed {
 		return
 	}
-	if !in.isReadyToClose {
+	if !in.isClockReadyToClose {
 		return
 	}
 	if !in.validatorAddingIsDone {
@@ -91,10 +84,8 @@ func (in *internal) run_close_payout() {
 
 }
 
+// stakers can add once the context in the trigger has Done() fired
 func (in *internal) run_validator_set_payout() {
-	if in.hasStarted {
-		return
-	}
 
 	var trigger *Trigger
 	trigger, in.cancelValidatorSetPayout = in.generic_trigger()
@@ -115,6 +106,20 @@ func (in *internal) run_validator_withdraw() {
 	trigger, in.cancelValidatorWithdraw = in.generic_trigger()
 	in.eventHome.Broadcast(sch.CreateWithPayload(
 		TRIGGER_VALIDATOR_WITHDRAW_RECEIPT,
+		true,
+		0,
+		trigger,
+	))
+}
+
+func (in *internal) run_staker_withdraw() {
+	if in.stakerAddingIsDone {
+		return
+	}
+	var trigger *Trigger
+	trigger, in.cancelStakerWithdraw = in.generic_trigger()
+	in.eventHome.Broadcast(sch.CreateWithPayload(
+		TRIGGER_STAKER_WITHDRAW,
 		true,
 		0,
 		trigger,

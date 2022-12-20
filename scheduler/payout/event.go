@@ -9,20 +9,21 @@ const (
 	EVENT_PRE_START                    sch.EventType = -1
 	EVENT_START                        sch.EventType = 0
 	EVENT_FINISH                       sch.EventType = 1
-	EVENT_CLOSE_OUT                    sch.EventType = 2
+	EVENT_DELAY_CLOSE_PAYOUT           sch.EventType = 2
 	EVENT_BID_CLOSED                   sch.EventType = 3
 	EVENT_BID_FINAL                    sch.EventType = 4
 	EVENT_VALIDATOR_IS_ADDING          sch.EventType = 5
 	EVENT_VALIDATOR_HAVE_WITHDRAWN     sch.EventType = 6
 	EVENT_STAKER_IS_ADDING             sch.EventType = 7
 	EVENT_STAKER_HAVE_WITHDRAWN        sch.EventType = 8
-	TRIGGER_CRANK                      sch.EventType = 100
-	TRIGGER_CLOSE_BIDS                 sch.EventType = 101
-	TRIGGER_CLOSE_PAYOUT               sch.EventType = 102
-	TRIGGER_VALIDATOR_SET_PAYOUT       sch.EventType = 103
-	TRIGGER_VALIDATOR_WITHDRAW_RECEIPT sch.EventType = 104
-	TRIGGER_STAKER_ADD                 sch.EventType = 105
-	TRIGGER_STAKER_WITHDRAW            sch.EventType = 106
+	EVENT_STAKER_HAVE_WITHDRAWN_EMPTY  sch.EventType = 9
+	TRIGGER_CRANK                      sch.EventType = 100 // pipeline: payout.bids
+	TRIGGER_CLOSE_BIDS                 sch.EventType = 101 // pipeline: payout.bids
+	TRIGGER_CLOSE_PAYOUT               sch.EventType = 102 // pipeline: payout
+	TRIGGER_VALIDATOR_SET_PAYOUT       sch.EventType = 103 // validator: payout
+	TRIGGER_VALIDATOR_WITHDRAW_RECEIPT sch.EventType = 104 // validator: payout
+	TRIGGER_STAKER_ADD                 sch.EventType = 105 // staker: validator, payout
+	TRIGGER_STAKER_WITHDRAW            sch.EventType = 106 // staker: validator, payout
 )
 
 func (in *internal) on_pre_start(isTransition bool) {
@@ -50,20 +51,19 @@ func (in *internal) on_finish(isTransition bool) {
 	in.hasFinished = true
 	if isTransition {
 		log.Debugf("payout=%s period has finished", in.payout.Id.String())
+		// this can be run as soon as on_bid_final is run; but for simplicity, we wait until the period is complete
 		in.run_close_bids()
 	} else {
 		log.Debugf("payout=%s period has already finished", in.payout.Id.String())
 	}
-
 }
 
 // it is now possible to send a ClosePayout instruction
-func (in *internal) on_close_out(isTransition bool) {
-	in.isReadyToClose = true
+func (in *internal) on_clock_close_payout(isTransition bool) {
+	in.isClockReadyToClose = true
 	if isTransition {
 		in.run_close_payout()
 	}
-
 }
 
 func (in *internal) on_bid_final(isTransition bool) {
@@ -76,9 +76,14 @@ func (in *internal) on_bid_final(isTransition bool) {
 }
 
 func (in *internal) on_bid_closed(isTransition bool) {
+	in.bidIsFinal = true
 	in.bidHasClosed = true
 
 	if isTransition {
+		if in.cancelCloseBid == nil {
+			in.cancelCloseBid()
+			in.cancelCloseBid = nil
+		}
 		in.run_close_payout()
 	}
 }
@@ -96,5 +101,18 @@ func (in *internal) on_validator_have_withdrawn(isTransition bool) {
 	in.validatorAddingIsDone = true
 	if isTransition {
 		in.run_close_payout()
+	}
+}
+
+func (in *internal) on_staker_is_adding(isTransition bool) {
+	in.stakerAddingHasStarted = true
+
+}
+
+func (in *internal) on_staker_have_withdrawn(isTransition bool) {
+	in.stakerAddingHasStarted = true
+	in.stakerAddingIsDone = true
+	if isTransition {
+		in.run_validator_withdraw()
 	}
 }

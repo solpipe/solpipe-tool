@@ -23,15 +23,18 @@ type internal struct {
 	eventHome                 *dssub.SubHome[sch.Event]
 	hasStarted                bool
 	hasFinished               bool
-	isReadyToClose            bool
+	isClockReadyToClose       bool
 	bidIsFinal                bool
 	bidHasClosed              bool
 	validatorAddingHasStarted bool
 	validatorAddingIsDone     bool
+	stakerAddingHasStarted    bool
+	stakerAddingIsDone        bool
 	cancelCrank               context.CancelFunc
 	cancelCloseBid            context.CancelFunc
 	cancelValidatorSetPayout  context.CancelFunc
 	cancelValidatorWithdraw   context.CancelFunc
+	cancelStakerWithdraw      context.CancelFunc
 }
 
 func loopInternal(
@@ -73,11 +76,13 @@ func loopInternal(
 
 	in.hasStarted = false
 	in.hasFinished = false
-	in.isReadyToClose = false
+	in.isClockReadyToClose = false
 	in.bidIsFinal = false
 	in.bidHasClosed = false
 	in.validatorAddingHasStarted = false
 	in.validatorAddingIsDone = false
+	in.stakerAddingHasStarted = false
+	in.stakerAddingIsDone = false
 
 	var isTrans string
 
@@ -102,8 +107,8 @@ out:
 				in.on_start(event.IsStateChange)
 			case EVENT_FINISH:
 				in.on_finish(event.IsStateChange)
-			case EVENT_CLOSE_OUT:
-				in.on_close_out(event.IsStateChange)
+			case EVENT_DELAY_CLOSE_PAYOUT:
+				in.on_clock_close_payout(event.IsStateChange)
 			case EVENT_BID_CLOSED:
 				in.on_bid_closed(event.IsStateChange)
 			case EVENT_BID_FINAL:
@@ -112,6 +117,10 @@ out:
 				in.on_validator_is_adding(event.IsStateChange)
 			case EVENT_VALIDATOR_HAVE_WITHDRAWN:
 				in.on_validator_have_withdrawn(event.IsStateChange)
+			case EVENT_STAKER_IS_ADDING:
+				in.on_staker_is_adding(event.IsStateChange)
+			case EVENT_STAKER_HAVE_WITHDRAWN:
+				in.on_staker_have_withdrawn(event.IsStateChange)
 			default:
 				err = errors.New("unknown event")
 				break out
@@ -138,5 +147,9 @@ func (in *internal) finish(err error) {
 	}
 	if in.cancelValidatorWithdraw != nil {
 		in.cancelValidatorWithdraw()
+	}
+
+	if in.cancelStakerWithdraw != nil {
+		in.cancelStakerWithdraw()
 	}
 }

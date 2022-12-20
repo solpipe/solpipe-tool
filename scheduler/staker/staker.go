@@ -1,4 +1,4 @@
-package validator
+package staker
 
 import (
 	"context"
@@ -6,7 +6,7 @@ import (
 	dssub "github.com/solpipe/solpipe-tool/ds/sub"
 	sch "github.com/solpipe/solpipe-tool/scheduler"
 	pipe "github.com/solpipe/solpipe-tool/state/pipeline"
-	val "github.com/solpipe/solpipe-tool/state/validator"
+	skr "github.com/solpipe/solpipe-tool/state/staker"
 )
 
 type external struct {
@@ -20,12 +20,13 @@ func (e1 external) OnEvent() dssub.Subscription[sch.Event] {
 	return dssub.SubscriptionRequest(e1.reqC, func(x sch.Event) bool { return true })
 }
 
-// Be alerted as to when to: TRIGGER_VALIDATOR_SET_PAYOUT, TRIGGER_VALIDATOR_WITHDRAW_RECEIPT, TRIGGER_STAKER_ADD
+// Be alerted as to when to: TRIGGER_STAKER_WITHDRAW
 func Schedule(
 	ctx context.Context,
 	pwd pipe.PayoutWithData,
 	ps sch.Schedule,
-	v val.Validator,
+	vs sch.Schedule,
+	s skr.Staker,
 ) sch.Schedule {
 	trackHome := dssub.CreateSubHome[sch.Event]()
 	ctxC, cancel := context.WithCancel(ctx)
@@ -36,7 +37,8 @@ func Schedule(
 		internalC,
 		pwd,
 		ps,
-		v,
+		vs,
+		s,
 		trackHome,
 	)
 

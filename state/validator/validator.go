@@ -216,3 +216,9 @@ func (e1 Validator) OnStake() dssub.Subscription[StakeStatus] {
 		return true
 	})
 }
+
+func (e1 Validator) OnReceipt() dssub.Subscription[rpt.ReceiptWithData] {
+	return dssub.SubscriptionRequest(e1.updateReceiptC, func(rwd rpt.ReceiptWithData) bool {
+		return true
+	})
+}

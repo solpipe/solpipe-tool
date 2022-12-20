@@ -73,7 +73,7 @@ out:
 				select {
 				case <-doneC:
 					break out
-				case eventC <- sch.Create(EVENT_CLOSE_OUT, isCloseStateTransition, slot):
+				case eventC <- sch.Create(EVENT_DELAY_CLOSE_PAYOUT, isCloseStateTransition, slot):
 				}
 				select {
 				case <-doneC:
