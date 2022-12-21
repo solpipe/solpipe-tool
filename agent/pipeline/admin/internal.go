@@ -87,6 +87,8 @@ func loopInternal(
 	homeLog *sub.SubHome[*pba.LogLine],
 	initialSettings *pipe.PipelineSettings,
 	configFilePath string,
+	periodSettingsC chan<- *pba.PeriodSettings,
+	rateSettingsC chan<- *pba.RateSettings,
 ) {
 	var err error
 	doneC := ctx.Done()

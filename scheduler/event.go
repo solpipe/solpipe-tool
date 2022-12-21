@@ -1,7 +1,7 @@
 package scheduler
 
 const (
-	EVENT_PRE_START                    EventType = 0
+	EVENT_PERIOD_PRE_START             EventType = 0
 	EVENT_PERIOD_START                 EventType = 1
 	EVENT_PERIOD_FINISH                EventType = 2
 	EVENT_DELAY_CLOSE_PAYOUT           EventType = 3 // 100 slots after EVENT_PERIOD_FINISH

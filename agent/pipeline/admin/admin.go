@@ -39,6 +39,8 @@ func Attach(
 	admin sgo.PrivateKey,
 	initialSettings *pipe.PipelineSettings,
 	configFilePath string,
+	periodSettingsC chan<- *pba.PeriodSettings,
+	rateSettingsC chan<- *pba.RateSettings,
 ) (<-chan error, error) {
 	log.Debug("creating owner grpc server")
 	signalC := make(chan error, 1)
@@ -76,6 +78,8 @@ func Attach(
 		homeLog,
 		initialSettings,
 		configFilePath,
+		periodSettingsC,
+		rateSettingsC,
 	)
 
 	pba.RegisterPipelineServer(grpcServer, e1)

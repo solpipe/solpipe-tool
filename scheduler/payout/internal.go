@@ -101,7 +101,7 @@ out:
 			}
 			log.Debugf("event payout=%s  type=%s  isTransition=%s", pwd.Id.String(), event.Type, isTrans)
 			switch event.Type {
-			case sch.EVENT_PRE_START:
+			case sch.EVENT_PERIOD_PRE_START:
 				in.on_pre_start(event.IsStateChange)
 			case sch.EVENT_PERIOD_START:
 				in.on_start(event.IsStateChange)

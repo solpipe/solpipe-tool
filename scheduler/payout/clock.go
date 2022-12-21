@@ -55,7 +55,7 @@ out:
 				select {
 				case <-doneC:
 					break out
-				case eventC <- sch.Create(sch.EVENT_PRE_START, true, slot):
+				case eventC <- sch.Create(sch.EVENT_PERIOD_PRE_START, true, slot):
 				}
 			}
 			if !sentFinish && finish <= slot {

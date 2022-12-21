@@ -2,6 +2,7 @@ package pipeline
 
 import (
 	"context"
+	"errors"
 
 	dssub "github.com/solpipe/solpipe-tool/ds/sub"
 	sch "github.com/solpipe/solpipe-tool/scheduler"
@@ -67,6 +68,18 @@ func (e1 external) OnEvent() dssub.Subscription[sch.Event] {
 }
 
 type TriggerAppend struct {
+	Context  context.Context
 	Pipeline pipe.Pipeline
 	Start    uint64
+}
+
+func ReadTrigger(event sch.Event) (*TriggerAppend, error) {
+	if event.Payload == nil {
+		return nil, errors.New("no trigger payload")
+	}
+	payload, ok := event.Payload.(*TriggerAppend)
+	if !ok {
+		return nil, errors.New("bad trigger payload")
+	}
+	return payload, nil
 }

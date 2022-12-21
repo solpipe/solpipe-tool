@@ -10,21 +10,25 @@ import (
 	"github.com/cretz/bine/tor"
 	log "github.com/sirupsen/logrus"
 	"github.com/solpipe/solpipe-tool/agent/pipeline/admin"
+	pba "github.com/solpipe/solpipe-tool/proto/admin"
 	"github.com/solpipe/solpipe-tool/proxy"
 	pxypipe "github.com/solpipe/solpipe-tool/proxy/relay/pipeline"
 	pxysvr "github.com/solpipe/solpipe-tool/proxy/server"
+	spt "github.com/solpipe/solpipe-tool/script"
 	pipe "github.com/solpipe/solpipe-tool/state/pipeline"
 	rtr "github.com/solpipe/solpipe-tool/state/router"
 	slt "github.com/solpipe/solpipe-tool/state/slot"
+	"github.com/solpipe/solpipe-tool/state/version"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/reflection"
 )
 
 type Agent struct {
-	ctx     context.Context
-	cancel  context.CancelFunc
-	errorC  chan<- error
-	subSlot slt.SlotHome
+	ctx       context.Context
+	cancel    context.CancelFunc
+	errorC    chan<- error
+	internalC chan<- func(*internal)
+	subSlot   slt.SlotHome
 }
 
 // create a pipeline agent
@@ -63,6 +67,8 @@ func Create(
 
 	errorC := make(chan error, 5)
 	config := args.Program
+	periodSettingsC := make(chan *pba.PeriodSettings)
+	rateSettingsC := make(chan *pba.RateSettings)
 
 	grpcAdminServer := grpc.NewServer()
 	tpsUpdateErrorC := make(chan error, 1)
@@ -123,6 +129,17 @@ func Create(
 		cancel()
 		return Agent{}, err
 	}
+	script, err := spt.Create(
+		ctx,
+		&spt.Configuration{Version: version.VERSION_1},
+		rpcClient,
+		wsClient,
+	)
+	if err != nil {
+		cancel()
+		return Agent{}, err
+	}
+	wrapper := spt.Wrap(script)
 
 	var signalC <-chan error
 	signalC, err = admin.Attach(
@@ -135,6 +152,8 @@ func Create(
 		args.Admin(),
 		args.Program.Settings,
 		args.ConfigFilePath,
+		periodSettingsC,
+		rateSettingsC,
 	)
 	if err != nil {
 		cancel()
@@ -186,6 +205,18 @@ func Create(
 	for i := 0; i < len(sList); i++ {
 		reflection.Register(sList[i])
 	}
+	internalC := make(chan func(*internal), 10)
+	go loopInternal(
+		ctx,
+		cancel,
+		internalC,
+		router,
+		pipeline,
+		wrapper,
+		args.Admin(),
+		periodSettingsC,
+		rateSettingsC,
+	)
 
 	// handle tor listener
 	go loopClose(ctx, torLi.Listener)
@@ -202,10 +233,11 @@ func Create(
 	go loopCloseFromError(ctx, cancel, errorC)
 
 	return Agent{
-		ctx:     ctx,
-		cancel:  cancel,
-		errorC:  errorC,
-		subSlot: controller.SlotHome(),
+		ctx:       ctx,
+		cancel:    cancel,
+		errorC:    errorC,
+		internalC: internalC,
+		subSlot:   controller.SlotHome(),
 	}, nil
 }
 
@@ -223,20 +255,29 @@ func loopCloseTor(ctx context.Context, t *tor.Tor) {
 	t.Close()
 }
 
-func (s Agent) CloseSignal() <-chan struct{} {
-
-	return s.ctx.Done()
+func (s Agent) CloseSignal() <-chan error {
+	signalC := make(chan error, 1)
+	err := s.ctx.Err()
+	if err != nil {
+		signalC <- err
+		return signalC
+	}
+	doneC := s.ctx.Done()
+	select {
+	case <-doneC:
+		signalC <- errors.New("canceled")
+	case s.internalC <- func(in *internal) {
+		in.closeSignalCList = append(in.closeSignalCList, signalC)
+	}:
+	}
+	return signalC
 }
 
 // make a blocking call to close
-func (s Agent) Close() {
-	doneC := s.ctx.Done()
-	err := s.ctx.Err()
-	if err != nil {
-		return
-	}
+func (s Agent) Close() error {
+	signalC := s.CloseSignal()
 	s.cancel()
-	<-doneC
+	return <-signalC
 }
 func loopStopOnError(ctx context.Context, cancel context.CancelFunc, errorC <-chan error) {
 	doneC := ctx.Done()
