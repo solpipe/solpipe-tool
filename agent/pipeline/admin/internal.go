@@ -3,47 +3,25 @@ package admin
 import (
 	"context"
 	"encoding/json"
-	"errors"
 	"os"
 
-	sgo "github.com/SolmateDev/solana-go"
-	sgorpc "github.com/SolmateDev/solana-go/rpc"
-	sgows "github.com/SolmateDev/solana-go/rpc/ws"
 	log "github.com/sirupsen/logrus"
-	cba "github.com/solpipe/cba"
-	ll "github.com/solpipe/solpipe-tool/ds/list"
 	"github.com/solpipe/solpipe-tool/ds/sub"
 	pba "github.com/solpipe/solpipe-tool/proto/admin"
 	"github.com/solpipe/solpipe-tool/script"
-	ctr "github.com/solpipe/solpipe-tool/state/controller"
 	pipe "github.com/solpipe/solpipe-tool/state/pipeline"
-	rtr "github.com/solpipe/solpipe-tool/state/router"
-	slt "github.com/solpipe/solpipe-tool/state/slot"
 )
 
 type internal struct {
-	ctx                             context.Context
-	errorC                          chan<- error
-	deletePayoutC                   chan<- uint64 // start slot
-	closeSignalCList                []chan<- error
-	configFilePath                  string
-	rpc                             *sgorpc.Client
-	ws                              *sgows.Client
-	rateSettings                    *pba.RateSettings
-	periodSettings                  *pba.PeriodSettings
-	controller                      ctr.Controller
-	router                          rtr.Router
-	pipeline                        pipe.Pipeline
-	payoutInfo                      *payoutInfo
-	nextAttemptToAddPeriod          uint64
-	lastAddPeriodAttemptToAddPeriod uint64
-	appendInProgress                bool
-	appendInProgressC               chan<- bool
-	list                            *ll.Generic[cba.PeriodWithPayout]
-	slot                            uint64
-	admin                           sgo.PrivateKey
-	homeLog                         *sub.SubHome[*pba.LogLine]
-	//lastAddPeriod        uint64
+	ctx              context.Context
+	errorC           chan<- error
+	closeSignalCList []chan<- error
+	configFilePath   string
+	rateSettings     *pba.RateSettings
+	periodSettings   *pba.PeriodSettings
+	homeLog          *sub.SubHome[*pba.LogLine]
+	periodSettingsC  chan<- *pba.PeriodSettings
+	rateSettingsC    chan<- *pba.RateSettings
 }
 
 type SettingsForFile struct {
@@ -77,13 +55,6 @@ func DefaultPeriodSettings() *pba.PeriodSettings {
 func loopInternal(
 	ctx context.Context,
 	internalC <-chan func(*internal),
-	rpcClient *sgorpc.Client,
-	wsClient *sgows.Client,
-	admin sgo.PrivateKey,
-	controller ctr.Controller,
-	router rtr.Router,
-	pipeline pipe.Pipeline,
-	subSlot slt.SlotHome,
 	homeLog *sub.SubHome[*pba.LogLine],
 	initialSettings *pipe.PipelineSettings,
 	configFilePath string,
@@ -93,49 +64,24 @@ func loopInternal(
 	var err error
 	doneC := ctx.Done()
 	errorC := make(chan error, 1)
-	appendInProgressC := make(chan bool, 1)
-	deletePayoutC := make(chan uint64)
 	in := new(internal)
 	in.ctx = ctx
 	in.errorC = errorC
-	in.deletePayoutC = deletePayoutC
-	in.appendInProgressC = appendInProgressC
 	in.configFilePath = configFilePath
-	in.rpc = rpcClient
-	in.ws = wsClient
 	in.closeSignalCList = make([]chan<- error, 0)
 	in.periodSettings = DefaultPeriodSettings()
 	if initialSettings != nil {
 		in.periodSettings.BidSpace = uint32(initialSettings.BidSpace)
 	}
+	in.periodSettingsC = periodSettingsC
+	in.rateSettingsC = rateSettingsC
 	log.Debug("settings+++!+!+!+!+")
 	log.Debugf("initial settings=%+v", initialSettings)
-
 	in.rateSettings = initialSettings.ToProtoRateSettings()
 	//in.lastAddPeriod = 0
-	in.nextAttemptToAddPeriod = 0
-	in.lastAddPeriodAttemptToAddPeriod = 0
-	in.list = ll.CreateGeneric[cba.PeriodWithPayout]()
-	in.slot = 0
-	in.admin = admin
-	in.controller = controller
-	in.router = router
-	in.pipeline = pipeline
+
 	//in.payoutMap = make(map[string]pipe.PayoutWithData)
 	in.homeLog = homeLog
-	in.appendInProgress = false
-
-	slotSubChannelGroup := subSlot.OnSlot()
-	defer slotSubChannelGroup.Unsubscribe()
-	payoutSub := in.pipeline.OnPayout()
-	defer payoutSub.Unsubscribe()
-
-	//in.on_period(pr)
-	// TODO: search for existing payouts
-	preaddPayoutC := make(chan pipe.PayoutWithData)
-	go loopPreloadPayout(in.ctx, in.pipeline, in.errorC, preaddPayoutC)
-
-	failedAttempts := 0
 
 	log.Debug("loading config - 6")
 
@@ -151,36 +97,13 @@ out:
 			break out
 		case err = <-errorC:
 			break out
-		case start := <-deletePayoutC:
-			in.payoutInfo.delete(start)
-		case err = <-payoutSub.ErrorC:
-			break out
-		case x := <-payoutSub.StreamC:
-			in.on_payout(x)
-		case x := <-preaddPayoutC:
-			// copy the code from "case x := <-payoutSub.StreamC:"
-			log.Debugf("reading existing payout=%s", x.Id.String())
-			in.on_payout(x)
 		case id := <-in.homeLog.DeleteC:
 			in.homeLog.Delete(id)
 		case x := <-in.homeLog.ReqC:
 			in.homeLog.Receive(x)
-		case err = <-slotSubChannelGroup.ErrorC:
-			break out
-		case slot := <-slotSubChannelGroup.StreamC:
-			if slot%50 == 0 {
-				log.Debugf("slot=%d", slot)
-				//in.log(pba.Severity_INFO, fmt.Sprintf("slot=%d", slot))
-			}
-			in.on_slot(slot)
 		case req := <-internalC:
 			req(in)
-		case in.appendInProgress = <-appendInProgressC:
 		}
-	}
-
-	if 9 < failedAttempts {
-		err = errors.New("too many failed attempts")
 	}
 
 	in.finish(err)
@@ -203,10 +126,6 @@ func (in *internal) init() error {
 			log.Debug("loading config - 5")
 			return err
 		}
-	}
-	err = in.init_payout()
-	if err != nil {
-		return err
 	}
 
 	return nil

@@ -66,7 +66,6 @@ func Create(
 	}
 
 	errorC := make(chan error, 5)
-	config := args.Program
 	periodSettingsC := make(chan *pba.PeriodSettings)
 	rateSettingsC := make(chan *pba.RateSettings)
 
@@ -145,15 +144,11 @@ func Create(
 	signalC, err = admin.Attach(
 		ctx,
 		grpcAdminServer,
-		router,
-		rpcClient,
-		wsClient,
-		*config.Pipeline,
-		args.Admin(),
 		args.Program.Settings,
 		args.ConfigFilePath,
 		periodSettingsC,
 		rateSettingsC,
+		pipeline,
 	)
 	if err != nil {
 		cancel()
