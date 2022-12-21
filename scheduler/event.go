@@ -13,6 +13,8 @@ const (
 	EVENT_STAKER_HAVE_WITHDRAWN        EventType = 9
 	EVENT_STAKER_HAVE_WITHDRAWN_EMPTY  EventType = 10
 	EVENT_TYPE_READY_APPEND            EventType = 11
+	EVENT_RECEIPT_NEW_COUNT            EventType = 12
+	EVENT_RECEIPT_APPROVED             EventType = 13
 	TRIGGER_CRANK                      EventType = 100 // pipeline: payout.bids
 	TRIGGER_CLOSE_BIDS                 EventType = 101 // pipeline: payout.bids
 	TRIGGER_CLOSE_PAYOUT               EventType = 102 // pipeline: payout
@@ -21,4 +23,5 @@ const (
 	TRIGGER_STAKER_ADD                 EventType = 105 // staker: validator, payout
 	TRIGGER_STAKER_WITHDRAW            EventType = 106 // staker: validator, payout
 	TRIGGER_PERIOD_APPEND              EventType = 107
+	TRIGGER_RECEIPT_APPROVE            EventType = 108
 )

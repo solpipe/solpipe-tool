@@ -6,7 +6,6 @@ import (
 	log "github.com/sirupsen/logrus"
 	dssub "github.com/solpipe/solpipe-tool/ds/sub"
 	sch "github.com/solpipe/solpipe-tool/scheduler"
-	schpyt "github.com/solpipe/solpipe-tool/scheduler/payout"
 	pipe "github.com/solpipe/solpipe-tool/state/pipeline"
 	rpt "github.com/solpipe/solpipe-tool/state/receipt"
 	skr "github.com/solpipe/solpipe-tool/state/staker"
@@ -82,7 +81,7 @@ out:
 func (in *internal) on_event(event sch.Event) {
 	in.trackHome.Broadcast(event)
 	switch event.Type {
-	case schpyt.EVENT_STAKER_HAVE_WITHDRAWN:
+	case sch.EVENT_STAKER_HAVE_WITHDRAWN:
 		if in.cancelWithdraw != nil {
 			in.cancelWithdraw()
 			in.cancelWithdraw = nil
@@ -100,7 +99,7 @@ type srgWithTransition struct {
 func (in *internal) on_staker_receipt(srgt srgWithTransition) {
 	// EVENT_STAKER_IS_ADDING
 	in.trackHome.Broadcast(sch.Create(
-		schpyt.EVENT_STAKER_IS_ADDING,
+		sch.EVENT_STAKER_IS_ADDING,
 		srgt.isStateChange,
 		0,
 	))

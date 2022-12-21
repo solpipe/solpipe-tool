@@ -8,7 +8,6 @@ import (
 	cba "github.com/solpipe/cba"
 	dssub "github.com/solpipe/solpipe-tool/ds/sub"
 	sch "github.com/solpipe/solpipe-tool/scheduler"
-	schpyt "github.com/solpipe/solpipe-tool/scheduler/payout"
 	pyt "github.com/solpipe/solpipe-tool/state/payout"
 	pipe "github.com/solpipe/solpipe-tool/state/pipeline"
 	rpt "github.com/solpipe/solpipe-tool/state/receipt"
@@ -134,7 +133,7 @@ func (in *internal) finish(err error) {
 
 func (in *internal) on_payout_event(event sch.Event) {
 	switch event.Type {
-	case schpyt.EVENT_START:
+	case sch.EVENT_PERIOD_START:
 		if in.cancelValidatorSetPayout != nil {
 			in.cancelValidatorSetPayout()
 			in.cancelValidatorSetPayout = nil
@@ -143,9 +142,9 @@ func (in *internal) on_payout_event(event sch.Event) {
 			// we have not received receipt data
 			in.clockPeriodStartC <- event.IsStateChange
 		}
-	case schpyt.EVENT_DELAY_CLOSE_PAYOUT:
+	case sch.EVENT_DELAY_CLOSE_PAYOUT:
 		in.clockPeriodPostCloseC <- event.IsStateChange
-	case schpyt.EVENT_VALIDATOR_HAVE_WITHDRAWN:
+	case sch.EVENT_VALIDATOR_HAVE_WITHDRAWN:
 		// exit the loop
 		if in.cancelValidatorWithraw != nil {
 			in.cancelValidatorWithraw()
@@ -161,11 +160,11 @@ func (in *internal) on_receipt_event(event sch.Event) {
 		in.cancelValidatorSetPayout()
 	}
 	switch event.Type {
-	case schpyt.EVENT_STAKER_IS_ADDING:
+	case sch.EVENT_STAKER_IS_ADDING:
 		in.trackHome.Broadcast(event)
-	case schpyt.EVENT_STAKER_HAVE_WITHDRAWN_EMPTY:
+	case sch.EVENT_STAKER_HAVE_WITHDRAWN_EMPTY:
 		in.run_validator_withdraw(event.IsStateChange)
-	case schpyt.EVENT_STAKER_HAVE_WITHDRAWN:
+	case sch.EVENT_STAKER_HAVE_WITHDRAWN:
 		in.run_validator_withdraw(event.IsStateChange)
 	default:
 		in.errorC <- errors.New("unknown event")
@@ -176,7 +175,7 @@ func (in *internal) run_validator_withdraw(isStateChange bool) {
 	var ctxC context.Context
 	ctxC, in.cancelValidatorWithraw = context.WithCancel(in.ctx)
 	in.trackHome.Broadcast(sch.CreateWithPayload(
-		schpyt.TRIGGER_VALIDATOR_WITHDRAW_RECEIPT,
+		sch.TRIGGER_VALIDATOR_WITHDRAW_RECEIPT,
 		isStateChange,
 		0,
 		&TriggerValidator{

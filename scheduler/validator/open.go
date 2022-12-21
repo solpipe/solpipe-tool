@@ -48,7 +48,7 @@ func loopOpenReceipt(
 		case <-doneC:
 			return
 		case eventC <- sch.CreateWithPayload(
-			schpyt.TRIGGER_VALIDATOR_SET_PAYOUT,
+			sch.TRIGGER_VALIDATOR_SET_PAYOUT,
 			false,
 			0,
 			schpyt.Trigger{
