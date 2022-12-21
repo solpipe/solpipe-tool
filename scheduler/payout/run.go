@@ -41,7 +41,7 @@ func (in *internal) run_crank() {
 	var trigger *Trigger
 	trigger, in.cancelCrank = in.generic_trigger()
 	in.eventHome.Broadcast(sch.CreateWithPayload(
-		TRIGGER_CRANK,
+		sch.TRIGGER_CRANK,
 		true,
 		0,
 		trigger,
@@ -53,7 +53,7 @@ func (in *internal) run_close_bids() {
 	var trigger *Trigger
 	trigger, in.cancelCloseBid = in.generic_trigger()
 	in.eventHome.Broadcast(sch.CreateWithPayload(
-		TRIGGER_CLOSE_BIDS,
+		sch.TRIGGER_CLOSE_BIDS,
 		true,
 		0,
 		trigger,
@@ -72,7 +72,7 @@ func (in *internal) run_close_payout() {
 		return
 	}
 	in.eventHome.Broadcast(sch.CreateWithPayload(
-		TRIGGER_CLOSE_PAYOUT,
+		sch.TRIGGER_CLOSE_PAYOUT,
 		true,
 		0,
 		&Trigger{
@@ -90,7 +90,7 @@ func (in *internal) run_validator_set_payout() {
 	var trigger *Trigger
 	trigger, in.cancelValidatorSetPayout = in.generic_trigger()
 	in.eventHome.Broadcast(sch.CreateWithPayload(
-		TRIGGER_VALIDATOR_SET_PAYOUT,
+		sch.TRIGGER_VALIDATOR_SET_PAYOUT,
 		true,
 		0,
 		trigger,
@@ -105,21 +105,7 @@ func (in *internal) run_validator_withdraw() {
 	var trigger *Trigger
 	trigger, in.cancelValidatorWithdraw = in.generic_trigger()
 	in.eventHome.Broadcast(sch.CreateWithPayload(
-		TRIGGER_VALIDATOR_WITHDRAW_RECEIPT,
-		true,
-		0,
-		trigger,
-	))
-}
-
-func (in *internal) run_staker_withdraw() {
-	if in.stakerAddingIsDone {
-		return
-	}
-	var trigger *Trigger
-	trigger, in.cancelStakerWithdraw = in.generic_trigger()
-	in.eventHome.Broadcast(sch.CreateWithPayload(
-		TRIGGER_STAKER_WITHDRAW,
+		sch.TRIGGER_VALIDATOR_WITHDRAW_RECEIPT,
 		true,
 		0,
 		trigger,

@@ -48,14 +48,14 @@ out:
 				select {
 				case <-doneC:
 					break out
-				case eventC <- sch.Create(EVENT_START, isStartStateTransition, slot):
+				case eventC <- sch.Create(sch.EVENT_PERIOD_START, isStartStateTransition, slot):
 				}
 			} else if !isStartStateTransition {
 				isStartStateTransition = true
 				select {
 				case <-doneC:
 					break out
-				case eventC <- sch.Create(EVENT_PRE_START, true, slot):
+				case eventC <- sch.Create(sch.EVENT_PRE_START, true, slot):
 				}
 			}
 			if !sentFinish && finish <= slot {
@@ -63,7 +63,7 @@ out:
 				select {
 				case <-doneC:
 					break out
-				case eventC <- sch.Create(EVENT_FINISH, isFinishStateTransition, slot):
+				case eventC <- sch.Create(sch.EVENT_PERIOD_FINISH, isFinishStateTransition, slot):
 				}
 			} else if !isFinishStateTransition {
 				isFinishStateTransition = true
@@ -73,7 +73,7 @@ out:
 				select {
 				case <-doneC:
 					break out
-				case eventC <- sch.Create(EVENT_DELAY_CLOSE_PAYOUT, isCloseStateTransition, slot):
+				case eventC <- sch.Create(sch.EVENT_DELAY_CLOSE_PAYOUT, isCloseStateTransition, slot):
 				}
 				select {
 				case <-doneC:

@@ -100,12 +100,20 @@ out:
 func (in *internal) on_latest() {
 	if in.lastSentAppend < in.lastPeriodFinish && in.lastPeriodFinish < in.slot+in.lookAhead {
 		in.lastSentAppend = in.lastPeriodFinish
+		start := in.slot
+		if start < in.lastSentAppend {
+			start = in.lastSentAppend
+		}
 		select {
 		case <-in.ctx.Done():
-		case in.eventC <- sch.Create(
-			EVENT_TYPE_READY_APPEND,
+		case in.eventC <- sch.CreateWithPayload(
+			sch.TRIGGER_PERIOD_APPEND,
 			true,
 			in.slot,
+			&TriggerAppend{
+				Pipeline: in.pipeline,
+				Start:    start,
+			},
 		):
 		}
 	}
@@ -172,7 +180,7 @@ out:
 				select {
 				case <-doneC:
 					break out
-				case eventC <- sch.Create(EVENT_TYPE_START, startIsStateChange, slot):
+				case eventC <- sch.Create(sch.EVENT_PERIOD_START, startIsStateChange, slot):
 				}
 			} else if !startIsStateChange {
 				startIsStateChange = true
@@ -192,7 +200,7 @@ out:
 		select {
 		case <-doneC:
 			break out
-		case eventC <- sch.Create(EVENT_TYPE_FINISH, finishIsStateChange, slot):
+		case eventC <- sch.Create(sch.EVENT_PERIOD_FINISH, finishIsStateChange, slot):
 		}
 	}
 }

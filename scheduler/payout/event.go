@@ -2,28 +2,6 @@ package payout
 
 import (
 	log "github.com/sirupsen/logrus"
-	sch "github.com/solpipe/solpipe-tool/scheduler"
-)
-
-const (
-	EVENT_PRE_START                    sch.EventType = -1
-	EVENT_START                        sch.EventType = 0
-	EVENT_FINISH                       sch.EventType = 1
-	EVENT_DELAY_CLOSE_PAYOUT           sch.EventType = 2
-	EVENT_BID_CLOSED                   sch.EventType = 3
-	EVENT_BID_FINAL                    sch.EventType = 4
-	EVENT_VALIDATOR_IS_ADDING          sch.EventType = 5
-	EVENT_VALIDATOR_HAVE_WITHDRAWN     sch.EventType = 6
-	EVENT_STAKER_IS_ADDING             sch.EventType = 7
-	EVENT_STAKER_HAVE_WITHDRAWN        sch.EventType = 8
-	EVENT_STAKER_HAVE_WITHDRAWN_EMPTY  sch.EventType = 9
-	TRIGGER_CRANK                      sch.EventType = 100 // pipeline: payout.bids
-	TRIGGER_CLOSE_BIDS                 sch.EventType = 101 // pipeline: payout.bids
-	TRIGGER_CLOSE_PAYOUT               sch.EventType = 102 // pipeline: payout
-	TRIGGER_VALIDATOR_SET_PAYOUT       sch.EventType = 103 // validator: payout
-	TRIGGER_VALIDATOR_WITHDRAW_RECEIPT sch.EventType = 104 // validator: payout
-	TRIGGER_STAKER_ADD                 sch.EventType = 105 // staker: validator, payout
-	TRIGGER_STAKER_WITHDRAW            sch.EventType = 106 // staker: validator, payout
 )
 
 func (in *internal) on_pre_start(isTransition bool) {

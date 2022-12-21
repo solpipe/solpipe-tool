@@ -101,25 +101,25 @@ out:
 			}
 			log.Debugf("event payout=%s  type=%s  isTransition=%s", pwd.Id.String(), event.Type, isTrans)
 			switch event.Type {
-			case EVENT_PRE_START:
+			case sch.EVENT_PRE_START:
 				in.on_pre_start(event.IsStateChange)
-			case EVENT_START:
+			case sch.EVENT_PERIOD_START:
 				in.on_start(event.IsStateChange)
-			case EVENT_FINISH:
+			case sch.EVENT_PERIOD_FINISH:
 				in.on_finish(event.IsStateChange)
-			case EVENT_DELAY_CLOSE_PAYOUT:
+			case sch.EVENT_DELAY_CLOSE_PAYOUT:
 				in.on_clock_close_payout(event.IsStateChange)
-			case EVENT_BID_CLOSED:
+			case sch.EVENT_BID_CLOSED:
 				in.on_bid_closed(event.IsStateChange)
-			case EVENT_BID_FINAL:
+			case sch.EVENT_BID_FINAL:
 				in.on_bid_final(event.IsStateChange)
-			case EVENT_VALIDATOR_IS_ADDING:
+			case sch.EVENT_VALIDATOR_IS_ADDING:
 				in.on_validator_is_adding(event.IsStateChange)
-			case EVENT_VALIDATOR_HAVE_WITHDRAWN:
+			case sch.EVENT_VALIDATOR_HAVE_WITHDRAWN:
 				in.on_validator_have_withdrawn(event.IsStateChange)
-			case EVENT_STAKER_IS_ADDING:
+			case sch.EVENT_STAKER_IS_ADDING:
 				in.on_staker_is_adding(event.IsStateChange)
-			case EVENT_STAKER_HAVE_WITHDRAWN:
+			case sch.EVENT_STAKER_HAVE_WITHDRAWN:
 				in.on_staker_have_withdrawn(event.IsStateChange)
 			default:
 				err = errors.New("unknown event")

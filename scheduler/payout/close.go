@@ -35,7 +35,7 @@ func loopPayoutEvent(
 		select {
 		case <-doneC:
 			return
-		case eventC <- sch.Create(EVENT_BID_CLOSED, false, 0):
+		case eventC <- sch.Create(sch.EVENT_BID_CLOSED, false, 0):
 		}
 		cancelExtra()
 	} else {
@@ -63,14 +63,14 @@ out:
 				select {
 				case <-doneC:
 					return
-				case eventC <- sch.Create(EVENT_VALIDATOR_IS_ADDING, isStateTransition, 0):
+				case eventC <- sch.Create(sch.EVENT_VALIDATOR_IS_ADDING, isStateTransition, 0):
 				}
 				if newData.ValidatorCount == 0 {
 					validatorHasWithdrawn = true
 					select {
 					case <-doneC:
 						return
-					case eventC <- sch.Create(EVENT_VALIDATOR_HAVE_WITHDRAWN, isStateTransition, 0):
+					case eventC <- sch.Create(sch.EVENT_VALIDATOR_HAVE_WITHDRAWN, isStateTransition, 0):
 					}
 				}
 			}
@@ -81,7 +81,7 @@ out:
 				select {
 				case <-doneC:
 					return
-				case eventC <- sch.Create(EVENT_BID_CLOSED, true, 0):
+				case eventC <- sch.Create(sch.EVENT_BID_CLOSED, true, 0):
 				}
 				cancelExtra()
 			}
@@ -92,7 +92,7 @@ out:
 				select {
 				case <-doneC:
 					return
-				case eventC <- sch.Create(EVENT_VALIDATOR_IS_ADDING, true, 0):
+				case eventC <- sch.Create(sch.EVENT_VALIDATOR_IS_ADDING, true, 0):
 				}
 			}
 			if validatorHasAdded && !validatorHasWithdrawn && newData.ValidatorCount == 0 {
@@ -100,7 +100,7 @@ out:
 				select {
 				case <-doneC:
 					return
-				case eventC <- sch.Create(EVENT_VALIDATOR_HAVE_WITHDRAWN, true, 0):
+				case eventC <- sch.Create(sch.EVENT_VALIDATOR_HAVE_WITHDRAWN, true, 0):
 				}
 			}
 		}
@@ -135,7 +135,7 @@ func loopBidSubIsFinal(
 		select {
 		case <-doneC:
 			return
-		case eventC <- sch.Create(EVENT_BID_FINAL, false, 0):
+		case eventC <- sch.Create(sch.EVENT_BID_FINAL, false, 0):
 		}
 	}
 out:
@@ -151,7 +151,7 @@ out:
 				select {
 				case <-doneC:
 					break out
-				case eventC <- sch.Create(EVENT_BID_FINAL, true, 0):
+				case eventC <- sch.Create(sch.EVENT_BID_FINAL, true, 0):
 				}
 
 			}
@@ -188,7 +188,7 @@ func loopStakeStatus(
 		select {
 		case <-doneC:
 			return
-		case eventC <- sch.Create(EVENT_STAKER_IS_ADDING, isStakerAddedTransition, 0):
+		case eventC <- sch.Create(sch.EVENT_STAKER_IS_ADDING, isStakerAddedTransition, 0):
 		}
 	}
 	// we cannot test if the staker count has gone up and down again without monitoring for changes
@@ -207,7 +207,7 @@ out:
 				select {
 				case <-doneC:
 					return
-				case eventC <- sch.Create(EVENT_STAKER_IS_ADDING, isStakerAddedTransition, 0):
+				case eventC <- sch.Create(sch.EVENT_STAKER_IS_ADDING, isStakerAddedTransition, 0):
 				}
 			}
 			if hasStakerAdded && !hasStakerRemoved && data.StakerCount == 0 {
@@ -216,7 +216,7 @@ out:
 				select {
 				case <-doneC:
 					return
-				case eventC <- sch.Create(EVENT_STAKER_HAVE_WITHDRAWN, isStakerAddedTransition, 0):
+				case eventC <- sch.Create(sch.EVENT_STAKER_HAVE_WITHDRAWN, isStakerAddedTransition, 0):
 				}
 				break out
 			}
@@ -225,7 +225,7 @@ out:
 				select {
 				case <-doneC:
 					return
-				case eventC <- sch.Create(EVENT_STAKER_HAVE_WITHDRAWN, isPostPastTransition, 0):
+				case eventC <- sch.Create(sch.EVENT_STAKER_HAVE_WITHDRAWN, isPostPastTransition, 0):
 				}
 				break out
 			}

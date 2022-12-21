@@ -17,6 +17,7 @@ type external struct {
 	internalC chan<- func(*internal)
 }
 
+// EVENT_TYPE_READY_APPEND
 func Schedule(
 	ctx context.Context,
 	router rtr.Router,
@@ -65,8 +66,7 @@ func (e1 external) OnEvent() dssub.Subscription[sch.Event] {
 	return dssub.SubscriptionRequest(e1.eventReqC, func(e sch.Event) bool { return true })
 }
 
-const (
-	EVENT_TYPE_START        sch.EventType = 0
-	EVENT_TYPE_FINISH       sch.EventType = 1
-	EVENT_TYPE_READY_APPEND sch.EventType = 2
-)
+type TriggerAppend struct {
+	Pipeline pipe.Pipeline
+	Start    uint64
+}
