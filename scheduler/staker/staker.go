@@ -5,7 +5,9 @@ import (
 
 	dssub "github.com/solpipe/solpipe-tool/ds/sub"
 	sch "github.com/solpipe/solpipe-tool/scheduler"
+	pyt "github.com/solpipe/solpipe-tool/state/payout"
 	pipe "github.com/solpipe/solpipe-tool/state/pipeline"
+	rpt "github.com/solpipe/solpipe-tool/state/receipt"
 	skr "github.com/solpipe/solpipe-tool/state/staker"
 )
 
@@ -20,13 +22,13 @@ func (e1 external) OnEvent() dssub.Subscription[sch.Event] {
 	return dssub.SubscriptionRequest(e1.reqC, func(x sch.Event) bool { return true })
 }
 
-// Be alerted as to when to: TRIGGER_STAKER_WITHDRAW
+// Be alerted as to when to: TRIGGER_STAKER_ADD, TRIGGER_STAKER_WITHDRAW
 func Schedule(
 	ctx context.Context,
 	pwd pipe.PayoutWithData,
 	ps sch.Schedule,
-	vs sch.Schedule,
 	s skr.Staker,
+	rwd rpt.ReceiptWithData,
 ) sch.Schedule {
 	trackHome := dssub.CreateSubHome[sch.Event]()
 	ctxC, cancel := context.WithCancel(ctx)
@@ -37,8 +39,8 @@ func Schedule(
 		internalC,
 		pwd,
 		ps,
-		vs,
 		s,
+		rwd,
 		trackHome,
 	)
 
@@ -61,4 +63,11 @@ func (e1 external) CloseSignal() <-chan error {
 		in.closeSignalCList = append(in.closeSignalCList, signalC)
 	}
 	return signalC
+}
+
+type TriggerStaker struct {
+	Context context.Context
+	Staker  skr.Staker
+	Receipt rpt.Receipt
+	Payout  pyt.Payout
 }

@@ -20,7 +20,7 @@ func (e1 external) OnEvent() dssub.Subscription[sch.Event] {
 	return dssub.SubscriptionRequest(e1.reqC, func(x sch.Event) bool { return true })
 }
 
-// Be alerted as to when to: TRIGGER_VALIDATOR_SET_PAYOUT, TRIGGER_VALIDATOR_WITHDRAW_RECEIPT, TRIGGER_STAKER_ADD
+// Be alerted as to when to: TRIGGER_VALIDATOR_SET_PAYOUT, TRIGGER_VALIDATOR_WITHDRAW_RECEIPT
 func Schedule(
 	ctx context.Context,
 	pwd pipe.PayoutWithData,
