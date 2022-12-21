@@ -1,7 +1,6 @@
 package validator
 
 import (
-	"context"
 	"errors"
 
 	sgo "github.com/SolmateDev/solana-go"
@@ -24,7 +23,7 @@ func (in *internal) settings_change(newSettings *pba.ValidatorSettings) error {
 		in.settings = oldSettings
 		return err
 	}
-
+	var pipeline pipe.Pipeline
 	var newPipelineId *sgo.PublicKey
 	if 0 < len(newSettings.PipelineId) {
 		newPipelineId = new(sgo.PublicKey)
@@ -33,41 +32,33 @@ func (in *internal) settings_change(newSettings *pba.ValidatorSettings) error {
 			log.Debug(err)
 			return err
 		}
+		pipeline, err = in.router.PipelineById(*newPipelineId)
+		if err != nil {
+			return err
+		}
 	} else {
 		newPipelineId = nil
 	}
 
 	var isPipelineDifferent bool
-	if newPipelineId == nil && in.pipeline == nil {
+	if newPipelineId == nil && in.selectedPipeline == nil {
 		isPipelineDifferent = false
-	} else if in.pipeline == nil {
+	} else if in.selectedPipeline == nil {
 		isPipelineDifferent = true
-	} else if newPipelineId.Equals(in.pipeline.Id) {
+	} else if newPipelineId.Equals(in.selectedPipeline.p.Id) {
 		isPipelineDifferent = false
 	} else {
 		isPipelineDifferent = true
 	}
 
 	if isPipelineDifferent {
-		if in.pipeline != nil {
-			in.pipelineCancel()
+		if in.selectedPipeline != nil {
+			in.selectedPipeline.cancel()
+			delete(in.pipelineM, in.selectedPipeline.p.Id.String())
 		}
 		if newPipelineId != nil {
 			log.Debugf("validator selecting payouts from pipeline=%s", newPipelineId.String())
-			in.pipelineCtx, in.pipelineCancel = context.WithCancel(in.ctx)
-			in.pipeline = new(pipe.Pipeline)
-			*in.pipeline, err = in.router.PipelineById(*newPipelineId)
-			if err != nil {
-				in.pipelineCancel()
-				in.pipeline = nil
-				return err
-			}
-			go loopListenPipeline(
-				in.pipelineCtx,
-				in.errorC,
-				*in.pipeline,
-				in.newPayoutC,
-			)
+			in.selectedPipeline = in.on_pipeline(pipeline)
 		}
 	} else {
 		log.Debug("no change in pipeline")

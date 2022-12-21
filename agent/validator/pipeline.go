@@ -2,11 +2,36 @@ package validator
 
 import (
 	"context"
-	"time"
 
 	log "github.com/sirupsen/logrus"
+	sch "github.com/solpipe/solpipe-tool/scheduler"
+	schpipe "github.com/solpipe/solpipe-tool/scheduler/pipeline"
 	pipe "github.com/solpipe/solpipe-tool/state/pipeline"
 )
+
+type pipelineInfo struct {
+	p      pipe.Pipeline
+	ps     sch.Schedule
+	cancel context.CancelFunc
+}
+
+func (in *internal) on_pipeline(p pipe.Pipeline) *pipelineInfo {
+	pi, present := in.pipelineM[p.Id.String()]
+	if present {
+		return pi
+	} else {
+		pi = new(pipelineInfo)
+		in.pipelineM[p.Id.String()] = pi
+		pi.p = p
+		// we will not do AppendPeriod, so we ignore lookahead
+		fakeLookaheadC := make(chan uint64)
+		pi.ps = schpipe.Schedule(in.ctx, in.router, p, 0, fakeLookaheadC)
+		var ctxC context.Context
+		ctxC, pi.cancel = context.WithCancel(in.ctx)
+		go loopPipeline(ctxC, in.errorC, pi.p, in.newPayoutC)
+		return pi
+	}
+}
 
 type listenPipelineInternal struct {
 	ctx        context.Context
@@ -16,7 +41,7 @@ type listenPipelineInternal struct {
 }
 
 // A pipeline has been selected, so listen for new Payout periods.
-func loopListenPipeline(
+func loopPipeline(
 	ctx context.Context,
 	errorC chan<- error,
 	pipeline pipe.Pipeline,
@@ -64,7 +89,6 @@ func (pi *listenPipelineInternal) on_payout(pwd pipe.PayoutWithData) {
 	case pi.newPayoutC <- payoutWithPipeline{
 		pwd:      pwd,
 		pipeline: pi.pipeline,
-		t:        time.Now(),
 	}:
 	}
 }
