@@ -15,24 +15,26 @@ const HEADER_GRPC = "grpc"
 
 func (e1 external) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 
-	log.Debugf("serving url=%s  or uri path=%s", r.URL.String(), r.URL.Path)
+	//log.Debugf("serving url=%s  or uri path=%s", r.URL.String(), r.URL.Path)
 	routeName := r.Header[HEADER_NAME]
+	//log.Debugf("headers=%+v", r.Header)
 	if 0 < len(routeName) {
 		switch strings.ToLower(routeName[0]) {
-		case HEADER_JSON_RPC:
-			log.Debug("going to json rpc")
-			if r.Header.Get("Upgrade") == "websocket" {
-				e1.ws_proxy(w, r, e1.wsUrl)
-			} else {
-				e1.proxy_http(w, r, e1.rpcUrl)
-			}
 		case HEADER_GRPC:
-			log.Debug("going to grpc")
+			log.Debug("going to grpc by header")
 			// grpc package name is admin, so we filter by that in the uri path
 			if r.Header.Get("Upgrade") == "websocket" {
 				e1.ws_proxy(w, r, e1.grpcWebUrl)
 			} else {
 				e1.proxy_http(w, r, e1.grpcWebUrl)
+			}
+		case HEADER_JSON_RPC:
+			if r.Header.Get("Upgrade") == "websocket" {
+				log.Debugf("going to json rpc!!! with remote=%s", e1.wsUrl)
+				e1.ws_proxy(w, r, e1.wsUrl)
+			} else {
+				log.Debugf("going to json rpc!!! with remote=%s", e1.rpcUrl)
+				e1.proxy_http(w, r, e1.rpcUrl)
 			}
 		default:
 			log.Debugf("error with header=%s value=%s", HEADER_NAME, routeName[0])
@@ -43,7 +45,12 @@ func (e1 external) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 
 	// Implement route forwarding
 	// by default, send all requests to the React front end
-	log.Debugf("url path=%s", r.URL.Path)
+	//log.Debugf("url path=%s", r.URL.Path)
+	if strings.HasPrefix(r.URL.Path, "/pricing") {
+		log.Debug("pricing")
+		e1.pricing(w, r)
+		return
+	}
 	switch r.URL.Path {
 	case "/health/startup":
 		log.Debug("start up")
@@ -59,8 +66,22 @@ func (e1 external) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		} else {
 			w.WriteHeader(http.StatusBadRequest)
 		}
+	case "/jsonrpc":
+		if r.Header.Get("Upgrade") == "websocket" {
+			log.Debugf("going to json rpc!!! with remote=%s", e1.wsUrl)
+			e1.ws_proxy(w, r, e1.wsUrl)
+		} else {
+			log.Debugf("going to json rpc!!! with remote=%s", e1.rpcUrl)
+			e1.proxy_http(w, r, e1.rpcUrl)
+		}
+	case "/ws":
+		if r.Header.Get("Upgrade") == "websocket" {
+			e1.ws_proxy(w, r, e1.frontendUrl)
+		} else {
+			e1.proxy_http(w, r, e1.frontendUrl)
+		}
 	default:
-		log.Debug("going to default")
+		//log.Debug("going to default")
 		if r.Header.Get("Upgrade") == "websocket" {
 			e1.ws_proxy(w, r, e1.frontendUrl)
 		} else {

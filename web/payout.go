@@ -6,6 +6,7 @@ import (
 
 	log "github.com/sirupsen/logrus"
 	pyt "github.com/solpipe/solpipe-tool/state/payout"
+	pipe "github.com/solpipe/solpipe-tool/state/pipeline"
 	"github.com/solpipe/solpipe-tool/state/receipt"
 	"github.com/solpipe/solpipe-tool/state/sub"
 	"github.com/solpipe/solpipe-tool/util"
@@ -32,7 +33,7 @@ func (e1 external) ws_payout(
 			go e1.ws_on_payout(
 				errorC,
 				clientCtx,
-				y.Payout,
+				y,
 				pOut,
 			)
 			err = pOut.writeData(sub.PayoutWithData{
@@ -52,29 +53,35 @@ func (e1 external) ws_payout(
 func (e1 external) ws_on_payout(
 	errorC chan<- error,
 	ctx context.Context,
-	p pyt.Payout,
+	pwd pipe.PayoutWithData,
 	pOut payoutChannelGroup,
 ) {
 	var err error
 	serverDoneC := e1.ctx.Done()
 	doneC := ctx.Done()
-
+	p := pwd.Payout
 	id := p.Id
 
 	dataSub := p.OnData()
 	defer dataSub.Unsubscribe()
 
 	{
-		d, err := p.Data()
-		if err != nil {
-			errorC <- err
-			return
-		}
+		d := pwd.Data
 		err = pOut.writeData(sub.PayoutWithData{
 			Id:     id,
 			Data:   d,
 			IsOpen: true,
 		})
+		if err != nil {
+			errorC <- err
+			return
+		}
+	}
+
+	var bidStatus *pyt.BidStatus
+	{
+		bidStatus = new(pyt.BidStatus)
+		*bidStatus, err = p.BidStatus()
 		if err != nil {
 			errorC <- err
 			return
@@ -104,6 +111,9 @@ func (e1 external) ws_on_payout(
 	receiptSub := p.OnReceipt(util.Zero())
 	defer receiptSub.Unsubscribe()
 
+	bidSub := p.OnBidStatus()
+	defer bidSub.Unsubscribe()
+
 out:
 	for {
 		select {
@@ -123,6 +133,16 @@ out:
 			break out
 		case rwd := <-receiptSub.StreamC:
 			go e1.ws_on_receipt(errorC, rwd, pOut)
+		case err = <-bidSub.ErrorC:
+			break out
+		case x := <-bidSub.StreamC:
+			if !bidStatus.IsFinal {
+				*bidStatus = x
+				err = pOut.writeBid(x)
+				if err != nil {
+					break out
+				}
+			}
 		}
 	}
 	if err != nil {
@@ -191,16 +211,19 @@ type payoutChannelGroup struct {
 	clientCtx context.Context
 	dataC     chan<- sub.PayoutWithData
 	receiptC  chan<- sub.ReceiptGroup
+	bidC      chan<- pyt.BidStatus
 }
 
 func (out payoutChannelGroup) writeData(d sub.PayoutWithData) error {
 	var err error
+
 	select {
 	case <-out.serverCtx.Done():
 		err = errors.New("canceled")
 	case <-out.clientCtx.Done():
 		err = errors.New("canceled")
 	case out.dataC <- d:
+		log.Debugf("wrote payout=%s validator count=%d", d.Id.String(), d.Data.ValidatorCount)
 	}
 	return err
 }
@@ -217,11 +240,24 @@ func (out payoutChannelGroup) writeReceipt(r sub.ReceiptGroup) error {
 	return err
 }
 
+func (out payoutChannelGroup) writeBid(bs pyt.BidStatus) error {
+	var err error
+	select {
+	case <-out.serverCtx.Done():
+		err = errors.New("canceled")
+	case <-out.clientCtx.Done():
+		err = errors.New("canceled")
+	case out.bidC <- bs:
+	}
+	return err
+}
+
 type payoutChannelGroupInternal struct {
 	serverCtx context.Context
 	clientCtx context.Context
 	dataC     <-chan sub.PayoutWithData
 	receiptC  <-chan sub.ReceiptGroup
+	bidC      <-chan pyt.BidStatus
 }
 
 func (e1 external) createPayoutPair(
@@ -229,17 +265,19 @@ func (e1 external) createPayoutPair(
 ) (payoutChannelGroup, payoutChannelGroupInternal) {
 	dataC := make(chan sub.PayoutWithData)
 	receiptC := make(chan sub.ReceiptGroup)
-
+	bidC := make(chan pyt.BidStatus)
 	return payoutChannelGroup{
 			clientCtx: clientCtx,
 			serverCtx: e1.ctx,
 			dataC:     dataC,
 			receiptC:  receiptC,
+			bidC:      bidC,
 		},
 		payoutChannelGroupInternal{
 			clientCtx: clientCtx,
 			serverCtx: e1.ctx,
 			dataC:     dataC,
 			receiptC:  receiptC,
+			bidC:      bidC,
 		}
 }

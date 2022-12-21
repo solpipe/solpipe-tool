@@ -78,6 +78,7 @@ func (in *internal) on_validator(obj sub.ValidatorGroup) error {
 		x, present := in.l_validator.receiptWithNoValidator[id.String()]
 		if present {
 			for _, r := range x {
+				log.Debug("loading receipt into new validator")
 				ref.v.UpdateReceipt(r)
 			}
 			delete(in.l_validator.receiptWithNoValidator, id.String())

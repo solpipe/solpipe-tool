@@ -5,17 +5,39 @@ Test Solpipe using a single validator and a single staker.
 
 # Setup
 
+
+
 ## Terminal 1 - Test Validator
 
 Run the test validator.
 
 ```bash
-mkdir $HOME/tmp
-cd $HOME/tmp
+mkdir -p $HOME/work/tmp
+cd $HOME/work/tmp
 solana-test-validator
 ```
 
 Press `ctrl+C` to stop the validator.  Do `rm -r $HOME/tmp/test-ledger` and restart `solana-test-validator` to reset all of the data.
+
+
+## Terminal 0 - Shortcut
+
+```bash
+rm -r $HOME/work/tmp/validator-8899
+./contrib/test.sh run $HOME/work/tmp/validator-8899
+```
+
+```bash
+./contrib/test.sh init $HOME/work/tmp/validator-8899
+```
+
+### Run another Validator
+
+
+```bash
+./contrib/test.sh prepval $HOME/work/tmp/validator-2 18899
+./contrib/test.sh runval $HOME/work/tmp/validator-2
+```
 
 ## Terminal 2 - Deploy Program
 
@@ -53,7 +75,7 @@ solpipe --verbose \
    --payer=./localconfig/single/faucet.json \
    ./localconfig/single/pipeline.json \
    ./localconfig/single/pipeline-admin.json \
-   1/240 1/10 1/2 100
+   1/240 1/10 100 20
 ```
 
 ### Pipeline Agent - Daemon
@@ -66,13 +88,11 @@ solpipe --verbose  \
    --ws=ws://localhost:8900  \
    pipeline agent \
    --crank_rate=1/100 \
-   --decay_rate=1/100 \
    --payout_share=95/100 \
    --clear_listen=127.0.0.1:50051 \
-   --admin_url="unix:///tmp/pipeline.socket" \
+   --admin_url="tcp://127.0.0.1:30051" \
   $(solana-keygen pubkey ./localconfig/single/pipeline.json) \
-  ./localconfig/single/pipeline-admin.json \
-  ./localconfig/single/pipeline-config.json
+  ./localconfig/single/pipeline-admin.json  $(pwd)/localconfig/single/pipeline-config.json 100
 ```
 * make sure `/tmp/pipeline.socket` does not exist prior to running this command
 
@@ -156,6 +176,14 @@ solpipe --verbose  \
    web \
    --frontend=http://localhost:3001 \
    4001
+solpipe --verbose  \
+   --rpc=http://localhost:8899 \
+   --ws=ws://localhost:8900  \
+   web \
+   --frontend=http://localhost:3001 \
+   --grpc=tcp://localhost4002 \
+   4001
+
 ```
 
 
@@ -181,4 +209,15 @@ solpipe --verbose \
   --rpc=http://localhost:8899 \
   --ws=ws://localhost:8900 \
   cranker 10 ./localconfig/single/faucet.json
+```
+
+# Debugging
+
+## Payouts
+
+```bash
+solpipe --verbose  \
+   --rpc=http://localhost:8899 \
+   --ws=ws://localhost:8900  \
+   payout status --help
 ```

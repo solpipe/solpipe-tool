@@ -35,7 +35,7 @@ type Pipeline struct {
 	slotSub               slot.SlotHome
 	updatePipelineC       chan<- dssub.ResponseChannel[cba.Pipeline]
 	updatePeriodRingC     chan<- dssub.ResponseChannel[cba.PeriodRing]
-	updateRefundC         chan<- dssub.ResponseChannel[cba.Refunds]
+	updateClaimC          chan<- dssub.ResponseChannel[cba.Claim]
 	updatePayoutC         chan<- dssub.ResponseChannel[PayoutWithData]
 	updateValidatorStakeC chan<- validatorStakeUpdate
 	updateValidatorC      chan<- dssub.ResponseChannel[ValidatorUpdate]
@@ -56,7 +56,7 @@ func CreatePipeline(
 	pipelineHome := dssub.CreateSubHome[cba.Pipeline]()
 	payoutHome := dssub.CreateSubHome[PayoutWithData]()
 	periodHome := dssub.CreateSubHome[cba.PeriodRing]()
-	refundHome := dssub.CreateSubHome[cba.Refunds]()
+	claimHome := dssub.CreateSubHome[cba.Claim]()
 	validatorHome := dssub.CreateSubHome[ValidatorUpdate]()
 	stakeStatusHome := dssub.CreateSubHome[sub.StakeUpdate]()
 
@@ -80,7 +80,7 @@ func CreatePipeline(
 	}
 
 	updatePeriodRingC := periodHome.ReqC
-	updateRefundC := refundHome.ReqC
+	updateClaimC := claimHome.ReqC
 	updatePayoutC := payoutHome.ReqC
 	updatePipelineC := pipelineHome.ReqC
 	updateValidatorStakeC := make(chan validatorStakeUpdate, 10)
@@ -98,7 +98,7 @@ func CreatePipeline(
 		rf,
 		pipelineHome,
 		periodHome,
-		refundHome,
+		claimHome,
 		payoutHome,
 		validatorHome,
 		stakeStatusHome,
@@ -113,7 +113,7 @@ func CreatePipeline(
 		slotSub:            slotSub,
 		updatePipelineC:    updatePipelineC,
 		updatePeriodRingC:  updatePeriodRingC,
-		updateRefundC:      updateRefundC,
+		updateClaimC:       updateClaimC,
 		updatePayoutC:      updatePayoutC,
 		updateValidatorC:   updateValidatorC,
 		updateStakeStatusC: updateStakeStatusC,
@@ -187,15 +187,14 @@ func convertRateToProto(r *state.Rate) *pba.Rate {
 
 type PipelineSettings struct {
 	CrankFee    *state.Rate
-	DecayRate   *state.Rate
+	BidSpace    uint16
+	RefundSpace uint16
 	PayoutShare *state.Rate
 }
 
 func (ps *PipelineSettings) ToProtoRateSettings() *pba.RateSettings {
-
 	return &pba.RateSettings{
 		CrankFee:    convertRateToProto(ps.CrankFee),
-		DecayRate:   convertRateToProto(ps.DecayRate),
 		PayoutShare: convertRateToProto(ps.PayoutShare),
 	}
 }
@@ -205,8 +204,8 @@ func (ps *PipelineSettings) Check() error {
 	if ps.CrankFee == nil {
 		return errors.New("no crank fee")
 	}
-	if ps.DecayRate == nil {
-		return errors.New("no decay rate")
+	if ps.BidSpace < 10 {
+		return errors.New("bid space too low")
 	}
 	if ps.PayoutShare == nil {
 		return errors.New("no payout share")
@@ -311,55 +310,31 @@ func SubscribePipeline(wsClient *sgows.Client) (*sgows.ProgramSubscription, erro
 
 func (e1 Pipeline) AllPayouts() ([]PayoutWithData, error) {
 	doneC := e1.ctx.Done()
-	countC := make(chan int)
-	payoutC := make(chan PayoutWithData)
+	ansC := make(chan []PayoutWithData)
 
 	select {
 	case <-doneC:
 		return nil, errors.New("canceled")
 	case e1.internalC <- func(in *internal) {
-		in.payout_list(countC, payoutC)
+		in.payout_list(ansC)
 	}:
 	}
-	var count int
+	var list []PayoutWithData
 	select {
 	case <-doneC:
 		return nil, errors.New("canceled")
-	case count = <-countC:
-	}
-	ans := make([]PayoutWithData, count)
-	for i := 0; i < count; i++ {
-		select {
-		case <-doneC:
-			return nil, errors.New("canceled")
-		case ans[i] = <-payoutC:
-		}
+	case list = <-ansC:
 	}
 
-	return ans, nil
+	return list, nil
 }
 
-func (in *internal) payout_list(countC chan<- int, payoutC chan<- PayoutWithData) {
+func (in *internal) payout_list(ansC chan<- []PayoutWithData) {
 	doneC := in.ctx.Done()
+
 	select {
 	case <-doneC:
-		return
-	case countC <- int(in.payoutLinkedList.Size):
-	}
-	if len(in.payoutById) == 0 {
-		return
-	}
-
-	err := in.payoutLinkedList.Iterate(func(obj PayoutWithData, index uint32, delete func()) error {
-		select {
-		case <-doneC:
-			return errors.New("canceled")
-		case payoutC <- obj:
-			return nil
-		}
-	})
-	if err != nil {
-		return
+	case ansC <- in.payoutLinkedList.Array():
 	}
 
 }

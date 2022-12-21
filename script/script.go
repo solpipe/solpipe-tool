@@ -4,11 +4,11 @@ import (
 	"context"
 	"errors"
 
-	vrs "github.com/solpipe/solpipe-tool/state/version"
 	sgo "github.com/SolmateDev/solana-go"
 	sgorpc "github.com/SolmateDev/solana-go/rpc"
 	sgows "github.com/SolmateDev/solana-go/rpc/ws"
 	bin "github.com/gagliardetto/binary"
+	vrs "github.com/solpipe/solpipe-tool/state/version"
 )
 
 type Configuration struct {
@@ -60,6 +60,69 @@ func (e1 *Script) SetTx(payer sgo.PrivateKey) error {
 	e1.AppendKey(payer)
 
 	return nil
+}
+
+func (e1 *Script) WaitForAccountChange(account sgo.PublicKey) (resultC <-chan WaitResult) {
+	ansC := make(chan WaitResult, 1)
+	resultC = ansC
+	sub, err := e1.ws.AccountSubscribe(account, sgorpc.CommitmentFinalized)
+	if err != nil {
+		ansC <- WaitResult{Err: err}
+		return
+	}
+	go loopWaitAccount(e1.ctx, sub, ansC)
+	return
+}
+
+type WaitResult struct {
+	HasClosed bool
+	Data      []byte
+	Err       error
+}
+
+func loopWaitAccount(
+	ctx context.Context,
+	sub *sgows.AccountSubscription,
+	resultC chan<- WaitResult,
+) {
+	defer sub.Unsubscribe()
+	doneC := ctx.Done()
+	streamC := sub.RecvStream()
+	errorC := sub.RecvErr()
+	var err error
+	var lamports uint64
+	var data []byte
+	select {
+	case <-doneC:
+		err = errors.New("canceled")
+	case err = <-errorC:
+	case d := <-streamC:
+		x, ok := d.(*sgows.AccountResult)
+		if !ok {
+			err = errors.New("bad account result")
+		} else {
+			lamports = x.Value.Lamports
+			data = x.Value.Account.Data.GetBinary()
+		}
+	}
+	if err != nil {
+		resultC <- WaitResult{
+			Err: err,
+		}
+		return
+	}
+	if 0 < lamports {
+		resultC <- WaitResult{
+			Err:       nil,
+			HasClosed: false,
+			Data:      data,
+		}
+	} else {
+		resultC <- WaitResult{
+			Err:       nil,
+			HasClosed: true,
+		}
+	}
 }
 
 func ParseTransaction(data []byte) (tx *sgo.Transaction, err error) {

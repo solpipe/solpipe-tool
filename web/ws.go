@@ -12,6 +12,7 @@ import (
 	"github.com/gorilla/websocket"
 	log "github.com/sirupsen/logrus"
 	cba "github.com/solpipe/cba"
+	pipe "github.com/solpipe/solpipe-tool/state/pipeline"
 	rtr "github.com/solpipe/solpipe-tool/state/router"
 )
 
@@ -66,11 +67,17 @@ func (e1 external) ws_proxy(w http.ResponseWriter, r *http.Request, remote *url.
 	var wsRemoteStr string
 	remoteStr := remote.String()
 	if strings.HasPrefix(remoteStr, "http") {
-		wsRemoteStr = "ws" + remoteStr[len("http"):]
+		wsRemoteStr = "ws" + remoteStr[len("http"):] + r.URL.Path
+	} else if strings.HasPrefix(remoteStr, "https") {
+		wsRemoteStr = "wss" + remoteStr[len("https"):] + r.URL.Path
 	} else {
-		wsRemoteStr = "wss" + remoteStr[len("https"):]
+		wsRemoteStr = remoteStr + r.URL.Path
 	}
 
+	if strings.Contains(wsRemoteStr, "3001") && !strings.Contains(wsRemoteStr, "jsonrpc") {
+		wsRemoteStr += "ws"
+	}
+	log.Debugf("websocket proxy to remote=%s with local=%s", wsRemoteStr, r.URL.String())
 	connLocal, err := upgrader.Upgrade(w, r, nil)
 	if err != nil {
 		log.Debug("Error during connection upgradation:", err)
@@ -80,8 +87,7 @@ func (e1 external) ws_proxy(w http.ResponseWriter, r *http.Request, remote *url.
 
 	connRemote, _, err := websocket.DefaultDialer.DialContext(e1.ctx, wsRemoteStr, nil)
 	if err != nil {
-
-		log.Println("Error:", err)
+		log.Debugf("websocket(%s) Error: %s", wsRemoteStr, err.Error())
 		return
 	}
 	defer connRemote.Close()
@@ -96,10 +102,13 @@ out:
 	for {
 		select {
 		case err = <-errorC:
+			log.Debugf("exiting error: %s", err.Error())
 			break out
 		case <-doneC:
+			log.Debug("exiting debug")
 			break out
 		case <-clientDoneC:
+			log.Debug("client is done")
 			break out
 		}
 	}
@@ -114,20 +123,26 @@ func loopMessagePass(a *websocket.Conn, b *websocket.Conn, errorC chan<- error) 
 	var err error
 	var m []byte
 	var msgType int
+	//log.Debugf("websocket a to b")
 out:
 	for {
 		msgType, m, err = a.ReadMessage()
 		if err == io.EOF {
+			log.Debug("client - 1")
 			err = nil
 			break out
 		} else if err != nil {
+			log.Debug("client - 2")
 			break out
 		}
+		//log.Debugf("sending message=%s", string(m))
 		err = b.WriteMessage(msgType, m)
 		if err == io.EOF {
+			log.Debug("client - 3")
 			err = nil
 			break out
 		} else if err != nil {
+			log.Debug("client - 4")
 			break out
 		}
 	}
@@ -219,7 +234,7 @@ out:
 			if err != nil {
 				break out
 			}
-		case x := <-pipeIn.bidStatusC:
+		case x := <-pIn.bidC:
 			err = writeConn(conn, TYPE_BID_STATUS, &x)
 			if err != nil {
 				break out
@@ -249,10 +264,18 @@ out:
 			break out
 		case p := <-payoutSub.StreamC:
 			// covers new payouts
+			data, err := p.Data()
+			if err != nil {
+				break out
+			}
 			go e1.ws_on_payout(
 				errorC,
 				clientCtx,
-				p,
+				pipe.PayoutWithData{
+					Id:     p.Id,
+					Payout: p,
+					Data:   data,
+				},
 				pOut,
 			)
 		case d := <-pIn.dataC:

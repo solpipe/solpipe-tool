@@ -164,8 +164,9 @@ func TestSetup(t *testing.T) {
 			Wallet:       &wallet,
 			Settings: &pipe.PipelineSettings{
 				CrankFee:    &state.Rate{N: 1, D: 10},
-				DecayRate:   &state.Rate{N: 3, D: 10},
 				PayoutShare: &state.Rate{N: 4, D: 10},
+				BidSpace:    100,
+				RefundSpace: 20,
 			},
 		}
 		var resultC <-chan ap.ListenResult
@@ -177,8 +178,8 @@ func TestSetup(t *testing.T) {
 			1*time.Minute,
 			args,
 			&pid,
-			100,
-			20,
+			args.Program.Settings.BidSpace,
+			args.Program.Settings.RefundSpace,
 		)
 		if err != nil {
 			t.Fatal(err)
@@ -225,8 +226,9 @@ func TestSetup(t *testing.T) {
 					Wallet:       &pipelineConfig.Admin,
 					Settings: &pipe.PipelineSettings{
 						CrankFee:    &state.Rate{N: 1, D: 100},
-						DecayRate:   &state.Rate{N: 1, D: 100},
 						PayoutShare: &state.Rate{N: 95, D: 100},
+						BidSpace:    100,
+						RefundSpace: 20,
 					},
 				},
 			},

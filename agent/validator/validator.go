@@ -18,6 +18,7 @@ import (
 	rly "github.com/solpipe/solpipe-tool/proxy/relay"
 	pxyval "github.com/solpipe/solpipe-tool/proxy/relay/validator"
 	pxysvr "github.com/solpipe/solpipe-tool/proxy/server"
+	spt "github.com/solpipe/solpipe-tool/script"
 	ctr "github.com/solpipe/solpipe-tool/state/controller"
 	rtr "github.com/solpipe/solpipe-tool/state/router"
 	val "github.com/solpipe/solpipe-tool/state/validator"
@@ -213,6 +214,7 @@ func Create(
 		cancel()
 		return
 	}
+
 	//rpcClient *sgorpc.Client, wsClient *sgows.Client
 
 	script, err := config.ScriptBuilder(ctx)
@@ -220,6 +222,7 @@ func Create(
 		cancel()
 		return
 	}
+	scriptWrapper := spt.Wrap(script)
 
 	var relay rly.Relay
 	relay, err = pxyval.Create(ctx, validator, router.Network, config)
@@ -256,6 +259,7 @@ func Create(
 		go loopGrpcShutdown(ctxC, t1, clearLi.Listener, grpcServerClearNet)
 	}
 
+	log.Debug("entering internal loop for validator agent")
 	go loopInternal(
 		ctxC,
 		cancel,
@@ -264,7 +268,7 @@ func Create(
 		config,
 		rpcClient,
 		wsClient,
-		script,
+		scriptWrapper,
 		router,
 		validator,
 		configFilePath,

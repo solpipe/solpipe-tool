@@ -17,7 +17,7 @@ type periodInfo struct {
 
 func (pi *periodInfo) find(start uint64) (exact *ll.Node[*payoutWithBidStatus], appendTarget *ll.Node[*payoutWithBidStatus]) {
 	tail := pi.list.TailNode()
-	if tail.Value() == nil {
+	if tail == nil {
 		return nil, nil
 	} else if tail.Value().Pwd.Data.Period.Start < start {
 		return nil, nil
@@ -51,6 +51,7 @@ type payoutWithBidStatus struct {
 }
 
 func (in *internal) pbs_create(pwd pipe.PayoutWithData) (*payoutWithBidStatus, error) {
+	log.Debugf("pbs create pwd(%s)=%+v", pwd.Id.String(), pwd.Data)
 	bs, err := pwd.Payout.BidStatus()
 	if err != nil {
 		return nil, err
@@ -78,6 +79,12 @@ func (in *internal) pbs_create(pwd pipe.PayoutWithData) (*payoutWithBidStatus, e
 		pwd.Data.Period.Start,
 		pwd.Data.Period.Start+pwd.Data.Period.Length,
 	)
+
+	err = in.pwbs_init_bid(pwbs)
+	if err != nil {
+		cancel()
+		return nil, err
+	}
 
 	return pwbs, nil
 }
@@ -107,6 +114,14 @@ func (in *internal) on_payout(pwd pipe.PayoutWithData, slotHome slot.SlotHome) {
 		pi.list.Append(pbs)
 	}
 
+}
+
+func (in *internal) pwbs_init_bid(pwbs *payoutWithBidStatus) error {
+	bi := new(bidderInfo)
+	bi.list = ll.CreateGeneric[*bidderFeed]()
+	bi.m = make(map[string]*ll.Node[*bidderFeed])
+	pwbs.bi = bi
+	return nil
 }
 
 type bidStatusWithStartTime struct {

@@ -61,8 +61,9 @@ func TestPipeline(t *testing.T) {
 		Wallet:       &wallet,
 		Settings: &pipe.PipelineSettings{
 			CrankFee:    &state.Rate{N: 1, D: 10},
-			DecayRate:   &state.Rate{N: 3, D: 10},
 			PayoutShare: &state.Rate{N: 4, D: 10},
+			BidSpace:    100,
+			RefundSpace: 20,
 		},
 	}
 
@@ -75,8 +76,8 @@ func TestPipeline(t *testing.T) {
 		1*time.Minute,
 		args,
 		nil,
-		100,
-		20,
+		args.Program.Settings.BidSpace,
+		args.Program.Settings.RefundSpace,
 	)
 	if err != nil {
 		t.Fatal(err)
@@ -97,5 +98,6 @@ func TestPipeline(t *testing.T) {
 
 	time.Sleep(30 * time.Second)
 	agent.Close()
+	t.Log("finished")
 	// create pipeline
 }

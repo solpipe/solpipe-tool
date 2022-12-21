@@ -204,7 +204,7 @@ func (e1 Validator) Print() (string, error) {
 	return fmt.Sprintf("Validator:\n\tAdmin=%s\n\tReceipt=%+v\n\tVote=%s", data.Admin.String(), data.Ring, data.Vote.String()), nil
 }
 
-func (e1 Validator) OnStats() dssub.Subscription[cba.ValidatorManager] {
+func (e1 Validator) OnData() dssub.Subscription[cba.ValidatorManager] {
 	return dssub.SubscriptionRequest(e1.updateC, func(data cba.ValidatorManager) bool {
 		return true
 	})
@@ -213,6 +213,12 @@ func (e1 Validator) OnStats() dssub.Subscription[cba.ValidatorManager] {
 // get a real time feed of activated state and network state
 func (e1 Validator) OnStake() dssub.Subscription[StakeStatus] {
 	return dssub.SubscriptionRequest(e1.stakeRatioC, func(data StakeStatus) bool {
+		return true
+	})
+}
+
+func (e1 Validator) OnReceipt() dssub.Subscription[rpt.ReceiptWithData] {
+	return dssub.SubscriptionRequest(e1.updateReceiptC, func(rwd rpt.ReceiptWithData) bool {
 		return true
 	})
 }

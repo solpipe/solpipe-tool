@@ -4,6 +4,7 @@ import (
 	"errors"
 
 	sgo "github.com/SolmateDev/solana-go"
+	log "github.com/sirupsen/logrus"
 	cba "github.com/solpipe/cba"
 	ctr "github.com/solpipe/solpipe-tool/state/controller"
 	pyt "github.com/solpipe/solpipe-tool/state/payout"
@@ -32,7 +33,7 @@ func (e1 *Script) CloseBids(
 	b.SetPipelineAccount(pipeline.Id)
 	b.SetPipelineAdminAccount(admin.PublicKey())
 	e1.AppendKey(admin)
-
+	log.Debugf("closing bid payout_data=(%+v)", data)
 	e1.txBuilder.AddInstruction(b.Build())
 
 	return nil

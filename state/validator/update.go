@@ -3,6 +3,7 @@ package validator
 import (
 	"context"
 
+	sgo "github.com/SolmateDev/solana-go"
 	log "github.com/sirupsen/logrus"
 	cba "github.com/solpipe/cba"
 	rpt "github.com/solpipe/solpipe-tool/state/receipt"
@@ -30,7 +31,11 @@ func (e1 Validator) UpdateReceipt(r rpt.Receipt) {
 		log.Error(err)
 		return
 	}
+	log.Debugf("receipt-_____data=%+v", d)
 
+	if d.Payout.String() == "11111111111111111111111111111111" {
+		panic("bad payout")
+	}
 	select {
 	case <-doneC:
 	case e1.internalC <- func(in *internal) {
@@ -47,22 +52,27 @@ type receiptHolder struct {
 }
 
 func (in *internal) on_receipt(r rpt.Receipt, d cba.Receipt) {
-	_, present := in.receipts[d.Payout.String()]
+	_, present := in.receiptsByPayoutId[d.Payout.String()]
 	if present {
-		log.Debug("receipt duplicate in validator")
+		log.Debugf("receipt duplicate in validator: id=%s", r.Id.String())
+		log.Debugf("%+v", d)
 		return
 	}
 
 	ctx, cancel := context.WithCancel(in.ctx)
-	in.receipts[d.Payout.String()] = &receiptHolder{
+	holder := &receiptHolder{
 		cancel: cancel,
 		r:      r,
 		d:      d,
 	}
+	in.receiptsByPayoutId[d.Payout.String()] = holder
+	in.receiptsById[r.Id.String()] = holder
 	ri := new(receiptInternal)
 	ri.ctx = ctx
+	ri.d = d
 	ri.errorC = in.errorC
 	ri.updateC = in.updateReceiptC
+	ri.deleteC = in.deleteReceiptC
 
 	go ri.loop(r)
 
@@ -74,7 +84,9 @@ func (in *internal) on_receipt(r rpt.Receipt, d cba.Receipt) {
 type receiptInternal struct {
 	ctx     context.Context
 	errorC  chan<- error
+	d       cba.Receipt
 	updateC chan<- cba.Receipt
+	deleteC chan<- [2]sgo.PublicKey
 }
 
 func (ri *receiptInternal) loop(r rpt.Receipt) {
@@ -94,13 +106,19 @@ out:
 		}
 	}
 
+	// TODO: make this code block non-blocking
 	if err != nil {
 		ri.errorC <- err
+	} else {
+		ri.deleteC <- [2]sgo.PublicKey{
+			ri.d.Payout, r.Id,
+		}
 	}
+
 }
 
 func (in *internal) on_receipt_update(d cba.Receipt) {
-	rh, present := in.receipts[d.Payout.String()]
+	rh, present := in.receiptsByPayoutId[d.Payout.String()]
 	if !present {
 		log.Errorf("missing receipt payout=%s", d.Payout.String())
 		return

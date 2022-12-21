@@ -1,5 +1,7 @@
 package util
 
+import "errors"
+
 const (
 	STRUCT_SIZE_MINT            uint64 = 82
 	STRUCT_SIZE_CONTROLLER      uint64 = 184
@@ -37,5 +39,17 @@ func CalculateDelta(o uint64, n uint64) Delta {
 	return Delta{
 		Change:     delta,
 		IsIncrease: isAddition,
+	}
+}
+
+const (
+	MAX_PC uint64 = 100_000_000_000_000
+)
+
+func SafeConvertUIntToFloat(x uint64) (float64, error) {
+	if MAX_PC <= x {
+		return 0, errors.New("integer out of range")
+	} else {
+		return float64(x), nil
 	}
 }

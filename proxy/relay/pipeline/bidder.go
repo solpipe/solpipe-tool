@@ -12,7 +12,6 @@ import (
 )
 
 type bidderFeed struct {
-	user    sgo.PublicKey
 	ctx     context.Context
 	cancel  context.CancelFunc
 	bidC    chan<- BidWithTotal
@@ -29,13 +28,6 @@ func (in *internal) init_bid() error {
 	return nil
 }
 
-func (in *internal) pwbs_init_bid(pwbs *payoutWithBidStatus) error {
-	bi := new(bidderInfo)
-	bi.list = ll.CreateGeneric[*bidderFeed]()
-	bi.m = make(map[string]*ll.Node[*bidderFeed])
-	return nil
-}
-
 func (in *internal) on_bid_status(s bidStatusWithStartTime) {
 	doneC := in.ctx.Done()
 	node, _ := in.periodInfo.find(s.start)
@@ -43,6 +35,7 @@ func (in *internal) on_bid_status(s bidStatusWithStartTime) {
 		log.Debugf("unable to match start=%d", s.start)
 		return
 	}
+	log.Debugf("____+_+____node=%+v", node.Value())
 	v := node.Value()
 
 	bi := v.bi
@@ -66,10 +59,9 @@ func (in *internal) on_bid_status(s bidStatusWithStartTime) {
 					in.pipelineTpsHome.ReqC,
 					in.txFromBidderToValidatorC,
 					BidWithTotal{
-						Period:               v.Pwd.Data.Period,
-						Bid:                  bid,
-						TotalDeposit:         s.status.TotalDeposits,
-						BandwidthDenominator: s.status.BandwidthDenominator,
+						Period:       v.Pwd.Data.Period,
+						Bid:          bid,
+						TotalDeposit: s.status.TotalDeposits,
 					},
 				)
 				in.bidderMap[bid.User.String()] = bf
@@ -79,10 +71,9 @@ func (in *internal) on_bid_status(s bidStatusWithStartTime) {
 			select {
 			case <-doneC:
 			case bf.bidC <- BidWithTotal{
-				Period:               v.Pwd.Data.Period,
-				Bid:                  bid,
-				TotalDeposit:         s.status.TotalDeposits,
-				BandwidthDenominator: s.status.BandwidthDenominator,
+				Period:       v.Pwd.Data.Period,
+				Bid:          bid,
+				TotalDeposit: s.status.TotalDeposits,
 			}:
 			}
 		}
@@ -154,7 +145,7 @@ func loopBidderInternal(
 
 	// bid.BandwidthAllocation
 	//bi.allottedShare = float64(bid.BandwidthAllocation) / float64(initPayout.Period.BandwidthAllotment)
-	bi.allottedShare = float64(bt.Bid.BandwidthAllocation) / float64(bt.Total)
+	bi.allottedShare = float64(bt.Bid.Deposit) / float64(bt.TotalDeposit)
 	bi.pipelineTps = float64(0)
 	bi.allotedTps = float64(0)
 	bi.txCount = float64(0)
@@ -176,7 +167,7 @@ out:
 			bi.keepReadingC <- true
 			bi.nextBoxC = time.After(bi.boxInterval)
 		case bt = <-bidC:
-			bi.allottedShare = float64(bt.Bid.BandwidthAllocation) / float64(bt.Total)
+			bi.allottedShare = float64(bt.Bid.Deposit) / float64(bt.TotalDeposit)
 			bi.allotedTps = bi.pipelineTps * bi.allottedShare
 		case s := <-loopTxSubmitC:
 			select {
@@ -253,15 +244,10 @@ type BidderStatus struct {
 	ActualTps    float64
 }
 
-func (bi *bidderInternal) broadcast_status() {
-
-}
-
 type BidWithTotal struct {
-	Period               cba.Period
-	Bid                  cba.Bid
-	TotalDeposit         uint64
-	BandwidthDenominator uint64
+	Period       cba.Period
+	Bid          cba.Bid
+	TotalDeposit uint64
 }
 
 func (bwt BidWithTotal) User() sgo.PublicKey {
@@ -269,5 +255,5 @@ func (bwt BidWithTotal) User() sgo.PublicKey {
 }
 
 func (bwt BidWithTotal) AllocatedShare() float64 {
-	return float64(bwt.Bid.BandwidthAllocation) / float64(bwt.Total)
+	return float64(bwt.Bid.Deposit) / float64(bwt.TotalDeposit)
 }

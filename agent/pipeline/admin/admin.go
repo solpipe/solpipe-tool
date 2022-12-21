@@ -6,86 +6,57 @@ import (
 	"io"
 	"math"
 
-	sgo "github.com/SolmateDev/solana-go"
-	sgorpc "github.com/SolmateDev/solana-go/rpc"
-	sgows "github.com/SolmateDev/solana-go/rpc/ws"
 	log "github.com/sirupsen/logrus"
 	"github.com/solpipe/solpipe-tool/ds/sub"
 	pba "github.com/solpipe/solpipe-tool/proto/admin"
-	ctr "github.com/solpipe/solpipe-tool/state/controller"
 
 	pipe "github.com/solpipe/solpipe-tool/state/pipeline"
-	rtr "github.com/solpipe/solpipe-tool/state/router"
 	"github.com/solpipe/solpipe-tool/util"
 	"google.golang.org/grpc"
 )
 
 type Server struct {
 	pba.UnimplementedPipelineServer
-	ctx        context.Context
-	controller ctr.Controller
-	internalC  chan<- func(*internal)
-	reqLogC    chan<- sub.ResponseChannel[*pba.LogLine]
-	pipeline   pipe.Pipeline
+	ctx       context.Context
+	internalC chan<- func(*internal)
+	reqLogC   chan<- sub.ResponseChannel[*pba.LogLine]
+	pipeline  pipe.Pipeline
 }
 
 func Attach(
 	ctx context.Context,
 	grpcServer *grpc.Server,
-	router rtr.Router,
-	rpcClient *sgorpc.Client,
-	wsClient *sgows.Client,
-	pipelineId sgo.PublicKey,
-	admin sgo.PrivateKey,
 	initialSettings *pipe.PipelineSettings,
 	configFilePath string,
+	periodSettingsC chan<- *pba.PeriodSettings,
+	rateSettingsC chan<- *pba.RateSettings,
+	pipeline pipe.Pipeline,
 ) (<-chan error, error) {
 	log.Debug("creating owner grpc server")
 	signalC := make(chan error, 1)
-	controller := router.Controller
-	slotHome := controller.SlotHome()
 	internalC := make(chan func(*internal), 10)
 	homeLog := sub.CreateSubHome[*pba.LogLine]()
 	reqLogC := homeLog.ReqC
-	pipeline, err := router.PipelineById(pipelineId)
-	if err != nil {
-		return signalC, err
-	}
+
 	e1 := Server{
-		ctx:        ctx,
-		controller: controller,
-		internalC:  internalC,
-		reqLogC:    reqLogC,
-		pipeline:   pipeline,
+		ctx:       ctx,
+		internalC: internalC,
+		reqLogC:   reqLogC,
+		pipeline:  pipeline,
 	}
 
 	if initialSettings == nil {
 		return signalC, errors.New("no initial settings")
 	}
 
-	pr, err := pipeline.PeriodRing()
-	if err != nil {
-		return signalC, err
-	}
-	prList, err := util.GetLinkedListFromPeriodRing(&pr)
-	if err != nil {
-		return signalC, err
-	}
-
 	go loopInternal(
 		ctx,
 		internalC,
-		rpcClient,
-		wsClient,
-		admin,
-		controller,
-		router,
-		pipeline,
-		slotHome,
 		homeLog,
-		prList,
 		initialSettings,
 		configFilePath,
+		periodSettingsC,
+		rateSettingsC,
 	)
 
 	pba.RegisterPipelineServer(grpcServer, e1)
@@ -167,7 +138,7 @@ func (e1 Server) SetPeriod(ctx context.Context, req *pba.PeriodSettings) (*pba.P
 }
 
 func (in *internal) settings_change() {
-	in.calculate_next_attempt_to_add_period(true)
+	log.Debug("admin settings have changed")
 }
 
 func (e1 Server) GetLogStream(req *pba.Empty, stream pba.Validator_GetLogStreamServer) error {

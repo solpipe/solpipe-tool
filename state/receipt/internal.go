@@ -27,7 +27,7 @@ func loopInternal(
 	ctx context.Context,
 	cancel context.CancelFunc,
 	internalC <-chan func(*internal),
-	data *cba.Receipt,
+	data cba.Receipt,
 	dataC <-chan cba.Receipt,
 	receiptHome *sub2.SubHome[cba.Receipt],
 ) {
@@ -41,7 +41,7 @@ func loopInternal(
 	in := new(internal)
 	in.ctx = ctx
 	in.cancel = cancel
-	in.data = data
+	in.data = &data
 	in.errorC = errorC
 	in.registeredStake = 0
 	in.stakers = make(map[string]stakerInfo)
@@ -51,6 +51,8 @@ func loopInternal(
 	in.deleteStakerC = deleteStakerC
 
 	defer receiptHome.Close()
+
+	//log.Debugf("receipt loopInternal %+v", in.data)
 
 out:
 	for {

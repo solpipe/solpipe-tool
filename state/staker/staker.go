@@ -157,3 +157,27 @@ func (e1 Staker) OnReceipt(receipt sgo.PublicKey) dssub.Subscription[sub.StakerR
 		return receipt.Equals(obj.Data.Receipt)
 	})
 }
+
+func (e1 Staker) AllReceipts() ([]sub.StakerReceiptGroup, error) {
+	doneC := e1.ctx.Done()
+	ansC := make(chan []sub.StakerReceiptGroup, 1)
+	select {
+	case <-doneC:
+		return nil, errors.New("canceled")
+	case e1.internalC <- func(in *internal) {
+		l := make([]sub.StakerReceiptGroup, len(in.dataReceiptByReceipt))
+		i := 0
+		for _, v := range in.dataReceiptByReceipt {
+			l[i] = *v
+			i++
+		}
+		ansC <- l
+	}:
+	}
+	select {
+	case <-doneC:
+		return nil, errors.New("canceled")
+	case list := <-ansC:
+		return list, nil
+	}
+}

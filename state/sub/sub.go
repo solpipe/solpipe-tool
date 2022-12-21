@@ -181,6 +181,7 @@ func FetchProgramAll(ctx context.Context, rpcClient *sgorpc.Client, version vrs.
 					x := new(cba.Receipt)
 					err = c.Decode(x)
 					if err == nil {
+						log.Debugf("1____+++++++receipt=%+v", x)
 						ans.Receipt.Append(&ReceiptGroup{
 							Id:     r[i].Pubkey,
 							Data:   *x,
@@ -196,6 +197,12 @@ func FetchProgramAll(ctx context.Context, rpcClient *sgorpc.Client, version vrs.
 							Data:   *x,
 							IsOpen: true,
 						})
+					}
+				case cba.RefundsDiscriminator:
+					x := new(cba.Refunds)
+					err = c.Decode(x)
+					if err == nil {
+						ans.Refund[x.Pipeline.String()] = x
 					}
 				default:
 					log.Debug("no discriminator matches")
@@ -257,6 +264,8 @@ func SubscribeProgramAll(
 	ans.ReceiptC = in.receipt.ReqC
 	in.payout = dssub.CreateSubHome[PayoutWithData]()
 	ans.PayoutC = in.payout.ReqC
+	in.refund = dssub.CreateSubHome[cba.Refunds]()
+	ans.RefundC = in.refund.ReqC
 
 	go loopSubscribePipeline(ctx, sub, in, errorC)
 
@@ -275,6 +284,7 @@ const (
 	TYPE_PAYOUT         DATA_TYPE = 6
 	TYPE_RECEIPT        DATA_TYPE = 7
 	TYPE_STAKER_RECEIPT DATA_TYPE = 8
+	TYPE_REFUND         DATA_TYPE = 9
 )
 
 func loopSubscribePipeline(
@@ -299,6 +309,7 @@ func loopSubscribePipeline(
 	D_stakeReceipt := binary.BigEndian.Uint64(cba.StakerReceiptDiscriminator[:])
 	D_receipt := binary.BigEndian.Uint64(cba.ReceiptDiscriminator[:])
 	D_payout := binary.BigEndian.Uint64(cba.PayoutDiscriminator[:])
+	D_refund := binary.BigEndian.Uint64(cba.RefundsDiscriminator[:])
 
 	trackingAccounts := make(map[string]DATA_TYPE)
 
@@ -348,6 +359,10 @@ out:
 			in.payout.Delete(id)
 		case r := <-in.payout.ReqC:
 			in.payout.Receive(r)
+		case id := <-in.refund.DeleteC:
+			in.refund.Delete(id)
+		case r := <-in.refund.ReqC:
+			in.refund.Receive(r)
 		case err = <-streamErrorC: // error
 			break out
 		case d := <-streamC:
@@ -376,6 +391,7 @@ out:
 					if err != nil {
 						break out
 					}
+					log.Debugf("-----+++validator=%+v", y)
 					in.validator.Broadcast(ValidatorGroup{
 						Id:     x.Value.Pubkey,
 						Data:   *y,
@@ -448,20 +464,31 @@ out:
 						Data:   *y,
 						IsOpen: true,
 					})
+					log.Debugf("2____+++++++receipt=%+v", y)
 					trackingAccounts[x.Value.Pubkey.String()] = TYPE_RECEIPT
 				case D_payout:
-					log.Debugf("update on payout with id=%s", x.Value.Pubkey.String())
+
 					y := new(cba.Payout)
 					err = bin.UnmarshalBorsh(y, data)
 					if err != nil {
 						break out
 					}
+					log.Debugf("update on payout with id=%s; data=%+v", x.Value.Pubkey.String(), y)
 					in.payout.Broadcast(PayoutWithData{
 						Id:     x.Value.Pubkey,
 						Data:   *y,
 						IsOpen: true,
 					})
 					trackingAccounts[x.Value.Pubkey.String()] = TYPE_PAYOUT
+				case D_refund:
+					log.Debugf("update on refund with id=%s", x.Value.Pubkey.String())
+					y := new(cba.Refunds)
+					err = bin.UnmarshalBorsh(y, data)
+					if err != nil {
+						break out
+					}
+					in.refund.Broadcast(*y)
+					trackingAccounts[x.Value.Pubkey.String()] = TYPE_REFUND
 				default:
 				}
 			} else if 8 <= len(data) {
@@ -486,9 +513,11 @@ out:
 							IsOpen: false,
 						})
 					case TYPE_BIDS:
-						// bids are taken care of by the Pipeline account
+						// bids are taken care of by the Payout account
 					case TYPE_PERIODS:
 						// periods are taken care of by the Pipeline account
+					case TYPE_REFUND:
+						// refunds are taken care of by the Pipeline account
 					case TYPE_STAKER:
 						in.stakeManager.Broadcast(StakeGroup{
 							Id:     id,

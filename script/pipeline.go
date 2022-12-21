@@ -18,7 +18,6 @@ func (e1 *Script) AddPipeline(
 	adminKey sgo.PrivateKey,
 	crankFee state.Rate,
 	allotment uint16,
-	decayRate state.Rate,
 	validatorPayoutShare state.Rate,
 	tickSize uint16,
 	refundSpace uint16,
@@ -35,7 +34,6 @@ func (e1 *Script) AddPipeline(
 		adminKey,
 		crankFee,
 		allotment,
-		decayRate,
 		validatorPayoutShare,
 		tickSize,
 		refundSpace,
@@ -51,7 +49,6 @@ func (e1 *Script) AddPipelineDirect(
 	adminKey sgo.PrivateKey,
 	crankFee state.Rate,
 	allotment uint16,
-	decayRate state.Rate,
 	validatorPayoutShare state.Rate,
 	tickSize uint16,
 	refundSpace uint16,
@@ -99,15 +96,19 @@ func (e1 *Script) AddPipelineDirect(
 	b.SetSystemProgramAccount(sgo.SystemProgramID)
 	b.SetRentAccount(sgo.SysVarRentPubkey)
 
+	log.Debugf("allotment=%d", allotment)
 	b.SetAllotment(allotment)
-	b.SetDecayRateNum(decayRate.N)
-	b.SetDecayRateDen(decayRate.D)
+	log.Debugf("crank fee=%d/%d", crankFee.N, crankFee.D)
 	b.SetCrankFeeRateNum(crankFee.N)
 	b.SetCrankFeeRateDen(crankFee.D)
+	log.Debugf("payout share=%d/%d", validatorPayoutShare.N, validatorPayoutShare.D)
 	b.SetValidatorPayoutShareNum(validatorPayoutShare.N)
 	b.SetValidatorPayoutShareDen(validatorPayoutShare.D)
+	log.Debugf("tick size=%d", tickSize)
 	b.SetTickSize(tickSize)
+	log.Debugf("refund space=%d", refundSpace)
 	b.SetRefundSpace(refundSpace)
+	b.SetReceiptLimit(RECEIPT_LIMIT_DEFUALT)
 
 	e1.txBuilder.AddInstruction(b.Build())
 
@@ -124,7 +125,6 @@ func (e1 *Script) UpdatePipeline(
 	adminKey sgo.PrivateKey,
 	crankFee state.Rate,
 	allotment uint16,
-	decayRate state.Rate,
 	validatorPayoutShare state.Rate,
 	tickSize uint16,
 ) (err error) {
@@ -143,13 +143,12 @@ func (e1 *Script) UpdatePipeline(
 	e1.AppendKey(adminKey)
 
 	b.SetAllotment(allotment)
-	b.SetDecayRateNum(decayRate.N)
-	b.SetDecayRateDen(decayRate.D)
 	b.SetCrankFeeRateNum(crankFee.N)
 	b.SetCrankFeeRateDen(crankFee.D)
 	b.SetValidatorPayoutShareNum(validatorPayoutShare.N)
 	b.SetValidatorPayoutShareDen(validatorPayoutShare.D)
 	b.SetTickSize(tickSize)
+	b.SetReceiptLimit(RECEIPT_LIMIT_DEFUALT) //TODO: make this variable
 
 	e1.txBuilder.AddInstruction(b.Build())
 
@@ -157,3 +156,7 @@ func (e1 *Script) UpdatePipeline(
 }
 
 const TICKSIZE_DEFAULT uint16 = 1
+
+const BIDSPACE_DEFAULT uint16 = 50
+
+const RECEIPT_LIMIT_DEFUALT uint8 = 20

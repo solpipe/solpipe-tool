@@ -44,6 +44,7 @@ var cli struct {
 	Bidder       Bidder       `cmd name:"bid" help:"Bid for transaction bandwidth."`
 	Controller   Controller   `cmd name:"controller" help:"Manage the controller"`
 	Pipeline     Pipeline     `cmd name:"pipeline" help:"Run a JSON RPC send_tx proxy"`
+	Payout       Payout       `cmd name:"payout" help:"Get Payout status"`
 	Validator    Validator    `cmd name:"validator" help:"Run a JSON RPC send_tx proxy"`
 	Web          Web          `cmd name:"web" help:"Run a web server allowing state updates over HTTP and Websockets"`
 }

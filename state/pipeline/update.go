@@ -72,6 +72,7 @@ func (e1 Pipeline) UpdatePeriod(ring cba.PeriodRing) {
 }
 
 func (e1 Pipeline) UpdatePayout(p pyt.Payout) {
+	log.Debugf("router add payout=%s", p.Id.String())
 	doneC := e1.ctx.Done()
 	d, err := p.Data()
 	if err != nil {
@@ -89,10 +90,11 @@ func (e1 Pipeline) UpdatePayout(p pyt.Payout) {
 // insert a new payout object
 func (in *internal) on_payout(p pyt.Payout, d cba.Payout) {
 	// linked list
-	node := in.on_payout_insert(PayoutWithData{Payout: p, Data: d})
+	node := in.on_payout_insert(PayoutWithData{Id: p.Id, Payout: p, Data: d})
 	if node == nil {
 		return
 	}
+	log.Debugf("list=%+v", in.payoutLinkedList)
 	in.payoutById[p.Id.String()] = node
 
 	in.payoutHome.Broadcast(node.Value())
@@ -103,38 +105,36 @@ func (in *internal) on_payout(p pyt.Payout, d cba.Payout) {
 }
 
 func (in *internal) on_payout_insert(pwd PayoutWithData) *ll.Node[PayoutWithData] {
+	log.Debugf("inserting id=%s", pwd.Id.String())
 	list := in.payoutLinkedList
 
 	if list.Size == 0 {
 		return list.Append(pwd)
 	}
 	periodStart := pwd.Data.Period.Start
-	periodEndPlusOne := periodStart + pwd.Data.Period.Length
+	//periodEndPlusOne := periodStart + pwd.Data.Period.Length
 
-	ans := new(ll.Node[PayoutWithData])
-out:
+	//var ans *ll.Node[PayoutWithData]
+
+	tail := list.TailNode()
+	if tail.Value().Data.Period.Start < pwd.Data.Period.Start {
+		return list.Append(pwd)
+	}
+
 	for node := list.HeadNode(); node != nil; node = node.Next() {
 		if node.Value().Payout.Id.Equals(pwd.Payout.Id) {
-			break out
+			node.ChangeValue(pwd)
+			return node
 		}
-		nextNode := node.Next()
-		if nextNode == nil {
-			// reached end of list
-			ans = list.Append(pwd)
-			break out
+		if periodStart < node.Value().Data.Period.Start {
+			list.Insert(node.Value(), node)
+			// switch with old node
+			node.ChangeValue(pwd)
+			return node
 		}
-
-		if node.Value().Data.Period.Start+node.Value().Data.Period.Length <= periodStart && periodEndPlusOne <= nextNode.Value().Data.Period.Start {
-			// insert in between
-			ans = list.Insert(pwd, node)
-			break out
-		}
-
 	}
-	if ans == nil {
-		log.Error("failed to insert payout")
-	}
-	return ans
+	log.Error("failed to insert payout")
+	return nil
 }
 
 // find out which payout is currently active (index=ring.Start)

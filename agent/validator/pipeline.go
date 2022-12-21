@@ -4,39 +4,91 @@ import (
 	"context"
 
 	log "github.com/sirupsen/logrus"
+	sch "github.com/solpipe/solpipe-tool/scheduler"
+	schpipe "github.com/solpipe/solpipe-tool/scheduler/pipeline"
 	pipe "github.com/solpipe/solpipe-tool/state/pipeline"
 )
 
-// Set the pipeline. Set up the listeners.
-func (in *internal) pipeline_set(pipeline pipe.Pipeline) error {
-	log.Debug("validator pipeline set - 1 - id=%s", pipeline.Id.String())
+type pipelineInfo struct {
+	p      pipe.Pipeline
+	ps     sch.Schedule
+	cancel context.CancelFunc
+}
+
+func (in *internal) on_pipeline(p pipe.Pipeline) *pipelineInfo {
+	pi, present := in.pipelineM[p.Id.String()]
+	if present {
+		return pi
+	} else {
+		pi = new(pipelineInfo)
+		in.pipelineM[p.Id.String()] = pi
+		pi.p = p
+		// we will not do AppendPeriod, so we ignore lookahead
+		fakeLookaheadC := make(chan uint64)
+		pi.ps = schpipe.Schedule(in.ctx, in.router, p, 0, fakeLookaheadC)
+		var ctxC context.Context
+		ctxC, pi.cancel = context.WithCancel(in.ctx)
+		go loopPipeline(ctxC, in.errorC, pi.p, in.newPayoutC)
+		return pi
+	}
+}
+
+type listenPipelineInternal struct {
+	ctx        context.Context
+	errorC     chan<- error
+	pipeline   pipe.Pipeline
+	newPayoutC chan<- payoutWithPipeline
+}
+
+// A pipeline has been selected, so listen for new Payout periods.
+func loopPipeline(
+	ctx context.Context,
+	errorC chan<- error,
+	pipeline pipe.Pipeline,
+	newPayoutC chan<- payoutWithPipeline,
+) {
 	var err error
-	if in.hasPipeline {
-		err = in.pipeline_blank()
-		if err != nil {
-			return err
+	doneC := ctx.Done()
+	log.Debugf("on listen pipeline=%s", pipeline.Id.String())
+
+	pi := new(listenPipelineInternal)
+	pi.ctx = ctx
+	pi.errorC = errorC
+	pi.pipeline = pipeline
+
+	pi.newPayoutC = newPayoutC
+
+	payoutSub := pi.pipeline.OnPayout()
+	defer payoutSub.Unsubscribe()
+	newPwdStreamC := make(chan pipe.PayoutWithData)
+
+out:
+	for {
+		select {
+		case <-doneC:
+			break out
+		case err = <-payoutSub.ErrorC:
+			break out
+		case pwd := <-payoutSub.StreamC:
+			pi.on_payout(pwd)
+		case pwd := <-newPwdStreamC:
+			pi.on_payout(pwd)
 		}
 	}
-	in.hasPipeline = true
-	in.pipeline = pipeline
-	// the SetValidator instruction is executed once a Payout account has been created
-	in.payoutScannerCtx, in.payoutScannerCancel = context.WithCancel(in.ctx)
-	go loopListenPeriod(
-		in.payoutScannerCtx,
-		in.errorC,
-		in.config,
-		in.controller.SlotHome(),
-		in.router,
-		in.pipeline,
-		in.validator,
-	)
-	in.settings.PipelineId = pipeline.Id.String()
 
-	err = in.config_save()
 	if err != nil {
-		return err
+		log.Debug(err)
+		errorC <- err
 	}
-	// set pipeline
+}
 
-	return nil
+func (pi *listenPipelineInternal) on_payout(pwd pipe.PayoutWithData) {
+	doneC := pi.ctx.Done()
+	select {
+	case <-doneC:
+	case pi.newPayoutC <- payoutWithPipeline{
+		pwd:      pwd,
+		pipeline: pi.pipeline,
+	}:
+	}
 }

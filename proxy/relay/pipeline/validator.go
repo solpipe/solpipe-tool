@@ -43,7 +43,7 @@ func loopInsertDeleteValidator(
 	slotSub := slotHome.OnSlot()
 	defer slotSub.Unsubscribe()
 
-	statsSub := update.Validator.OnStats()
+	statsSub := update.Validator.OnData()
 	defer statsSub.Unsubscribe()
 
 	start := update.Start
@@ -100,7 +100,7 @@ func (in *internal) update_validators(u validatorInsertInfo) {
 	}
 	vf := valconn.feed
 
-	if vf == nil {
+	if vf != nil {
 		select {
 		case <-doneC:
 		case <-vf.ctx.Done():

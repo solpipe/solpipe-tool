@@ -12,18 +12,19 @@ import (
 )
 
 type internal struct {
-	ctx            context.Context
-	errorC         chan<- error
-	data           *cba.ValidatorManager
-	validatorHome  *sub2.SubHome[cba.ValidatorManager]
-	stakeRatioHome *sub2.SubHome[StakeStatus]
-	receiptHome    *sub2.SubHome[rpt.ReceiptWithData]
-	totalStake     uint64
-	activatedStake uint64
-	receipts       map[string]*receiptHolder // map payout id->receipt
+	ctx                context.Context
+	errorC             chan<- error
+	data               *cba.ValidatorManager
+	validatorHome      *sub2.SubHome[cba.ValidatorManager]
+	stakeRatioHome     *sub2.SubHome[StakeStatus]
+	receiptHome        *sub2.SubHome[rpt.ReceiptWithData]
+	totalStake         uint64
+	activatedStake     uint64
+	receiptsByPayoutId map[string]*receiptHolder // map payout id->receipt
+	receiptsById       map[string]*receiptHolder // map receipt id->receipt
 	//deletePayoutC  chan<- sgo.PublicKey
-	updateReceiptC chan<- cba.Receipt   // id=payout
-	deleteReceiptC chan<- sgo.PublicKey // id=payout
+	updateReceiptC chan<- cba.Receipt      // id=payout
+	deleteReceiptC chan<- [2]sgo.PublicKey // [payout,receipt]
 }
 
 func loopInternal(
@@ -44,7 +45,7 @@ func loopInternal(
 	errorC := make(chan error, 1)
 	doneC := ctx.Done()
 	updateReceiptC := make(chan cba.Receipt, 10)
-	deleteReceiptC := make(chan sgo.PublicKey, 1)
+	deleteReceiptC := make(chan [2]sgo.PublicKey, 1)
 
 	in := new(internal)
 	in.ctx = ctx
@@ -55,7 +56,8 @@ func loopInternal(
 	in.validatorHome = validatorHome
 	in.stakeRatioHome = stakeRatioHome
 	in.receiptHome = receiptHome
-	in.receipts = make(map[string]*receiptHolder)
+	in.receiptsByPayoutId = make(map[string]*receiptHolder)
+	in.receiptsById = make(map[string]*receiptHolder)
 	in.updateReceiptC = updateReceiptC
 	in.deleteReceiptC = deleteReceiptC
 
@@ -103,12 +105,13 @@ out:
 		case d := <-updateReceiptC:
 			log.Debugf("validator receipt update: %+v", d)
 			in.on_receipt_update(d)
-		case id := <-deleteReceiptC:
-			rh, present := in.receipts[id.String()]
+		case pair := <-deleteReceiptC:
+			rh, present := in.receiptsByPayoutId[pair[0].String()]
 			if present {
-				delete(in.receipts, id.String())
+				delete(in.receiptsByPayoutId, pair[0].String())
 				rh.cancel()
 			}
+			delete(in.receiptsById, pair[1].String())
 		}
 	}
 	in.finish(err)

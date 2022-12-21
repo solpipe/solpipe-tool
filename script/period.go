@@ -58,9 +58,13 @@ func (e1 *Script) AppendPeriod(
 	b.SetSystemProgramAccount(sgo.SystemProgramID)
 	b.SetTokenProgramAccount(sgo.TokenProgramID)
 
+	log.Debugf("start=%d", start)
 	b.SetStart(start)
+	log.Debugf("length=%d", length)
 	b.SetLength(length)
+	log.Debugf("withhold=%d", withhold)
 	b.SetWithhold(withhold)
+	log.Debugf("bid space=%d", bidSpace)
 	b.SetBidSpace(bidSpace)
 
 	e1.txBuilder.AddInstruction(b.Build())

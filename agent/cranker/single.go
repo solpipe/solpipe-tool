@@ -3,11 +3,11 @@ package cranker
 import (
 	"context"
 
+	sgo "github.com/SolmateDev/solana-go"
 	cba "github.com/solpipe/cba"
 	"github.com/solpipe/solpipe-tool/script"
 	pipe "github.com/solpipe/solpipe-tool/state/pipeline"
 	rtr "github.com/solpipe/solpipe-tool/state/router"
-	sgo "github.com/SolmateDev/solana-go"
 )
 
 type NewPeriodUpdateSub struct {
@@ -91,26 +91,6 @@ out:
 }
 
 func (ci *crankInternal) run(req crankRequest) error {
-	var err error
-	err = ci.script.SetTx(ci.admin)
-	if err != nil {
-		return err
-	}
-	err = ci.script.Crank(
-		ci.router.Controller,
-		req.pipeline.Id,
-		req.pipelineData.Periods,
-		req.pipelineData.Bids,
-		req.period.Payout,
-		ci.admin,
-		ci.pcVault,
-	)
-	if err != nil {
-		return err
-	}
-	err = ci.script.FinishTx(true)
-	if err != nil {
-		return err
-	}
+
 	return nil
 }

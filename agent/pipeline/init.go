@@ -108,11 +108,9 @@ func Initialize(
 			args.Admin(),
 			*programConfig.Settings.CrankFee,
 			100,
-			*programConfig.Settings.DecayRate,
 			*programConfig.Settings.PayoutShare,
-			bidSpace,
-			residualSpace,
 			script.TICKSIZE_DEFAULT,
+			args.Program.Settings.RefundSpace,
 		)
 	} else {
 		pid, err = s1.AddPipelineDirect(
@@ -122,11 +120,9 @@ func Initialize(
 			args.Admin(),
 			*programConfig.Settings.CrankFee,
 			100,
-			*programConfig.Settings.DecayRate,
 			*programConfig.Settings.PayoutShare,
-			bidSpace,
-			residualSpace,
 			script.TICKSIZE_DEFAULT,
+			args.Program.Settings.RefundSpace,
 		)
 	}
 

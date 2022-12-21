@@ -79,7 +79,7 @@ func (e1 external) ws_on_validator(
 
 	id := v.Id
 
-	dataSub := v.OnStats()
+	dataSub := v.OnData()
 	defer dataSub.Unsubscribe()
 
 	stakeSub := v.OnStake()

@@ -5,6 +5,7 @@ import (
 	"errors"
 
 	sgo "github.com/SolmateDev/solana-go"
+	log "github.com/sirupsen/logrus"
 	cba "github.com/solpipe/cba"
 	dssub "github.com/solpipe/solpipe-tool/ds/sub"
 	"github.com/solpipe/solpipe-tool/state/sub"
@@ -31,11 +32,12 @@ func CreateReceipt(ctx context.Context, d sub.ReceiptGroup) (e1 Receipt, err err
 	//	err = errors.New("no data")
 	//	return
 	//}
+	log.Debugf("starting receipt with data=%+v", d)
 
 	receiptHome := dssub.CreateSubHome[cba.Receipt]()
 	updateReceiptC := receiptHome.ReqC
 	ctxC, cancel := context.WithCancel(ctx)
-	go loopInternal(ctxC, cancel, internalC, &d.Data, dataC, receiptHome)
+	go loopInternal(ctxC, cancel, internalC, d.Data, dataC, receiptHome)
 	e1 = Receipt{
 		ctx:            ctxC,
 		cancel:         cancel,
@@ -74,11 +76,20 @@ func (e1 Receipt) Data() (ans cba.Receipt, err error) {
 			errorC <- errors.New("no receipt")
 		} else {
 			errorC <- nil
+			//log.Debugf("receipt sending data=%+v", in.data)
 			ansC <- *in.data
 		}
 	}
 	select {
 	case err = <-errorC:
+	case <-doneC:
+		err = errors.New("canceled")
+	}
+	if err != nil {
+		return
+	}
+	select {
+	case ans = <-ansC:
 	case <-doneC:
 		err = errors.New("canceled")
 	}

@@ -92,7 +92,26 @@ func (tu StakeUpdate) Tps(networkTps *big.Float) *big.Float {
 	activatedStake.SetInt(tu.ActivatedStake)
 	totalStake := big.NewFloat(0)
 	totalStake.SetInt(tu.TotalStake)
+	if tu.TotalStake == big.NewInt(0) {
+		return big.NewFloat(0)
+	}
 	ans := big.NewFloat(0)
 	ans.Mul(networkTps, activatedStake)
 	return ans.Quo(ans, totalStake)
+}
+
+// get the ratio between the activated stake and total stake (value range=[0,1])
+func (tu StakeUpdate) Share() float64 {
+	activatedStake := big.NewFloat(0)
+	activatedStake.SetInt(tu.ActivatedStake)
+	totalStake := big.NewFloat(0)
+	totalStake.SetInt(tu.TotalStake)
+	var x float64
+	if tu.TotalStake == big.NewInt(0) {
+		x, _ = big.NewFloat(0).Float64()
+		return x
+	}
+	ans := big.NewFloat(0)
+	x, _ = ans.Quo(activatedStake, totalStake).Float64()
+	return x
 }

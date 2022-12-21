@@ -26,6 +26,22 @@ type Payout struct {
 	updateReceiptC   chan dssub.ResponseChannel[rpt.ReceiptWithData]
 }
 
+/*
+1. do append period
+2. create: payout + bid + []receipt
+3. do Validator Set Payout
+4. update: payout (validator count++)
+5. do Crank
+6. update: payout + bid (final=true)
+7. do ValidatorWithdraw
+8. update: payout (validator count--); close: receipt
+9. do CloseBids
+10. update: payout; close:bid
+11. do ClosePayouts
+12. close: payout
+
+*/
+
 func CreatePayout(ctx context.Context, d sub.PayoutWithData) (e1 Payout, err error) {
 	internalC := make(chan func(*internal), 10)
 	dataC := make(chan sub.PayoutWithData, 10)
@@ -36,6 +52,7 @@ func CreatePayout(ctx context.Context, d sub.PayoutWithData) (e1 Payout, err err
 	go loopInternal(
 		ctxC,
 		internalC,
+		d.Id,
 		&d.Data,
 		dataC,
 		payoutHome,

@@ -3,40 +3,54 @@ package validator
 import (
 	"context"
 	"encoding/json"
-	"errors"
 	"os"
 
+	sgo "github.com/SolmateDev/solana-go"
 	sgorpc "github.com/SolmateDev/solana-go/rpc"
 	sgows "github.com/SolmateDev/solana-go/rpc/ws"
 	log "github.com/sirupsen/logrus"
+	cba "github.com/solpipe/cba"
 	pba "github.com/solpipe/solpipe-tool/proto/admin"
 	rly "github.com/solpipe/solpipe-tool/proxy/relay"
-	"github.com/solpipe/solpipe-tool/script"
+	sch "github.com/solpipe/solpipe-tool/scheduler"
+	spt "github.com/solpipe/solpipe-tool/script"
 	ctr "github.com/solpipe/solpipe-tool/state/controller"
 	pipe "github.com/solpipe/solpipe-tool/state/pipeline"
+	rpt "github.com/solpipe/solpipe-tool/state/receipt"
 	rtr "github.com/solpipe/solpipe-tool/state/router"
 	val "github.com/solpipe/solpipe-tool/state/validator"
 )
 
 type internal struct {
-	ctx                 context.Context
-	errorC              chan<- error
-	closeSignalCList    []chan<- error
-	config              rly.Configuration
-	configFilePath      string
-	rpc                 *sgorpc.Client
-	ws                  *sgows.Client
-	script              *script.Script
-	slot                uint64
-	controller          ctr.Controller
-	router              rtr.Router
-	validator           val.Validator
-	settings            *pba.ValidatorSettings
-	pipeline            pipe.Pipeline
-	hasPipeline         bool
-	payoutScannerCtx    context.Context // loopPeriod scoops up new payout accounts
-	payoutScannerCancel context.CancelFunc
+	ctx              context.Context
+	errorC           chan<- error
+	closeSignalCList []chan<- error
+	config           rly.Configuration
+	configFilePath   string
+	rpc              *sgorpc.Client
+	ws               *sgows.Client
+	scriptWrapper    spt.Wrapper
+	controller       ctr.Controller
+	router           rtr.Router
+	validator        val.Validator
+	settings         *pba.ValidatorSettings
+	selectedPipeline *pipelineInfo
+	newPayoutC       chan<- payoutWithPipeline
+	deletePipelineC  chan<- sgo.PublicKey
+	pipelineM        map[string]*pipelineInfo
+	payoutM          map[string]*payoutInfo
+	eventC           chan<- sch.Event
 }
+
+type validatorReceiptInfo struct {
+	rsf      *cba.ReceiptWithStartFinish
+	ctx      context.Context
+	cancel   context.CancelFunc
+	rwd      rpt.ReceiptWithData
+	pipeline pipe.Pipeline
+}
+
+const START_BUFFER = uint64(10)
 
 func loopInternal(
 	ctx context.Context,
@@ -46,7 +60,7 @@ func loopInternal(
 	config rly.Configuration,
 	rpcClient *sgorpc.Client,
 	wsClient *sgows.Client,
-	script *script.Script,
+	scriptWrapper spt.Wrapper,
 	router rtr.Router,
 	validator val.Validator,
 	configFilePath string,
@@ -55,22 +69,25 @@ func loopInternal(
 	var err error
 	errorC := make(chan error, 1)
 	doneC := ctx.Done()
+	eventC := make(chan sch.Event)
+	newPayoutC := make(chan payoutWithPipeline)
+	deletePipelineC := make(chan sgo.PublicKey)
 	in := new(internal)
 	in.ctx = ctx
 	in.errorC = errorC
+	in.eventC = eventC
 	in.closeSignalCList = make([]chan<- error, 0)
 	in.configFilePath = configFilePath
 	in.config = config
 	in.rpc = rpcClient
 	in.ws = wsClient
-	in.script = script
-	in.slot = 0
+	in.scriptWrapper = scriptWrapper
 	in.controller = router.Controller
 	in.router = router
 	in.validator = validator
-	slotSub := in.controller.SlotHome().OnSlot()
-	in.settings = &pba.ValidatorSettings{}
-	in.hasPipeline = false
+	in.settings = nil
+	in.deletePipelineC = deletePipelineC
+	in.newPayoutC = newPayoutC
 
 	if in.config_exists() {
 		err = in.config_load()
@@ -78,6 +95,7 @@ func loopInternal(
 			in.errorC <- err
 		}
 	}
+
 out:
 	for {
 		select {
@@ -85,13 +103,17 @@ out:
 			break out
 		case err = <-serverErrorC:
 			break out
-		case err = <-slotSub.ErrorC:
-			break out
-		case in.slot = <-slotSub.StreamC:
 		case <-doneC:
 			break out
 		case req := <-internalC:
 			req(in)
+		case pp := <-newPayoutC:
+			in.on_payout(pp)
+		case event := <-eventC:
+			err = in.on_event(event)
+			if err != nil {
+				break out
+			}
 		}
 	}
 
@@ -116,23 +138,22 @@ func (in *internal) config_exists() bool {
 }
 
 func (in *internal) config_load() error {
-	log.Debugf("loading configuration file from %s", in.configFilePath)
+	log.Debugf("++++++++++++++++++++++loading configuration file from %s", in.configFilePath)
 	f, err := os.Open(in.configFilePath)
 	if err != nil {
 		return err
 	}
-	in.settings = new(pba.ValidatorSettings)
-	err = json.NewDecoder(f).Decode(in.settings)
+	newSettings := new(pba.ValidatorSettings)
+	err = json.NewDecoder(f).Decode(newSettings)
 	if err != nil {
 		return err
 	}
-
-	return nil
+	return in.settings_change(newSettings)
 }
 
 func (in *internal) config_save() error {
 	log.Debugf("saving configuration file to %s", in.configFilePath)
-	f, err := os.Open(in.configFilePath)
+	f, err := os.OpenFile(in.configFilePath, os.O_WRONLY, 0640)
 	if err != nil {
 		f, err = os.Create(in.configFilePath)
 		if err != nil {
@@ -144,33 +165,4 @@ func (in *internal) config_save() error {
 		return err
 	}
 	return nil
-}
-
-func (a adminExternal) send_cb(ctx context.Context, cb func(in *internal)) error {
-	doneC := ctx.Done()
-	err := ctx.Err()
-	if err != nil {
-		return err
-	}
-	select {
-	case <-doneC:
-		err = errors.New("canceled")
-	case a.agent.internalC <- cb:
-	}
-	return err
-}
-
-type scriptResult struct {
-	err    error
-	script *script.Script
-}
-
-func (in *internal) script_create(ctx context.Context) scriptResult {
-	script, err := script.Create(
-		in.ctx,
-		&script.Configuration{Version: in.config.Version},
-		in.config.Rpc(),
-		in.ws,
-	)
-	return scriptResult{err: err, script: script}
 }

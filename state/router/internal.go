@@ -139,12 +139,13 @@ out:
 		case err = <-payoutG.ErrorC:
 			break out
 		case d := <-payoutG.StreamC:
-			log.Debug("received payout update____; id=%s; is open=%f", d.Id.String(), d.IsOpen)
+			log.Debugf("received payout update____; id=%s; is open=%f", d.Id.String(), d.IsOpen)
 			in.on_payout(d)
 		case err = <-receiptG.ErrorC:
 			break out
 		case d := <-receiptG.StreamC:
-			log.Debug("received receipt update____")
+			log.Debugf("received receipt update____; id=%s; payout=%s", d.Id.String(), d.Data.Payout.String())
+			log.Debugf("%+v", d.Data)
 			in.on_receipt(d)
 		case err = <-stakerManagerG.ErrorC:
 			break out

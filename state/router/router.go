@@ -336,6 +336,7 @@ func (e1 Router) PayoutByPipelineIdAndStart(pipelineId sgo.PublicKey, start uint
 	errorC := make(chan error, 1)
 	ansC := make(chan pyt.Payout, 1)
 	e1.internalC <- func(in *internal) {
+
 		x, present := in.l_payout.byPipeline[pipelineId.String()]
 		if !present {
 			errorC <- errors.New("no pipeline")
@@ -357,6 +358,41 @@ func (e1 Router) PayoutByPipelineIdAndStart(pipelineId sgo.PublicKey, start uint
 	}
 	if err != nil {
 		return pyt.Payout{}, err
+	}
+	return <-ansC, nil
+}
+
+func (e1 Router) PayoutById(id sgo.PublicKey) (pipe.PayoutWithData, error) {
+
+	err := e1.ctx.Err()
+	if err != nil {
+		return pipe.PayoutWithData{}, err
+	}
+	errorC := make(chan error, 1)
+	ansC := make(chan pipe.PayoutWithData, 1)
+	e1.internalC <- func(in *internal) {
+
+		x, present := in.l_payout.byId[id.String()]
+		if !present {
+			errorC <- errors.New("no pipeline")
+			return
+		}
+
+		errorC <- nil
+		ansC <- pipe.PayoutWithData{
+			Id:     id,
+			Payout: x.p,
+			Data:   x.data,
+		}
+	}
+	doneC := e1.ctx.Done()
+	select {
+	case <-doneC:
+		err = errors.New("canceled")
+	case err = <-errorC:
+	}
+	if err != nil {
+		return pipe.PayoutWithData{}, err
 	}
 	return <-ansC, nil
 }
