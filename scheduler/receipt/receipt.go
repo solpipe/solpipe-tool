@@ -42,11 +42,12 @@ func Schedule(
 		trackHome,
 	)
 
-	return external{
+	e1 := external{
 		ctx:    ctxC,
 		cancel: cancel,
 		reqC:   trackHome.ReqC,
 	}
+	return e1
 }
 
 func (e1 external) Close() error {

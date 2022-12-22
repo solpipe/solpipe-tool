@@ -47,7 +47,7 @@ func loopInternal(
 	in.rwd = rwd
 
 	go loopPeriodClock(in.ctx, in.ps, in.errorC, in.eventC)
-	go loopTx(in.ctx, in.rwd, in.errorC, in.eventC)
+	go loopUpdate(in.ctx, in.rwd, in.errorC, in.eventC)
 
 	var err error
 	var send bool

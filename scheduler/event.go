@@ -1,5 +1,9 @@
 package scheduler
 
+import "fmt"
+
+const thresh int = 1000
+
 const (
 	EVENT_PERIOD_PRE_START             EventType = 0
 	EVENT_PERIOD_START                 EventType = 1
@@ -15,13 +19,30 @@ const (
 	EVENT_TYPE_READY_APPEND            EventType = 11
 	EVENT_RECEIPT_NEW_COUNT            EventType = 12
 	EVENT_RECEIPT_APPROVED             EventType = 13
-	TRIGGER_CRANK                      EventType = 100 // pipeline: payout.bids
-	TRIGGER_CLOSE_BIDS                 EventType = 101 // pipeline: payout.bids
-	TRIGGER_CLOSE_PAYOUT               EventType = 102 // pipeline: payout
-	TRIGGER_VALIDATOR_SET_PAYOUT       EventType = 103 // validator: payout
-	TRIGGER_VALIDATOR_WITHDRAW_RECEIPT EventType = 104 // validator: payout
-	TRIGGER_STAKER_ADD                 EventType = 105 // staker: validator, payout
-	TRIGGER_STAKER_WITHDRAW            EventType = 106 // staker: validator, payout
-	TRIGGER_PERIOD_APPEND              EventType = 107
-	TRIGGER_RECEIPT_APPROVE            EventType = 108
+	TRIGGER_CRANK                      EventType = thresh + 1 // pipeline: payout.bids
+	TRIGGER_CLOSE_BIDS                 EventType = thresh + 2 // pipeline: payout.bids
+	TRIGGER_CLOSE_PAYOUT               EventType = thresh + 3 // pipeline: payout
+	TRIGGER_VALIDATOR_SET_PAYOUT       EventType = thresh + 4 // validator: payout
+	TRIGGER_VALIDATOR_WITHDRAW_RECEIPT EventType = thresh + 5 // validator: payout
+	TRIGGER_STAKER_ADD                 EventType = thresh + 6 // staker: validator, payout
+	TRIGGER_STAKER_WITHDRAW            EventType = thresh + 7 // staker: validator, payout
+	TRIGGER_PERIOD_APPEND              EventType = thresh + 8
+	TRIGGER_RECEIPT_APPROVE            EventType = thresh + 9
 )
+
+type EventType = int
+
+type Event struct {
+	Slot          uint64
+	Type          EventType
+	IsStateChange bool
+	Payload       interface{}
+}
+
+func (e Event) String() string {
+	return fmt.Sprintf("type=%d; slot=%d; is_state_change=%t", e.Type, e.Slot, e.IsStateChange)
+}
+
+func (e Event) IsTrigger() bool {
+	return thresh <= e.Type
+}

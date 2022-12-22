@@ -12,7 +12,7 @@ type txInfo struct {
 	cancelApprove context.CancelFunc
 }
 
-func loopTx(
+func loopUpdate(
 	ctx context.Context,
 	rwd rpt.ReceiptWithData,
 	errorC chan<- error,
