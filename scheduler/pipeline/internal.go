@@ -199,7 +199,6 @@ out:
 	} else {
 		select {
 		case <-doneC:
-			break out
 		case eventC <- sch.Create(sch.EVENT_PERIOD_FINISH, finishIsStateChange, slot):
 		}
 	}

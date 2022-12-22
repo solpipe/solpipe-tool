@@ -4,11 +4,11 @@ import (
 	"context"
 	"errors"
 
+	sgo "github.com/SolmateDev/solana-go"
+	log "github.com/sirupsen/logrus"
 	cba "github.com/solpipe/cba"
 	pbj "github.com/solpipe/solpipe-tool/proto/job"
 	"github.com/solpipe/solpipe-tool/util"
-	sgo "github.com/SolmateDev/solana-go"
-	log "github.com/sirupsen/logrus"
 )
 
 // Send a transaction.  Before sending the transaction, update the receipt with the latest transaction hash so that the receiver will be able to authenticate the transaction.
@@ -78,7 +78,7 @@ func (e1 Client) generate_bid_receipt(ctx context.Context, txHash sgo.Hash) erro
 	err = e1.send_cb(ctx, func(in *internal) {
 		in.txCount++
 		b.SetTxSent(in.txCount)
-		errorC <- in.generate_general_receipt(s.Bidder, b.Build())
+		errorC <- in.generate_general_receipt(s.PipelineAdmin, b.Build())
 	})
 	if err != nil {
 		return err
