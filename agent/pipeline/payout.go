@@ -95,6 +95,7 @@ func (in *internal) run_payout_crank(event sch.Event) error {
 	if err != nil {
 		return err
 	}
+
 	go ckr.CrankPayout(
 		sch.MergeCtx(in.ctx, trigger.Context),
 		in.admin,
@@ -226,7 +227,7 @@ func RunClosePayout(
 	}
 	err = script.FinishTx(true)
 	if err != nil {
-		log.Debug("failed to close payout id=%s", payout.Id.String())
+		log.Debugf("failed to close payout id=%s", payout.Id.String())
 		os.Stderr.WriteString(err.Error() + "\n")
 		return err
 	}

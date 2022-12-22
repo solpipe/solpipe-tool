@@ -89,6 +89,7 @@ func loopInternal(
 	if err != nil {
 		in.errorC <- err
 	}
+	in.settings_change()
 
 out:
 	for {
@@ -196,6 +197,7 @@ func (in *internal) config_load() error {
 
 	in.periodSettings = c.PeriodSettings
 	in.rateSettings = c.RateSettings
+
 	return nil
 }
 
@@ -216,4 +218,39 @@ func (in *internal) config_save() error {
 		return err
 	}
 	return nil
+}
+
+func (in *internal) on_period_settings_update() {
+	doneC := in.ctx.Done()
+	data, err := json.Marshal(in.periodSettings)
+	if err != nil {
+		return
+	}
+	copy := new(pba.PeriodSettings)
+	err = json.Unmarshal(data, copy)
+	if err != nil {
+		return
+	}
+	select {
+	case <-doneC:
+	case in.periodSettingsC <- copy:
+	}
+
+}
+
+func (in *internal) on_rate_settings_update() {
+	doneC := in.ctx.Done()
+	data, err := json.Marshal(in.rateSettings)
+	if err != nil {
+		return
+	}
+	copy := new(pba.RateSettings)
+	err = json.Unmarshal(data, copy)
+	if err != nil {
+		return
+	}
+	select {
+	case <-doneC:
+	case in.rateSettingsC <- copy:
+	}
 }

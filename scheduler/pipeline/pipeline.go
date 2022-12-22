@@ -73,6 +73,19 @@ type TriggerAppend struct {
 	Start    uint64
 }
 
+func CreateTrigger(
+	parentCtx context.Context,
+	pipeline pipe.Pipeline,
+	start uint64,
+) (*TriggerAppend, context.CancelFunc) {
+	ctxC, cancel := context.WithCancel(parentCtx)
+	return &TriggerAppend{
+		Context:  ctxC,
+		Pipeline: pipeline,
+		Start:    start,
+	}, cancel
+}
+
 func ReadTrigger(event sch.Event) (*TriggerAppend, error) {
 	if event.Payload == nil {
 		return nil, errors.New("no trigger payload")
