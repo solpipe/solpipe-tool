@@ -93,7 +93,8 @@ func (in *internal) run_close_payout() {
 			Payout:  in.payout,
 		},
 	))
-	in.errorC <- nil
+
+	in.keepPayoutOpen = false
 
 }
 

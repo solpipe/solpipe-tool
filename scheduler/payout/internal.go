@@ -35,6 +35,7 @@ type internal struct {
 	cancelValidatorSetPayout  context.CancelFunc
 	cancelValidatorWithdraw   context.CancelFunc
 	cancelStakerWithdraw      context.CancelFunc
+	keepPayoutOpen            bool
 }
 
 func loopInternal(
@@ -79,9 +80,10 @@ func loopInternal(
 	in.validatorHasWithdrawn = false
 	in.stakerAddingHasStarted = false
 	in.stakerAddingIsDone = false
+	in.keepPayoutOpen = true
 
 out:
-	for {
+	for in.keepPayoutOpen {
 		select {
 		case <-doneC:
 			break out
@@ -128,21 +130,5 @@ func (in *internal) finish(err error) {
 	log.Debug(err)
 	for i := 0; i < len(in.closeSignalCList); i++ {
 		in.closeSignalCList[i] <- err
-	}
-	if in.cancelCloseBid != nil {
-		in.cancelCloseBid()
-	}
-	if in.cancelCrank != nil {
-		in.cancelCrank()
-	}
-	if in.cancelValidatorSetPayout != nil {
-		in.cancelValidatorSetPayout()
-	}
-	if in.cancelValidatorWithdraw != nil {
-		in.cancelValidatorWithdraw()
-	}
-
-	if in.cancelStakerWithdraw != nil {
-		in.cancelStakerWithdraw()
 	}
 }

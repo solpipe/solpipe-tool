@@ -217,7 +217,7 @@ func RunClosePayout(
 	if err != nil {
 		return err
 	}
-
+	log.Debugf("close payout=%s", payout.Id.String())
 	err = script.ClosePayout(
 		controller,
 		pipeline,

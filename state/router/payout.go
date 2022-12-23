@@ -70,6 +70,7 @@ func (in *internal) on_payout(pwd sub.PayoutWithData) error {
 		newlyCreated = true
 	} else {
 		p = ref.p
+		p.Update(pwd)
 	}
 
 	{

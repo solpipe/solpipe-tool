@@ -101,7 +101,7 @@ out:
 			log.Debugf("lookahead=%d from slot=%d", in.lookAhead, in.slot)
 			in.on_latest()
 		case <-deleteCancelC:
-			in.cancelAppend = nil
+			in.append_cancel()
 		}
 	}
 	in.finish(err)
@@ -109,11 +109,18 @@ out:
 
 const SLOT_TOO_CLOSE_THRESHOLD uint64 = 50
 
+func (in *internal) append_cancel() {
+	log.Debugf("deleting cancel for pipeline")
+	if in.cancelAppend != nil {
+		in.cancelAppend = nil
+	}
+}
+
 func (in *internal) on_latest() {
-	if in.slot == 0 {
+	if in.slot == 0 || (in.lastPeriodFinish == 0 && in.lastSentAppend == 0) {
 		return
 	}
-	if in.cancelAppend == nil && ((in.lastPeriodFinish == 0 && in.lastSentAppend == 0) || in.lastSentAppend < in.lastPeriodFinish) && in.lastPeriodFinish < in.slot+in.lookAhead {
+	if in.cancelAppend == nil && in.lastSentAppend < in.lastPeriodFinish && in.lastPeriodFinish < in.slot+in.lookAhead {
 
 		in.lastSentAppend = in.lastPeriodFinish + 1
 		start := in.slot
@@ -171,17 +178,16 @@ func (in *internal) finish(err error) {
 
 func (in *internal) on_period(pr cba.PeriodRing) {
 
-	if in.cancelAppend != nil {
-		in.cancelAppend()
-		in.cancelAppend = nil
-	}
+	in.append_cancel()
+
 	n := uint16(len(pr.Ring))
 	var k uint16
 	var pwd cba.PeriodWithPayout
 	for i := uint16(0); i < pr.Length; i++ {
 		k = (i + pr.Start) % n
 		pwd = pr.Ring[k]
-		if in.lastPeriodStart < pwd.Period.Start {
+
+		if !pwd.Period.IsBlank && in.lastPeriodStart < pwd.Period.Start {
 			in.lastPeriodStart = pwd.Period.Start
 			in.lastPeriodFinish = pwd.Period.Start + pwd.Period.Length - 1
 			go loopPeriod(
