@@ -138,7 +138,7 @@ out:
 		case <-doneC:
 			break out
 		case rC := <-reqC:
-			log.Debugf("slot subscription (%s)  %d", id.String(), home.SubscriberCount())
+			//log.Debugf("slot subscription (%s)  %d", id.String(), home.SubscriberCount())
 			home.Receive(rC)
 		case id := <-deleteC:
 			home.Delete(id)

@@ -27,7 +27,7 @@ type internal struct {
 	bidIsFinal                bool
 	bidHasClosed              bool
 	validatorAddingHasStarted bool
-	validatorAddingIsDone     bool
+	validatorHasWithdrawn     bool
 	stakerAddingHasStarted    bool
 	stakerAddingIsDone        bool
 	cancelCrank               context.CancelFunc
@@ -50,10 +50,6 @@ func loopInternal(
 	doneC := ctx.Done()
 	errorC := make(chan error, 5)
 
-	slotHome := router.Controller.SlotHome()
-
-	slotSub := slotHome.OnSlot()
-	defer slotSub.Unsubscribe()
 	//dataSub := pwd.Payout.OnData()
 	//defer dataSub.Unsubscribe()
 	//bidSub := pwd.Payout.OnBidStatus()
@@ -80,7 +76,7 @@ func loopInternal(
 	in.bidIsFinal = false
 	in.bidHasClosed = false
 	in.validatorAddingHasStarted = false
-	in.validatorAddingIsDone = false
+	in.validatorHasWithdrawn = false
 	in.stakerAddingHasStarted = false
 	in.stakerAddingIsDone = false
 
@@ -92,7 +88,6 @@ out:
 		case req := <-internalC:
 			req(in)
 		case event := <-eventC:
-
 			log.Debugf("event payout=%s  %s", pwd.Id.String(), event.String())
 			switch event.Type {
 			case sch.EVENT_PERIOD_PRE_START:
@@ -119,6 +114,10 @@ out:
 				err = errors.New("unknown event")
 				break out
 			}
+		case id := <-eventHome.DeleteC:
+			eventHome.Delete(id)
+		case r := <-eventHome.ReqC:
+			eventHome.Receive(r)
 
 		}
 	}
