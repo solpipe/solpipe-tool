@@ -84,8 +84,6 @@ func loopInternal(
 	in.stakerAddingHasStarted = false
 	in.stakerAddingIsDone = false
 
-	var isTrans string
-
 out:
 	for {
 		select {
@@ -94,12 +92,8 @@ out:
 		case req := <-internalC:
 			req(in)
 		case event := <-eventC:
-			if event.IsStateChange {
-				isTrans = "change"
-			} else {
-				isTrans = "static"
-			}
-			log.Debugf("event payout=%s  type=%s  isTransition=%s", pwd.Id.String(), event.Type, isTrans)
+
+			log.Debugf("event payout=%s  %s", pwd.Id.String(), event.String())
 			switch event.Type {
 			case sch.EVENT_PERIOD_PRE_START:
 				in.on_pre_start(event.IsStateChange)

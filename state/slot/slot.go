@@ -2,6 +2,7 @@ package slot
 
 import (
 	"context"
+	"errors"
 	"time"
 
 	sgorpc "github.com/SolmateDev/solana-go/rpc"
@@ -12,12 +13,17 @@ import (
 )
 
 type SlotHome struct {
-	id   uuid.UUID
-	reqC chan<- dssub.ResponseChannel[uint64]
-	ctx  context.Context
+	id         uuid.UUID
+	reqC       chan<- dssub.ResponseChannel[uint64]
+	ctx        context.Context
+	singleReqC chan<- chan<- uint64
 }
 
-func SubscribeSlot(ctxOutside context.Context, rpcClient *sgorpc.Client, wsClient *sgows.Client) (SlotHome, error) {
+func SubscribeSlot(
+	ctxOutside context.Context,
+	rpcClient *sgorpc.Client,
+	wsClient *sgows.Client,
+) (SlotHome, error) {
 	ctx, cancel := context.WithCancel(ctxOutside)
 
 	home := dssub.CreateSubHome[uint64]()
@@ -33,12 +39,41 @@ func SubscribeSlot(ctxOutside context.Context, rpcClient *sgorpc.Client, wsClien
 		cancel()
 		return SlotHome{}, err
 	}
-	go loopSlot(ctx, home, rpcClient, sub, cancel, id)
+	singleReqC := make(chan chan<- uint64)
+	go loopInternal(
+		ctx,
+		home,
+		rpcClient,
+		sub,
+		cancel,
+		id,
+		singleReqC,
+	)
 
 	//log.Debugf("creating slot subber id=%s", id.String())
 	return SlotHome{
-		reqC: reqC, ctx: ctx, id: id,
+		reqC: reqC, ctx: ctx, id: id, singleReqC: singleReqC,
 	}, nil
+}
+
+func (sh SlotHome) Time() (uint64, error) {
+	err := sh.ctx.Err()
+	if err != nil {
+		return 0, err
+	}
+	doneC := sh.ctx.Done()
+	respC := make(chan uint64, 1)
+	select {
+	case <-doneC:
+		return 0, errors.New("canceled")
+	case sh.singleReqC <- respC:
+	}
+	select {
+	case <-doneC:
+		return 0, errors.New("canceled")
+	case ans := <-respC:
+		return ans, nil
+	}
 }
 
 func (sh SlotHome) OnSlot() dssub.Subscription[uint64] {
@@ -50,13 +85,14 @@ func (sh SlotHome) CloseSignal() <-chan struct{} {
 }
 
 // carry websocket client into this goroutine to prevent it from going out of memory and killing the subscriptions
-func loopSlot(
+func loopInternal(
 	ctx context.Context,
 	home *dssub.SubHome[uint64],
 	rpcClient *sgorpc.Client,
 	sub *sgows.SlotSubscription,
 	cancel context.CancelFunc,
 	id uuid.UUID,
+	singleReqC <-chan chan<- uint64,
 ) {
 	var err error
 	defer cancel()
@@ -78,6 +114,8 @@ func loopSlot(
 out:
 	for {
 		select {
+		case respC := <-singleReqC:
+			respC <- slot
 		case d := <-streamC:
 			x, ok := d.(*sgows.SlotResult)
 			if !ok {

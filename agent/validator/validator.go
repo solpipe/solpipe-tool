@@ -222,7 +222,7 @@ func Create(
 		cancel()
 		return
 	}
-	scriptWrapper := spt.Wrap(script)
+	scriptWrapper := spt.Wrap(ctxC, script)
 
 	var relay rly.Relay
 	relay, err = pxyval.Create(ctx, validator, router.Network, config)

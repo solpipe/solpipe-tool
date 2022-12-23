@@ -5,7 +5,6 @@ import (
 
 	log "github.com/sirupsen/logrus"
 	cba "github.com/solpipe/cba"
-	ll "github.com/solpipe/solpipe-tool/ds/list"
 	dssub "github.com/solpipe/solpipe-tool/ds/sub"
 	sch "github.com/solpipe/solpipe-tool/scheduler"
 	ctr "github.com/solpipe/solpipe-tool/state/controller"
@@ -26,8 +25,8 @@ type internal struct {
 	lastPeriodFinish uint64
 	lastSentAppend   uint64
 	lookAhead        uint64
-	appendCancelList *ll.Generic[*cancelInfo]
-	deleteAppendC    chan<- uint64
+	cancelAppend     context.CancelFunc
+	deleteCancelC    chan<- uint64
 }
 
 func loopInternal(
@@ -45,13 +44,12 @@ func loopInternal(
 	doneC := ctx.Done()
 	errorC := make(chan error, 5)
 	eventC := make(chan sch.Event, 1)
-	deleteAppendC := make(chan uint64)
-
+	deleteCancelC := make(chan uint64)
 	in := new(internal)
 	in.ctx = ctx
 	in.errorC = errorC
 	in.eventC = eventC
-	in.deleteAppendC = deleteAppendC
+	in.deleteCancelC = deleteCancelC
 	in.closeSignalCList = make([]chan<- error, 0)
 	in.lookAhead = lookAhead
 	in.eventHome = eventHome
@@ -61,7 +59,6 @@ func loopInternal(
 	in.lastPeriodStart = 0
 	in.lastPeriodFinish = 0
 	in.lastSentAppend = 0
-	in.appendCancelList = ll.CreateGeneric[*cancelInfo]()
 
 	periodRing, err := pipeline.PeriodRing()
 	if err != nil {
@@ -84,7 +81,6 @@ out:
 		case <-doneC:
 			break out
 		case err = <-slotSub.ErrorC:
-			//break out
 			slotSub = in.router.Controller.SlotHome().OnSlot()
 		case in.slot = <-slotSub.StreamC:
 			in.on_latest()
@@ -104,65 +100,65 @@ out:
 		case in.lookAhead = <-lookAheadC:
 			log.Debugf("lookahead=%d from slot=%d", in.lookAhead, in.slot)
 			in.on_latest()
-		case start := <-deleteAppendC:
-		found:
-			for node := in.appendCancelList.HeadNode(); node != nil; node = node.Next() {
-				if node.Value().start == start {
-					in.appendCancelList.Remove(node)
-					break found
-				}
-			}
-
+		case <-deleteCancelC:
+			in.cancelAppend = nil
 		}
 	}
 	in.finish(err)
 }
 
-type cancelInfo struct {
-	cancel context.CancelFunc
-	start  uint64
-}
+const SLOT_TOO_CLOSE_THRESHOLD uint64 = 50
 
 func (in *internal) on_latest() {
-
-	for node := in.appendCancelList.HeadNode(); node != nil; node = node.Next() {
-		if node.Value().start <= in.lastPeriodFinish {
-			node.Value().cancel()
-			in.appendCancelList.Remove(node)
-		}
+	if in.slot == 0 {
+		return
 	}
+	if in.cancelAppend == nil && ((in.lastPeriodFinish == 0 && in.lastSentAppend == 0) || in.lastSentAppend < in.lastPeriodFinish) && in.lastPeriodFinish < in.slot+in.lookAhead {
 
-	if (in.lastPeriodFinish == 0 || in.lastSentAppend < in.lastPeriodFinish) && in.lastPeriodFinish < in.slot+in.lookAhead {
-
-		in.lastSentAppend = in.lastPeriodFinish
+		in.lastSentAppend = in.lastPeriodFinish + 1
 		start := in.slot
 		if start < in.lastSentAppend {
 			start = in.lastSentAppend
 		}
-
-		trigger, cancel := CreateTrigger(in.ctx, in.pipeline, start)
-		in.appendCancelList.Append(&cancelInfo{
-			cancel: cancel,
-			start:  start,
-		})
-		go loopDeleteAttend(
-			in.ctx,
-			trigger.Context,
-			in.router.Controller,
-			in.deleteAppendC,
-			start,
-		)
+		log.Debugf("(pipeline=%s) sending trigger=append_period (%d;%d)", in.pipeline.Id.String(), in.slot, start)
+		var trigger *TriggerAppend
+		// set start to 0 to make the Solana Program use the actual slot when the transaction is being processed
+		if start-in.slot < SLOT_TOO_CLOSE_THRESHOLD {
+			start = 0
+		}
+		trigger, in.cancelAppend = CreateTrigger(in.ctx, in.pipeline, start)
 		event := sch.CreateWithPayload(
 			sch.TRIGGER_PERIOD_APPEND,
 			true,
 			in.slot,
 			trigger,
 		)
+		go loopWaitAppend(in.ctx, trigger.Context, in.deleteCancelC, start)
 		log.Debugf("sending event=%s", event.String())
 		select {
 		case <-in.ctx.Done():
 		case in.eventC <- event:
 		}
+	}
+}
+
+// this has to exit before another append_period trigger is sent
+func loopWaitAppend(
+	parentCtx context.Context,
+	appendCtx context.Context,
+	deleteC chan<- uint64,
+	start uint64,
+) {
+	parentDoneC := parentCtx.Done()
+	appendDoneC := appendCtx.Done()
+	select {
+	case <-parentDoneC:
+		return
+	case <-appendDoneC:
+	}
+	select {
+	case <-parentDoneC:
+	case deleteC <- start:
 	}
 }
 
@@ -175,6 +171,10 @@ func (in *internal) finish(err error) {
 
 func (in *internal) on_period(pr cba.PeriodRing) {
 
+	if in.cancelAppend != nil {
+		in.cancelAppend()
+		in.cancelAppend = nil
+	}
 	n := uint16(len(pr.Ring))
 	var k uint16
 	var pwd cba.PeriodWithPayout

@@ -195,7 +195,7 @@ out:
 		case <-clientDoneC:
 			break out
 		case err = <-slotSub.ErrorC:
-			break out
+			slotSub = e1.router.Controller.SlotHome().OnSlot()
 		case slot := <-slotSub.StreamC:
 			//log.Debugf("slot=%d", slot)
 			err = writeConn(conn, TYPE_SLOT, &SlotTick{

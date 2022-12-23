@@ -65,6 +65,7 @@ func loopInternal(
 	)
 	in.admin = admin
 	in.payoutM = make(map[string]*payoutInfo)
+	in.wrapper = wrapper
 
 	pipelineEventSub := in.ps.OnEvent()
 	defer pipelineEventSub.Unsubscribe()
@@ -110,12 +111,12 @@ out:
 		case pwd := <-payoutSub.StreamC:
 			in.on_payout(pwd)
 		case err = <-slotSub.ErrorC:
-			break out
+			slotSub = in.router.Controller.SlotHome().OnSlot()
 		case in.slot = <-slotSub.StreamC:
 		case err = <-pipelineEventSub.ErrorC:
 			break out
 		case event := <-pipelineEventSub.StreamC:
-			in.on_event(event)
+			in.on_pipeline_event(event)
 		case event := <-eventC:
 			in.on_payout_event(event)
 		case id := <-deletePayoutC:

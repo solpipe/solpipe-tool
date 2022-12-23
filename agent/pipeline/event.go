@@ -5,13 +5,13 @@ import (
 	sch "github.com/solpipe/solpipe-tool/scheduler"
 )
 
-func (in *internal) on_event(event sch.Event) {
+func (in *internal) on_pipeline_event(event sch.Event) {
 	var err error
 	switch event.Type {
 	case sch.TRIGGER_PERIOD_APPEND:
 		err = in.run_period_append(event)
 	default:
-		log.Debugf("event=%s", event.String())
+		log.Debugf("no match for event=%s", event.String())
 	}
 	if err != nil {
 		in.errorC <- err
