@@ -8,6 +8,7 @@ func (in *internal) on_pre_start(isTransition bool) {
 	in.run_validator_set_payout()
 }
 
+// clock: start
 func (in *internal) on_start(isTransition bool) {
 	in.hasStarted = true
 	log.Debugf("payout=%s period has started", in.payout.Id.String())
@@ -19,8 +20,12 @@ func (in *internal) on_start(isTransition bool) {
 	}
 }
 
+// clock: finish
 func (in *internal) on_finish(isTransition bool) {
-	in.hasStarted = true
+	if !in.hasStarted {
+		in.on_start(false)
+	}
+
 	in.hasFinished = true
 
 	if !in.bidHasClosed {
@@ -30,8 +35,12 @@ func (in *internal) on_finish(isTransition bool) {
 	}
 }
 
+// clock: 100 slots after finish
 // it is now possible to send a ClosePayout instruction
 func (in *internal) on_clock_close_payout(isTransition bool) {
+	if !in.hasFinished {
+		in.on_finish(false)
+	}
 	in.isClockReadyToClose = true
 	log.Debugf("payout=%s time to close payout", in.payout.Id.String())
 	in.run_close_payout()
@@ -44,7 +53,6 @@ func (in *internal) on_bid_final(isTransition bool) {
 		in.cancelCrank()
 		in.cancelCrank = nil
 	}
-
 }
 
 func (in *internal) on_bid_closed(isTransition bool) {

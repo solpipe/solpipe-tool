@@ -10,7 +10,7 @@ func (in *internal) on_pipeline_event(event sch.Event) {
 	switch event.Type {
 	case sch.TRIGGER_PERIOD_APPEND:
 		log.Debugf("ignoring period append event=%s", event.String())
-		//err = in.run_period_append(event)
+		err = in.run_period_append(event)
 	default:
 		log.Debugf("no match for event=%s", event.String())
 	}

@@ -36,38 +36,13 @@ func loopClock(
 	isCloseStateTransition := false
 
 out:
-	for !sentStart && !sentFinish && !sentClose {
+	for !sentClose {
 		select {
 		case <-doneC:
 			break out
 		case err = <-slotSub.ErrorC:
 			break out
 		case slot = <-slotSub.StreamC:
-			if !sentStart && start <= slot {
-				sentStart = true
-				select {
-				case <-doneC:
-					break out
-				case eventC <- sch.Create(sch.EVENT_PERIOD_START, isStartStateTransition, slot):
-				}
-			} else if !isStartStateTransition {
-				isStartStateTransition = true
-				select {
-				case <-doneC:
-					break out
-				case eventC <- sch.Create(sch.EVENT_PERIOD_PRE_START, true, slot):
-				}
-			}
-			if !sentFinish && finish <= slot {
-				sentFinish = true
-				select {
-				case <-doneC:
-					break out
-				case eventC <- sch.Create(sch.EVENT_PERIOD_FINISH, isFinishStateTransition, slot):
-				}
-			} else if !isFinishStateTransition {
-				isFinishStateTransition = true
-			}
 			if !sentClose && closeOut <= slot {
 				sentClose = true
 				select {
@@ -83,6 +58,32 @@ out:
 			} else if !isCloseStateTransition {
 				isCloseStateTransition = true
 			}
+			if !sentFinish && finish <= slot {
+				sentFinish = true
+				select {
+				case <-doneC:
+					break out
+				case eventC <- sch.Create(sch.EVENT_PERIOD_FINISH, isFinishStateTransition, slot):
+				}
+			} else if !isFinishStateTransition {
+				isFinishStateTransition = true
+			}
+			if !sentClose && !sentFinish && !sentStart && start <= slot {
+				sentStart = true
+				select {
+				case <-doneC:
+					break out
+				case eventC <- sch.Create(sch.EVENT_PERIOD_START, isStartStateTransition, slot):
+				}
+			} else if !isStartStateTransition {
+				isStartStateTransition = true
+				select {
+				case <-doneC:
+					break out
+				case eventC <- sch.Create(sch.EVENT_PERIOD_PRE_START, true, slot):
+				}
+			}
+
 		}
 	}
 	if err != nil {
