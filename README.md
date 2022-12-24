@@ -1,136 +1,113 @@
-# solpipe-tool
+# Solpipe
 
-This go module allows staked-valditors to sell bandwidth and developers to buy bandwidth via the onchain Solpipe program.  The Solpipe Solana program is a continuous bandwidth auctioning mechanism.
+* [See Developer documentation here](docs/Development.md)
 
+## Summary
 
-Bandwidth is a consumable commodity.  Developers no longer have direct access to the lead validator without a staked validator.  Access to the lead validator is over Quic protocol with QoS (quality of service) rate limiting by staked SOL amount.  Thus, developers must route writes through staked validators to write to the chain.
+Solpipe is a framework on Solana that lets users create a market for capacity-constrained service.  Solpipe is flexible, convenient, and privacy protecting.  Solpipe can be used in many different business contexts.  Examples of such markets are:
 
-Staked validators need to allocate scare routing capacity.  Go-Staker is the Golang interface to the Solpipe program.
+* [Validators on Solana auctioning Transaction bandwidth](https://docs.solana.com/terminology#tps).  Said [bandwidth is contrained by QoS and QUIC](https://github.com/solana-labs/solana/issues/23211).
+* Generalized API gateways where API calls by users are rate limited
+* Electricity markets where users sell electricity generation capacity
 
-## Vocuabulary
+The Solpipe is composed of multiple code bases:
 
-| *Term* | *Definition* |
-|------------|---------------|
-| Validator | This is a server daemon that connects to peer to peer network.  It downloads the Solana blockchain and uploads transactions to a lead validator. [See article for more information](https://solana.com/validators).  Leaders and voting validators require staked SOL. |
-| QoS | quality of service; writes to the leader are restricted by stake. |
-| QUIC | Validators create connections with each other over UDP using a Google developed protocol called QUIC |
-| Bandwidth | a % of TPS (transactions per second) that a validator is capable of sending to the leader. |
-| Period | The validator selling bandwidth splits up an epoch into time chunks.  Periods are measured in slots, not unix epoch time. |
-| Period Crank | a Crank instruction that pushed the state of the validator bid into the next Period.  Fees are taken and bandwidth allocations are set. |
-| Bid | A developer wants to buy bandwidth for an upcoming period.  Before the period starts, the developer deposits funds.  Once a period starts, the bandwidth allocated to the developer by the validator is done in proportion to the amount deposited. |
-| Bid Bucket | the funds stored pending a  Period crank.  A fixed % of the bid bucket is taken as the bandwidth fee. |
-| Decay Rate | The proportion of the bid bucket taken as a bandwidth fee upon Period crank |
+* a Solana Program (i.e. smart contract written in Rust)
+* this Go repository for managing onchain state
+* a React library for viewing the status of the market
 
+**THIS CODE IS STILL IN ALPHA STATE**
 
+The main objective of the framework is:
 
-# Actors
+* to let buyers and sellers place/take bids and settle cash on chain
+* to record/meter usage on chain using mutually signed receipt accounts
+* if the capacity is an internet deliverable such as an API gateway or JSON RPC service, then set up a [a TOR](https://en.wikipedia.org/wiki/Tor_(network)) connection and an optional clear net peer to peer connection mutually authenticated over TLS using the respective Solana keypairs used in the bidding process (see [Proxy.md](docs/Proxy.md) for details)
 
-## Staked Validators (Seller)
+## Capacity Market
 
-Overall, validators must:
-1. set up a bidding space
-1. set period variables which include: start time, length, decay rate
-1. run a Grpc proxy server that forwards transactions from developers (buyers) to the lead validator.  The proxy implements rate limiting according to the bandwidth allocation stipulated in the bidding account.
+The definition of a capacity market is that there is a consumable service or product (oil, API calls, etc) that is used at some rate *consumable/time*  (e.g. MW for electricity, Tx/s for Solana  ) over some period time (e.g. 1 hour between 00:00 UTC and 01:00 UTC).
 
+| *Solpipe Definition* |
+| --- |
+| ![Flow Management](docs/files/flow.png "Flow management") |
 
-Staked validators need to execute the following Solpipe instructions:
-1. AddValidator - create a bidding account that lets developers submit bids to the target staked validator
-1. AppendPeriod - continously append bidding periods, which includes adjusting the bandwidth fee (% of bid bucket) 
+In said market, single or multiple suppliers define time periods and offer capacity priced in *money/consumable* (e.g. 21 USD/KwH for electricity, 0.004 USD/tx for Solana).
 
-## Developer (Buyer)
-
-Overall, developers must:
-1. [continually adjust the balance on his/her bid bucket balance](bidder/bidder.go)
-1. [connect to the valdiator proxy via Grpc client](client/client.go)
-
-Developers execute the following Solpipe instructions:
-1. InsertBid - deposit/withdraw funds
+| *Market Supply and Demand* |
+| --- |
+| ![Market Supply and Demand](docs/files/market.png "Market Supply and Demand") |
 
 
-## Cranker
+# How Solpipe Works
 
-Anyone can crank so long as the crank fee is set above 0.
+Solpipe is a capacity market with state stored onchain.  Agents (Go programs in the repository) track and update onchain state.
 
-[See the cranker code](cranker/cranker.go).
+| *Terms* | *Definition* |
+| --- | --- |
+| Bidder | The person bidding for capacity [see details here](docs/Agents/Bidder.md) |
+| Pipeline | The person offering capacity | [see details here](docs/Agents/Pipeline.md). For [Solana transaction processing capacity](https://docs.solana.com/terminology#tps), see also [Validator](docs/Agents/Validator.md) and [Staker](docs/Agents/Staker.md) |
+| TIME_PERIOD | a time period for which capacity is being bid |
+| BID_TABLE | an account belonging to the TIME_PERIOD for which capacity is being bid |
+| ALLOCATION | the share of capacity being allocated to a Bidder upon start of the TIME_PERIOD |
+| PC_MINT | the denomination of the funds that can be deposited in the BID_TABLE |
+| BID_RECEIPT | an onchain account storing usage information that is mutually signed by the Pipeline and Bidder |
+| TOR | [stands for the onion router](https://www.torproject.org/) |
 
-
-
-# Golang CLI Test
-
-## Build Binary
-
-Change directory to `./go`.
-
-```bash
-make all
-```
-
-## Miscellaneous
-
-### Airdrop
-
-```bash
-solpipe airdrop --rpc=http://localhost:8899 --ws=ws://localhost:8900 -d EA4d44kdDaCWNcuBjepk8fyRp4WnccGgd1TrseDzcmtY -a 4.5598 -v
-```
-
-### Mint
-
-```bash
-solana-keygen new -o ./tmp/mint.json
-solana-keygen new -o ./tmp/authority.json
-solpipe airdrop --rpc=http://localhost:8899 --ws=ws://localhost:8900 -d $(solana-keygen pubkey ./tmp/mint.json) -a 0.1 -v
-solpipe airdrop --rpc=http://localhost:8899 --ws=ws://localhost:8900 -d $(solana-keygen pubkey ./tmp/authority.json) -a 0.1 -v
-solpipe mint --rpc=http://localhost:8899 --ws=ws://localhost:8900 --payer=./tmp/mint.json --authority=./tmp/mint.json -d 2 -o ./tmp/mint-usdc.json -v
-< ./tmp/mint-usdc.json  jq '.id' | sed 's/\"//g'
-```
-* `-o` is optional in the last command
-
-### Issue Tokens
-
-```bash
-solana-keygen new -o ./tmp/bidder.json
-solpipe airdrop --rpc=http://localhost:8899 --ws=ws://localhost:8900 -d $(solana-keygen pubkey ./tmp/bidder.json) -a 0.1 -v
-solpipe issue --rpc=http://localhost:8899 --ws=ws://localhost:8900 --payer=./tmp/bidder.json --mint=./tmp/mint-usdc.json --owner=$(solana-keygen pubkey ./tmp/bidder.json) -a 1000 -v 
-```
-
-Check the new balance with:
-
-```bash
-solpipe balance --rpc=http://localhost:8899 --ws=ws://localhost:8900  --mint=$(< ./tmp/mint-usdc.json  jq '.id' | sed 's/\"//g') --owner=$(solana-keygen pubkey ./tmp/bidder.json)  -v
-```
-
-## Create accounts
-
-```bash
-solpipe airdrop --rpc=http://localhost:8899 --ws=ws://localhost:8900 -d $(solana-keygen pubkey ./tmp/controller-admin.json) -a 100 -v
-solpipe airdrop --rpc=http://localhost:8899 --ws=ws://localhost:8900 -d $(solana-keygen pubkey ./tmp/mint.json) -a 100 -v
-solpipe airdrop --rpc=http://localhost:8899 --ws=ws://localhost:8900 -d $(solana-keygen pubkey ./tmp/validator.json) -a 100 -v
-solpipe airdrop --rpc=http://localhost:8899 --ws=ws://localhost:8900 -d $(solana-keygen pubkey ./tmp/validator-admin.json) -a 100 -v
-```
+There is a Solana Program that implements a bidding system.  Pipelines create bidding periods that span a number of slots starting at either the current slot or some slot in the future.  Off-chain, bidders can calculate the real time capacity of a Pipeline and forecast the capacity of said Pipeline during the time period being bid on.
 
 
-### Create Controller
+### Bid Cycle
 
-The help output:
+||
+| --- |
+| **PICTURE BELOW IS SLIGHTLY OUT OF DATE.  THERE IS NO DECAY RATE. THERE IS ONE BID BUCKET PER PERIOD.** |
+![Bid Cycle Diagram](docs/files/bid-cycle.png "Bid Cycle")
 
-```
-Usage: cba-client controller
+A Pipeline creates a TIME_PERIOD to which a unique BID_TABLE is attached.  Bidders can deposit funds into BID_TABLE up until the start of the TIME_PERIOD.
 
-Create a controller and change the controller settings
+The Bidder connects to Pipeline and maintains connection for the duration of TIME_PERIOD.  See [Proxy](docs/Proxy.md) for details.  All necessary connection information is derived from the public keys used in the onchain bidding process.
 
-Flags:
-  -h, --help            Show context-sensitive help.
-      --verbose         Set logging to verbose.
+During TIME_PERIOD, the Bidder can make API calls such as send_transaction, but is rate limited by the ALLOCATION.  The usage is recorded onchain in BID_RECEIPT.
 
-      --payer=STRING    the account paying SOL fees
-      --admin=STRING    the account with administrative privileges
-      --mint=STRING     the mint of the token account to which fees are paid to and by validators
-      --rpc=STRING      Connection information to a Solana validator Rpc endpoint with format
-                        protocol://host:port (ie http://locahost:8899)
-      --ws=STRING       Connection information to a Solana validator Websocket endpoint with format
-                        protocol://host:port (ie ws://localhost:8900)
-```
+# Market Examples
 
-```bash
-cba-client controller --rpc=http://localhost:8899 --ws=ws://localhost:8900--payer=./tmp/controller-admin.json --admin=./tmp/controller-admin.json --mint=$(< ./tmp/mint-usdc.json  jq '.id' | sed 's/\"//g') -v
-```
+The main purpose of Solpipe is to auction TPS capacity.  However, SaaS businesses providing rate-limited API services can use the same tooling to earn revenue.
+
+Customers have the option of concealing their IP addresses by consuming services over the default TOR connections.
+
+## Solana
+
+| *Solana* |
+| --- |
+| ![Solana Example](docs/files/eg-solana.png "Solana Example") |
+
+|||
+| --- | --- |
+| **Capacity** | transactions per second |
+| **Volume** | total transactions submitted over a fixed time period |
+| **Price** | USD per transaction during the fixed time period |
+
+## API Billing Gateway
+
+| *Solana* |
+| --- |
+| ![API Billing Gateway](docs/files/eg-api.png "API Billing Gateway") |
+
+|||
+| --- | --- |
+| **Capacity** | transactions per second |
+| **Volume** | total transactions submitted over a fixed time period |
+| **Price** | USD per transaction during the fixed time period |
+
+## Electricity Generation Market
+
+| *Solana* |
+| --- |
+| ![Electricity Generation Market](docs/files/eg-power.png "Electricity Generation Market") |
+
+|||
+| --- | --- |
+| **Capacity** | transactions per second |
+| **Volume** | total transactions submitted over a fixed time period |
+| **Price** | USD per transaction during the fixed time period |
