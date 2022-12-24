@@ -1,6 +1,22 @@
 # Solpipe
 
-## Summary
+Solpipe is a framework on Solana that lets users create a market for capacity-constrained service.  Examples of such markets are:
+
+* Validators on Solana auctioning Transaction bandwidth.  Said bandwidth is contrained by QoS and QUIC.
+* Generalized API gateways where API calls by users are rate limited
+* Electricity markets where users sell electricity generation capacity
+
+The Solpipe is composed of multiple code bases:
+
+* the Solana Program itself
+* this Go repository for managing onchain state
+* a React library for viewing the status of the market
+
+**THIS CODE IS STILL IN ALPHA STATE**
+
+
+
+## Capacity Market
 
 | *Solpipe Definition* |
 | --- |
@@ -11,6 +27,18 @@
 | *Market Supply and Demand* |
 | --- |
 | ![Market Supply and Demand](/docs/files/market.png "Market Supply and Demand") |
+
+
+# How Solpipe Works
+
+| *Agent* | *Description* |
+| --- | --- |
+| hi ||
+
+
+## Life Cycle
+
+![Bid Cycle Diagram](/docs/files/bid-cycle.png "Bid Cycle")
 
 
 # Examples
