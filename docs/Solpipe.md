@@ -14,15 +14,21 @@ The Solpipe is composed of multiple code bases:
 
 **THIS CODE IS STILL IN ALPHA STATE**
 
+The main objective of the framework is:
 
+* let buyers and sellers place/take bids and settle cash on chain
+* record/meter usage on chain using mutually signed receipt accounts
+* if the capacity is an internet deliverable such as an API gateway or JSON RPC service, then set up a [a TOR](https://en.wikipedia.org/wiki/Tor_(network)) connection and an optional clear net peer to peer connection mutually authenticated over TLS using the respective Solana keypairs used in the bidding process (see [Proxy.md](Proxy.md) for details)
 
 ## Capacity Market
+
+The definition of a capacity market is that there is a consumable service or product (oil, API calls, etc) that is used at some rate *consumable/time*  (e.g. MW for electricity, Tx/s for Solana  ) over some period time (e.g. 1 hour between 00:00 UTC and 01:00 UTC).
 
 | *Solpipe Definition* |
 | --- |
 | ![Flow Management](/docs/files/flow.png "Flow management") |
 
-
+In said market, single or multiple suppliers define time periods and offer capacity priced in *money/consumable* (e.g. 21 USD/KwH for electricity, 0.004 USD/tx for Solana).
 
 | *Market Supply and Demand* |
 | --- |
