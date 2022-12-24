@@ -112,15 +112,17 @@ const SLOT_TOO_CLOSE_THRESHOLD uint64 = 50
 func (in *internal) append_cancel() {
 	log.Debugf("deleting cancel for pipeline")
 	if in.cancelAppend != nil {
+		in.cancelAppend()
 		in.cancelAppend = nil
 	}
 }
 
 func (in *internal) on_latest() {
-	if in.slot == 0 || (in.lastPeriodFinish == 0 && in.lastSentAppend == 0) {
+
+	if in.slot == 0 {
 		return
 	}
-	if in.cancelAppend == nil && in.lastSentAppend < in.lastPeriodFinish && in.lastPeriodFinish < in.slot+in.lookAhead {
+	if in.cancelAppend == nil && in.lastPeriodFinish < in.slot+in.lookAhead {
 
 		in.lastSentAppend = in.lastPeriodFinish + 1
 		start := in.slot
