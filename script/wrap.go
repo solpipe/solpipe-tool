@@ -160,7 +160,9 @@ func (w Wrapper) Send(
 	case w.internalC <- func(in *internal) (CallbackReplay, error) {
 		replay.Count++
 		in.script.ctx = ctx
-		return *replay, cb(in.script)
+		cbError := cb(in.script)
+		in.script.txBuilder = nil
+		return *replay, cbError
 	}:
 	}
 
