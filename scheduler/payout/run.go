@@ -42,6 +42,7 @@ func (in *internal) run_crank() {
 	if in.cancelCrank != nil {
 		return
 	}
+	log.Debugf("payout=%s run crank", in.payout.Id.String())
 	var trigger *Trigger
 	trigger, in.cancelCrank = in.generic_trigger()
 	in.eventHome.Broadcast(sch.CreateWithPayload(
@@ -59,6 +60,7 @@ func (in *internal) run_close_bids() {
 	if in.cancelCloseBid != nil {
 		return
 	}
+	log.Debugf("payout=%s run close bids", in.payout.Id.String())
 	var trigger *Trigger
 	trigger, in.cancelCloseBid = in.generic_trigger()
 	in.eventHome.Broadcast(sch.CreateWithPayload(
@@ -84,6 +86,7 @@ func (in *internal) run_close_payout() {
 		log.Debugf("payout=%s validator has not withdrawn", in.payout.Id.String())
 		return
 	}
+	log.Debugf("payout=%s run close payout", in.payout.Id.String())
 	in.eventHome.Broadcast(sch.CreateWithPayload(
 		sch.TRIGGER_CLOSE_PAYOUT,
 		true,
