@@ -15,6 +15,7 @@ decho(){
 copy_keys(){
     DIR=$1
     ( cd ./localconfig/single && ./load.sh $DIR)
+    decho "deploying program"
     solana -u localhost program deploy --keypair ./localconfig/single/faucet.json ./target/deploy/solmate_cba.so --program-id ./target/deploy/solmate_cba-keypair.json
     sleep 20
 }

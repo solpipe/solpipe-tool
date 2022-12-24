@@ -36,13 +36,14 @@ func loopClock(
 	isCloseStateTransition := false
 
 out:
-	for !sentStart && !sentFinish && !sentClose {
+	for !sentClose {
 		select {
 		case <-doneC:
 			break out
 		case err = <-slotSub.ErrorC:
 			break out
 		case slot = <-slotSub.StreamC:
+
 			if !sentStart && start <= slot {
 				sentStart = true
 				select {

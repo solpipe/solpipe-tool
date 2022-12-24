@@ -23,9 +23,9 @@ type payoutInfo struct {
 }
 
 func (in *internal) on_payout(pwd pipe.PayoutWithData) {
-	pi, present := in.payoutM[pwd.Id.String()]
+	_, present := in.payoutM[pwd.Id.String()]
 	if !present {
-		pi = new(payoutInfo)
+		pi := new(payoutInfo)
 		var ctxC context.Context
 		ctxC, pi.cancel = context.WithCancel(in.ctx)
 		pi.pwd = pwd
@@ -48,6 +48,7 @@ func loopPayoutScheduler(
 	sub := s.OnEvent()
 	defer sub.Unsubscribe()
 	var event sch.Event
+	log.Debugf("loop payout scheduler")
 out:
 	for {
 		select {
@@ -56,6 +57,7 @@ out:
 		case err = <-sub.ErrorC:
 			break out
 		case event = <-sub.StreamC:
+			log.Debugf("payout scheduler event=%s", event.String())
 			select {
 			case <-doneC:
 				break out
@@ -95,6 +97,7 @@ func (in *internal) run_payout_crank(event sch.Event) error {
 	if err != nil {
 		return err
 	}
+
 	go ckr.CrankPayout(
 		sch.MergeCtx(in.ctx, trigger.Context),
 		in.admin,
@@ -102,7 +105,7 @@ func (in *internal) run_payout_crank(event sch.Event) error {
 		in.pipeline,
 		in.wrapper,
 		trigger.Payout,
-		in.errorC,
+		in.wrapper.ErrorNonNil(in.errorC),
 	)
 	return nil
 }
@@ -133,7 +136,7 @@ func (in *internal) run_payout_close_bids(event sch.Event) error {
 				payout,
 			)
 		},
-		in.errorC,
+		in.wrapper.ErrorNonNil(in.errorC),
 	)
 	return nil
 }
@@ -177,13 +180,13 @@ func (in *internal) run_payout_close_payout(event sch.Event) error {
 	if err != nil {
 		return err
 	}
-	ctxC := trigger.Context
+	// no trigger context for payout
 	admin := in.admin
 	controller := in.router.Controller
 	pipeline := in.pipeline
 	payout := trigger.Payout
 	in.wrapper.SendDetached(
-		sch.MergeCtx(in.ctx, ctxC),
+		in.ctx,
 		MAX_TRIES_PAYOUT_CLOSE_PAYOUT,
 		DELAY_PAYOUT_CLOSE_PAYOUT,
 		func(script *spt.Script) error {
@@ -195,7 +198,7 @@ func (in *internal) run_payout_close_payout(event sch.Event) error {
 				payout,
 			)
 		},
-		in.errorC,
+		in.wrapper.ErrorNonNil(in.errorC),
 	)
 	return nil
 }
@@ -214,7 +217,7 @@ func RunClosePayout(
 	if err != nil {
 		return err
 	}
-
+	log.Debugf("close payout=%s", payout.Id.String())
 	err = script.ClosePayout(
 		controller,
 		pipeline,
@@ -226,7 +229,7 @@ func RunClosePayout(
 	}
 	err = script.FinishTx(true)
 	if err != nil {
-		log.Debug("failed to close payout id=%s", payout.Id.String())
+		log.Debugf("failed to close payout id=%s", payout.Id.String())
 		os.Stderr.WriteString(err.Error() + "\n")
 		return err
 	}

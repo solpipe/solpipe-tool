@@ -65,6 +65,7 @@ func loopInternal(
 	)
 	in.admin = admin
 	in.payoutM = make(map[string]*payoutInfo)
+	in.wrapper = wrapper
 
 	pipelineEventSub := in.ps.OnEvent()
 	defer pipelineEventSub.Unsubscribe()
@@ -97,23 +98,25 @@ out:
 		case req := <-internalC:
 			req(in)
 		case in.periodSettings = <-periodSettingsC:
+			log.Debugf("new period settings=%+v", in.periodSettings)
 			select {
 			case <-doneC:
 				break out
 			case lookaheadC <- in.periodSettings.Lookahead:
 			}
 		case in.rateSettings = <-rateSettingsC:
+			log.Debugf("new rate settings=%+v", in.rateSettings)
 		case err = <-payoutSub.ErrorC:
 			break out
 		case pwd := <-payoutSub.StreamC:
 			in.on_payout(pwd)
 		case err = <-slotSub.ErrorC:
-			break out
+			slotSub = in.router.Controller.SlotHome().OnSlot()
 		case in.slot = <-slotSub.StreamC:
 		case err = <-pipelineEventSub.ErrorC:
 			break out
 		case event := <-pipelineEventSub.StreamC:
-			in.on_event(event)
+			in.on_pipeline_event(event)
 		case event := <-eventC:
 			in.on_payout_event(event)
 		case id := <-deletePayoutC:

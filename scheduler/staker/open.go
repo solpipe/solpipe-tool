@@ -4,7 +4,6 @@ import (
 	"context"
 
 	sch "github.com/solpipe/solpipe-tool/scheduler"
-	schpyt "github.com/solpipe/solpipe-tool/scheduler/payout"
 	pipe "github.com/solpipe/solpipe-tool/state/pipeline"
 	rpt "github.com/solpipe/solpipe-tool/state/receipt"
 	skr "github.com/solpipe/solpipe-tool/state/staker"
@@ -49,7 +48,7 @@ func loopOpenReceipt(
 	case <-doneC:
 		return
 	case eventC <- sch.CreateWithPayload(
-		schpyt.TRIGGER_STAKER_ADD,
+		sch.TRIGGER_STAKER_ADD,
 		true,
 		0,
 		&TriggerStaker{

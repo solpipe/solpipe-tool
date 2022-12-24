@@ -12,12 +12,14 @@ import (
 	"github.com/solpipe/solpipe-tool/state"
 	ctr "github.com/solpipe/solpipe-tool/state/controller"
 	pipe "github.com/solpipe/solpipe-tool/state/pipeline"
+	slt "github.com/solpipe/solpipe-tool/state/slot"
 )
 
-const MAX_TRIES_PERIOD_APPEND = 1
-const DELAY_PERIOD_APPEND = 30 * time.Second
+const MAX_TRIES_PERIOD_APPEND = 5
+const DELAY_PERIOD_APPEND = 10 * time.Second
 
 func (in *internal) run_period_append(event sch.Event) error {
+	log.Debugf("received event=%s", event.String())
 	if in.periodSettings == nil {
 		return errors.New("no period settings")
 	}
@@ -28,7 +30,11 @@ func (in *internal) run_period_append(event sch.Event) error {
 	if err != nil {
 		return err
 	}
-	start := payload.Start - 1
+
+	// decrement because later we increment
+
+	sh := in.router.Controller.SlotHome()
+	start := payload.Start
 	admin := in.admin
 	length := in.periodSettings.Length
 	withhold := uint16(in.periodSettings.Withhold)
@@ -38,15 +44,17 @@ func (in *internal) run_period_append(event sch.Event) error {
 	crankFee := state.RateFromProto(in.rateSettings.CrankFee)
 	payoutShare := state.RateFromProto(in.rateSettings.PayoutShare)
 	tickSize := uint16(in.periodSettings.TickSize)
+
 	in.wrapper.SendDetached(
 		sch.MergeCtx(in.ctx, payload.Context),
 		MAX_TRIES_PERIOD_APPEND,
 		DELAY_PERIOD_APPEND,
 		func(script *spt.Script) error {
-			start++
+
 			return RunAppendPeriod(
 				script,
 				admin,
+				sh,
 				start,
 				length,
 				withhold,
@@ -58,7 +66,7 @@ func (in *internal) run_period_append(event sch.Event) error {
 				tickSize,
 			)
 		},
-		in.errorC,
+		in.wrapper.ErrorNonNil(in.errorC),
 	)
 	return nil
 }
@@ -66,6 +74,7 @@ func (in *internal) run_period_append(event sch.Event) error {
 func RunAppendPeriod(
 	script *spt.Script,
 	admin sgo.PrivateKey,
+	sh slt.SlotHome,
 	start uint64,
 	length uint64,
 	withhold uint16,
@@ -77,11 +86,22 @@ func RunAppendPeriod(
 	tickSize uint16,
 ) error {
 	var err error
+	/*
+		slot, err2 := sh.Time()
+		if err2 != nil {
+			return err2
+		}
+		// it takes 5 slots to get to the validator
+		// typically the slot is off by 1
+		if start < slot {
+			start = slot + 50
+		}
+	*/
 	err = script.SetTx(admin)
 	if err != nil {
 		return err
 	}
-
+	log.Debugf("run append period (%s;%d;%d;%d;%d;%d)", pipeline.Id.String(), 0, start, length, withhold, bidSpace)
 	err = script.UpdatePipeline(
 		controller.Id(),
 		pipeline.Id,
@@ -110,6 +130,7 @@ func RunAppendPeriod(
 		return err
 	}
 	// a successful transaction here does not imply that the transaction has made it into a block and run without error
+	// this is time sensitive, so we skip simulation
 	err = script.FinishTx(true)
 	if err != nil {
 		log.Debugf("tx submit failure: %s", err.Error())

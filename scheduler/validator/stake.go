@@ -4,7 +4,6 @@ import (
 	"context"
 
 	sch "github.com/solpipe/solpipe-tool/scheduler"
-	schpyt "github.com/solpipe/solpipe-tool/scheduler/payout"
 	rpt "github.com/solpipe/solpipe-tool/state/receipt"
 )
 
@@ -15,7 +14,7 @@ func (in *internal) on_receipt(rt receiptWithTransition) {
 	select {
 	case <-in.ctx.Done():
 	case in.eventC <- sch.Create(
-		schpyt.EVENT_VALIDATOR_IS_ADDING,
+		sch.EVENT_VALIDATOR_IS_ADDING,
 		rt.isStateChange,
 		0,
 	):
@@ -64,7 +63,7 @@ func loopWaitStakeFinish(
 		case <-doneC:
 			return
 		case eventC <- sch.Create(
-			schpyt.EVENT_STAKER_IS_ADDING,
+			sch.EVENT_STAKER_IS_ADDING,
 			false,
 			0,
 		):
@@ -83,7 +82,7 @@ out:
 				case <-doneC:
 					return
 				case eventC <- sch.Create(
-					schpyt.EVENT_STAKER_HAVE_WITHDRAWN_EMPTY,
+					sch.EVENT_STAKER_HAVE_WITHDRAWN_EMPTY,
 					isClockPostPeriodTransition,
 					0,
 				):
@@ -100,7 +99,7 @@ out:
 				case <-doneC:
 					return
 				case eventC <- sch.Create(
-					schpyt.EVENT_STAKER_IS_ADDING,
+					sch.EVENT_STAKER_IS_ADDING,
 					true,
 					0,
 				):
@@ -111,7 +110,7 @@ out:
 				case <-doneC:
 					return
 				case eventC <- sch.Create(
-					schpyt.EVENT_STAKER_HAVE_WITHDRAWN,
+					sch.EVENT_STAKER_HAVE_WITHDRAWN,
 					true,
 					0,
 				):

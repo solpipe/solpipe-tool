@@ -138,7 +138,7 @@ func Create(
 		cancel()
 		return Agent{}, err
 	}
-	wrapper := spt.Wrap(script)
+	wrapper := spt.Wrap(ctx, script)
 
 	var signalC <-chan error
 	signalC, err = admin.Attach(

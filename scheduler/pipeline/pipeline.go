@@ -3,6 +3,7 @@ package pipeline
 import (
 	"context"
 	"errors"
+	"time"
 
 	dssub "github.com/solpipe/solpipe-tool/ds/sub"
 	sch "github.com/solpipe/solpipe-tool/scheduler"
@@ -71,6 +72,22 @@ type TriggerAppend struct {
 	Context  context.Context
 	Pipeline pipe.Pipeline
 	Start    uint64
+}
+
+const TIMEOUT_PERIOD_APPEND = 180 * time.Second
+
+// set timeout
+func CreateTrigger(
+	parentCtx context.Context,
+	pipeline pipe.Pipeline,
+	start uint64,
+) (*TriggerAppend, context.CancelFunc) {
+	ctxC, cancel := context.WithTimeout(parentCtx, TIMEOUT_PERIOD_APPEND)
+	return &TriggerAppend{
+		Context:  ctxC,
+		Pipeline: pipeline,
+		Start:    start,
+	}, cancel
 }
 
 func ReadTrigger(event sch.Event) (*TriggerAppend, error) {

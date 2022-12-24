@@ -139,6 +139,8 @@ func (e1 Server) SetPeriod(ctx context.Context, req *pba.PeriodSettings) (*pba.P
 
 func (in *internal) settings_change() {
 	log.Debug("admin settings have changed")
+	in.on_period_settings_update()
+	in.on_rate_settings_update()
 }
 
 func (e1 Server) GetLogStream(req *pba.Empty, stream pba.Validator_GetLogStreamServer) error {

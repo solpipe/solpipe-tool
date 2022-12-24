@@ -4,7 +4,6 @@ import (
 	"context"
 
 	sch "github.com/solpipe/solpipe-tool/scheduler"
-	schpyt "github.com/solpipe/solpipe-tool/scheduler/payout"
 	pipe "github.com/solpipe/solpipe-tool/state/pipeline"
 	rpt "github.com/solpipe/solpipe-tool/state/receipt"
 	skr "github.com/solpipe/solpipe-tool/state/staker"
@@ -45,7 +44,7 @@ out:
 				select {
 				case <-doneC:
 				case eventC <- sch.Create(
-					schpyt.EVENT_STAKER_HAVE_WITHDRAWN,
+					sch.EVENT_STAKER_HAVE_WITHDRAWN,
 					true,
 					0,
 				):
@@ -56,12 +55,12 @@ out:
 			break out
 		case event := <-eventSub.StreamC:
 			switch event.Type {
-			case schpyt.EVENT_FINISH:
+			case sch.EVENT_PERIOD_FINISH:
 				select {
 				case <-doneC:
 					break out
 				case eventC <- sch.CreateWithPayload(
-					schpyt.TRIGGER_STAKER_WITHDRAW,
+					sch.TRIGGER_STAKER_WITHDRAW,
 					true,
 					0,
 					&TriggerReceipt{

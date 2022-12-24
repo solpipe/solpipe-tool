@@ -15,6 +15,7 @@ require (
 )
 
 require (
+	github.com/atomixwap/go-merkle v0.1.0 // indirect
 	github.com/golang/protobuf v1.5.2 // indirect
 	github.com/improbable-eng/grpc-web v0.15.0 // indirect
 	github.com/mattn/go-sqlite3 v1.14.16 // indirect

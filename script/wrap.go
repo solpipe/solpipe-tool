@@ -3,20 +3,24 @@ package script
 import (
 	"context"
 	"errors"
+	"os"
 	"time"
 )
 
+// ignore the ctx in script
 func Wrap(
+	ctx context.Context,
 	script *Script,
 ) Wrapper {
-
+	if ctx == nil {
+		panic("no context")
+	}
 	internalC := make(chan Callback, 10)
-
 	e1 := Wrapper{
-		ctx:       script.ctx,
+		ctx:       ctx,
 		internalC: internalC,
 	}
-	go loopInternal(script, internalC)
+	go loopInternal(ctx, script, internalC)
 
 	return e1
 }
@@ -41,10 +45,12 @@ type CallbackReplay struct {
 }
 
 func loopInternal(
+	ctx context.Context,
 	script *Script,
 	internalC <-chan Callback,
 ) {
-	ctx := script.ctx
+
+	//ctx := script.ctx
 	doneC := ctx.Done()
 	replayC := make(chan Callback, 10)
 	in := new(internal)
@@ -61,6 +67,9 @@ out:
 			go loopReplay(in.ctx, y, req, err, replayC)
 		case req := <-internalC:
 			y, err := req(in)
+			if err != nil {
+				os.Stderr.WriteString(err.Error())
+			}
 			go loopReplay(in.ctx, y, req, err, replayC)
 		}
 	}
@@ -116,13 +125,14 @@ func (w Wrapper) loop(
 	cb func(*Script) error,
 	errorC chan<- error,
 ) {
+	err := w.Send(ctx, maxTries, delay, cb)
 	select {
 	case <-ctx.Done():
 		select {
 		case <-time.After(30 * time.Second):
 		case errorC <- nil:
 		}
-	case errorC <- w.Send(ctx, maxTries, delay, cb):
+	case errorC <- err:
 	}
 
 }
@@ -133,6 +143,7 @@ func (w Wrapper) Send(
 	delay time.Duration,
 	cb func(*Script) error,
 ) error {
+	parentDoneC := w.ctx.Done()
 	doneC := ctx.Done()
 	errorC := make(chan error, 1)
 	replay := &CallbackReplay{
@@ -143,6 +154,8 @@ func (w Wrapper) Send(
 	}
 
 	select {
+	case <-parentDoneC:
+		return errors.New("parent canceled")
 	case <-doneC:
 	case w.internalC <- func(in *internal) (CallbackReplay, error) {
 		replay.Count++
@@ -152,9 +165,38 @@ func (w Wrapper) Send(
 	}
 
 	select {
+	case <-parentDoneC:
+		return errors.New("parent canceled")
 	case <-doneC:
-		return errors.New("canceled")
+		// handle this error somewhere else
+		return nil //errors.New("canceled")
 	case err := <-errorC:
 		return err
+	}
+}
+
+func (w Wrapper) ErrorNonNil(
+	errorC chan<- error,
+) chan<- error {
+	signalC := make(chan error, 1)
+	go loopPropagate(w.ctx, errorC, signalC)
+	return signalC
+}
+
+func loopPropagate(
+	ctx context.Context,
+	errorC chan<- error,
+	signalC <-chan error,
+) {
+	doneC := ctx.Done()
+	select {
+	case <-doneC:
+	case err := <-signalC:
+		if err != nil {
+			select {
+			case <-doneC:
+			case errorC <- err:
+			}
+		}
 	}
 }

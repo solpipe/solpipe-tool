@@ -9,9 +9,8 @@ type BidReceiptSettings struct {
 	Receipt       sgo.PublicKey
 	Controller    sgo.PublicKey
 	Pipeline      sgo.PublicKey
-	PipelineAdmin sgo.PublicKey
+	PipelineAdmin sgo.PrivateKey
 	Payout        sgo.PublicKey
-	Bidder        sgo.PrivateKey
 }
 
 func (brs BidReceiptSettings) Update(txHash sgo.Hash) (*cba.UpdateBidReceipt, error) {
@@ -22,7 +21,7 @@ func (brs BidReceiptSettings) Update(txHash sgo.Hash) (*cba.UpdateBidReceipt, er
 	b.SetControllerAccount(brs.Controller)
 	b.SetPayoutAccount(brs.Payout)
 	b.SetPipelineAccount(brs.Pipeline)
-	b.SetBidderAccount(brs.Bidder.PublicKey())
+	b.SetPipelineAdminAccount(brs.PipelineAdmin.PublicKey())
 	b.SetBidReceiptAccount(brs.Receipt)
 	b.SetRentAccount(sgo.SysVarRentPubkey)
 	b.SetSystemProgramAccount(sgo.SystemProgramID)
@@ -41,7 +40,6 @@ type ReceiptSettings struct {
 	PipelineAdmin   sgo.PrivateKey
 	Payout          sgo.PublicKey
 	ValidatorMember sgo.PublicKey
-	ValidatorAdmin  sgo.PublicKey
 }
 
 func (brs ReceiptSettings) Update(txHash sgo.Hash) (*cba.UpdateReceipt, error) {
@@ -56,7 +54,6 @@ func (brs ReceiptSettings) Update(txHash sgo.Hash) (*cba.UpdateReceipt, error) {
 	b.SetRentAccount(sgo.SysVarRentPubkey)
 	b.SetSystemProgramAccount(sgo.SystemProgramID)
 	b.SetValidatorManagerAccount(brs.ValidatorMember)
-	b.SetValidatorAdminAccount(brs.ValidatorAdmin)
 
 	var d [sgo.PublicKeyLength]byte
 	copy(d[:], sgo.PublicKey(txHash).Bytes())

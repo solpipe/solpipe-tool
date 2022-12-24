@@ -27,7 +27,7 @@ type internal struct {
 	bidIsFinal                bool
 	bidHasClosed              bool
 	validatorAddingHasStarted bool
-	validatorAddingIsDone     bool
+	validatorHasWithdrawn     bool
 	stakerAddingHasStarted    bool
 	stakerAddingIsDone        bool
 	cancelCrank               context.CancelFunc
@@ -35,6 +35,7 @@ type internal struct {
 	cancelValidatorSetPayout  context.CancelFunc
 	cancelValidatorWithdraw   context.CancelFunc
 	cancelStakerWithdraw      context.CancelFunc
+	keepPayoutOpen            bool
 }
 
 func loopInternal(
@@ -50,10 +51,6 @@ func loopInternal(
 	doneC := ctx.Done()
 	errorC := make(chan error, 5)
 
-	slotHome := router.Controller.SlotHome()
-
-	slotSub := slotHome.OnSlot()
-	defer slotSub.Unsubscribe()
 	//dataSub := pwd.Payout.OnData()
 	//defer dataSub.Unsubscribe()
 	//bidSub := pwd.Payout.OnBidStatus()
@@ -80,26 +77,20 @@ func loopInternal(
 	in.bidIsFinal = false
 	in.bidHasClosed = false
 	in.validatorAddingHasStarted = false
-	in.validatorAddingIsDone = false
+	in.validatorHasWithdrawn = false
 	in.stakerAddingHasStarted = false
 	in.stakerAddingIsDone = false
-
-	var isTrans string
+	in.keepPayoutOpen = true
 
 out:
-	for {
+	for in.keepPayoutOpen {
 		select {
 		case <-doneC:
 			break out
 		case req := <-internalC:
 			req(in)
 		case event := <-eventC:
-			if event.IsStateChange {
-				isTrans = "change"
-			} else {
-				isTrans = "static"
-			}
-			log.Debugf("event payout=%s  type=%s  isTransition=%s", pwd.Id.String(), event.Type, isTrans)
+			log.Debugf("event payout=%s  %s", pwd.Id.String(), event.String())
 			switch event.Type {
 			case sch.EVENT_PERIOD_PRE_START:
 				in.on_pre_start(event.IsStateChange)
@@ -125,6 +116,10 @@ out:
 				err = errors.New("unknown event")
 				break out
 			}
+		case id := <-eventHome.DeleteC:
+			eventHome.Delete(id)
+		case r := <-eventHome.ReqC:
+			eventHome.Receive(r)
 
 		}
 	}
@@ -135,21 +130,5 @@ func (in *internal) finish(err error) {
 	log.Debug(err)
 	for i := 0; i < len(in.closeSignalCList); i++ {
 		in.closeSignalCList[i] <- err
-	}
-	if in.cancelCloseBid != nil {
-		in.cancelCloseBid()
-	}
-	if in.cancelCrank != nil {
-		in.cancelCrank()
-	}
-	if in.cancelValidatorSetPayout != nil {
-		in.cancelValidatorSetPayout()
-	}
-	if in.cancelValidatorWithdraw != nil {
-		in.cancelValidatorWithdraw()
-	}
-
-	if in.cancelStakerWithdraw != nil {
-		in.cancelStakerWithdraw()
 	}
 }
