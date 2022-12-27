@@ -92,7 +92,7 @@ func (a adminExternal) SetDefault(
 	case <-doneC:
 		err = errors.New("canceled")
 	case a.agent.internalC <- func(in *internal) {
-		errorC <- in.settings_change(newReq)
+		errorC <- in.on_settings(newReq)
 	}:
 	}
 	if err != nil {

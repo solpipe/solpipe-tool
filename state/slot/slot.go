@@ -34,17 +34,13 @@ func SubscribeSlot(
 		cancel()
 		return SlotHome{}, err
 	}
-	sub, err := wsClient.SlotSubscribe()
-	if err != nil {
-		cancel()
-		return SlotHome{}, err
-	}
+
 	singleReqC := make(chan chan<- uint64)
 	go loopInternal(
 		ctx,
 		home,
 		rpcClient,
-		sub,
+		wsClient,
 		cancel,
 		id,
 		singleReqC,
@@ -76,8 +72,14 @@ func (sh SlotHome) Time() (uint64, error) {
 	}
 }
 
+const SLOT_BUFFER_SIZE = 100
+
+func allowAllSlot(x uint64) bool {
+	return true
+}
+
 func (sh SlotHome) OnSlot() dssub.Subscription[uint64] {
-	return dssub.SubscriptionRequest(sh.reqC, func(x uint64) bool { return true })
+	return dssub.SubscriptionRequestWithBufferSize(sh.reqC, SLOT_BUFFER_SIZE, allowAllSlot)
 }
 
 func (sh SlotHome) CloseSignal() <-chan struct{} {
@@ -89,42 +91,38 @@ func loopInternal(
 	ctx context.Context,
 	home *dssub.SubHome[uint64],
 	rpcClient *sgorpc.Client,
-	sub *sgows.SlotSubscription,
+	wsClient *sgows.Client,
 	cancel context.CancelFunc,
 	id uuid.UUID,
 	singleReqC <-chan chan<- uint64,
 ) {
 	var err error
+	var sub *sgows.SlotSubscription
 	defer cancel()
 	doneC := ctx.Done()
 	reqC := home.ReqC
 	deleteC := home.DeleteC
+	defer home.Close()
 
+	sub, err = wsClient.SlotSubscribe()
+	if err != nil {
+		log.Debug(err)
+		return
+	}
 	streamC := sub.RecvStream()
-	closeC := sub.CloseSignal()
+	streamErrorC := sub.CloseSignal()
 	defer sub.Unsubscribe()
 
 	log.Debug("preparing slot stream")
 	time.Sleep(5 * time.Second)
 	interval := 3 * time.Second
 	nextC := time.After(interval)
-	var lastSlot uint64
-	lastSlot = 0
-	var slot uint64
+	lastSlot := uint64(0)
+	slot := uint64(0)
+
 out:
 	for {
 		select {
-		case respC := <-singleReqC:
-			respC <- slot
-		case d := <-streamC:
-			x, ok := d.(*sgows.SlotResult)
-			if !ok {
-				break out
-			}
-			slot = x.Slot
-			sendBroadcat(home, &lastSlot, &slot)
-			lastSlot = slot
-			nextC = time.After(interval)
 		case <-nextC:
 			slot, err = rpcClient.GetSlot(ctx, sgorpc.CommitmentFinalized)
 			if err != nil {
@@ -133,12 +131,29 @@ out:
 			sendBroadcat(home, &lastSlot, &slot)
 			lastSlot = slot
 			nextC = time.After(interval)
-		case <-closeC:
-			break out
+		case respC := <-singleReqC:
+			respC <- slot
+		case d := <-streamC:
+			x, ok := d.(*sgows.SlotResult)
+			if !ok {
+				break out
+			}
+			slot = x.Slot
+			if slot%50 == 0 {
+				log.Debugf("slothome slot=%d", slot)
+			}
+			sendBroadcat(home, &lastSlot, &slot)
+			lastSlot = slot
+			nextC = time.After(interval)
+		case err = <-streamErrorC:
+			if err != nil {
+				log.Debugf("slot stream error: %s", err.Error())
+				break out
+			}
 		case <-doneC:
 			break out
 		case rC := <-reqC:
-			//log.Debugf("slot subscription (%s)  %d", id.String(), home.SubscriberCount())
+			log.Debugf("slot subscription (%s)  %d", id.String(), home.SubscriberCount())
 			home.Receive(rC)
 		case id := <-deleteC:
 			home.Delete(id)
@@ -157,7 +172,7 @@ func sendBroadcat(
 	if *slot <= *lastSlot {
 		return
 	}
-	if *slot%500 == 0 {
+	if *slot%50 == 0 {
 		log.Debugf("slot____=%d; sub count=%d", *slot, home.SubscriberCount())
 	}
 	//log.Debugf("slot____=%d; sub count=%d", *slot, home.SubscriberCount())

@@ -22,24 +22,25 @@ import (
 )
 
 type internal struct {
-	ctx              context.Context
-	errorC           chan<- error
-	closeSignalCList []chan<- error
-	config           rly.Configuration
-	configFilePath   string
-	rpc              *sgorpc.Client
-	ws               *sgows.Client
-	scriptWrapper    spt.Wrapper
-	controller       ctr.Controller
-	router           rtr.Router
-	validator        val.Validator
-	settings         *pba.ValidatorSettings
-	selectedPipeline *pipelineInfo
-	newPayoutC       chan<- payoutWithPipeline
-	deletePipelineC  chan<- sgo.PublicKey
-	pipelineM        map[string]*pipelineInfo
-	payoutM          map[string]*payoutInfo
-	eventC           chan<- sch.Event
+	ctx                context.Context
+	errorC             chan<- error
+	closeSignalCList   []chan<- error
+	config             rly.Configuration
+	configFilePath     string
+	rpc                *sgorpc.Client
+	ws                 *sgows.Client
+	scriptWrapper      spt.Wrapper
+	controller         ctr.Controller
+	router             rtr.Router
+	validator          val.Validator
+	settings           *pba.ValidatorSettings
+	selectedPipeline   *pipelineInfo
+	newPayoutC         chan<- payoutWithPipeline
+	deletePipelineC    chan<- sgo.PublicKey
+	pipelineM          map[string]*pipelineInfo
+	payoutM            map[string]*payoutInfo
+	eventC             chan<- sch.Event
+	latestPeriodFinish uint64
 }
 
 type validatorReceiptInfo struct {
@@ -88,6 +89,8 @@ func loopInternal(
 	in.settings = nil
 	in.deletePipelineC = deletePipelineC
 	in.newPayoutC = newPayoutC
+	in.pipelineM = make(map[string]*pipelineInfo)
+	in.payoutM = make(map[string]*payoutInfo)
 
 	if in.config_exists() {
 		err = in.config_load()
@@ -148,7 +151,7 @@ func (in *internal) config_load() error {
 	if err != nil {
 		return err
 	}
-	return in.settings_change(newSettings)
+	return in.on_settings(newSettings)
 }
 
 func (in *internal) config_save() error {

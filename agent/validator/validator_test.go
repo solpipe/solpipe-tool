@@ -130,7 +130,7 @@ func TestSetup(t *testing.T) {
 	}
 	select {
 	case <-ctx.Done():
-	case <-time.After(5 * time.Minute):
+	case <-time.After(120 * time.Minute):
 	case err = <-switchedC:
 	}
 
