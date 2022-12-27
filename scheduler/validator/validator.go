@@ -24,6 +24,7 @@ func (e1 external) OnEvent() dssub.Subscription[sch.Event] {
 func Schedule(
 	ctx context.Context,
 	pwd pipe.PayoutWithData,
+	pipeline pipe.Pipeline,
 	ps sch.Schedule,
 	v val.Validator,
 ) sch.Schedule {
@@ -34,6 +35,7 @@ func Schedule(
 		ctxC,
 		cancel,
 		internalC,
+		pipeline,
 		pwd,
 		ps,
 		v,

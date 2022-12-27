@@ -4,8 +4,8 @@ import (
 	"context"
 
 	sch "github.com/solpipe/solpipe-tool/scheduler"
-	schpyt "github.com/solpipe/solpipe-tool/scheduler/payout"
 	pyt "github.com/solpipe/solpipe-tool/state/payout"
+	pipe "github.com/solpipe/solpipe-tool/state/pipeline"
 	rpt "github.com/solpipe/solpipe-tool/state/receipt"
 	val "github.com/solpipe/solpipe-tool/state/validator"
 )
@@ -20,6 +20,7 @@ func loopOpenReceipt(
 	ctx context.Context,
 	cancel context.CancelFunc,
 	errorC chan<- error,
+	pipeline pipe.Pipeline,
 	rC chan<- receiptWithTransition,
 	eventC chan<- sch.Event,
 	payout pyt.Payout,
@@ -51,9 +52,10 @@ func loopOpenReceipt(
 			sch.TRIGGER_VALIDATOR_SET_PAYOUT,
 			false,
 			0,
-			schpyt.Trigger{
-				Context: ctx,
-				Payout:  payout,
+			&TriggerValidator{
+				Context:  ctx,
+				Payout:   payout,
+				Pipeline: pipeline,
 			},
 		):
 		}

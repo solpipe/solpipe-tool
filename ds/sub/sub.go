@@ -1,7 +1,6 @@
 package sub
 
 import (
-	"context"
 	"errors"
 	"fmt"
 
@@ -33,26 +32,30 @@ type ResponseChannel[T any] struct {
 
 const DEFAULT_STREAM_BUFFER_SIZE uint16 = 10
 
-func SubscriptionRequest[T any](ctx context.Context, reqC chan<- ResponseChannel[T], filterCallback func(T) bool) (Subscription[T], error) {
-	return SubscriptionRequestWithBufferSize(ctx, reqC, DEFAULT_STREAM_BUFFER_SIZE, filterCallback)
+func SubscriptionRequest[T any](reqC chan<- ResponseChannel[T], filterCallback func(T) bool) Subscription[T] {
+	return SubscriptionRequestWithBufferSize(reqC, DEFAULT_STREAM_BUFFER_SIZE, filterCallback)
 }
 
-func SubscriptionRequestWithBufferSize[T any](ctx context.Context, reqC chan<- ResponseChannel[T], bufSize uint16, filterCallback func(T) bool) (sub Subscription[T], err error) {
-	err = ctx.Err()
-	if err != nil {
-		return
-	}
-	doneC := ctx.Done()
+func SubscriptionRequestWithBufferSize[T any](reqC chan<- ResponseChannel[T], bufSize uint16, filterCallback func(T) bool) (sub Subscription[T]) {
+
 	respC := make(chan Subscription[T], 1)
 	select {
-	case <-doneC:
-		err = errors.New("canceled")
-		return
 	case reqC <- ResponseChannel[T]{
 		RespC:               respC,
 		filter:              filterCallback,
 		requestedBufferSize: bufSize,
 	}:
+	default:
+		streamC := make(chan T)
+		deleteC := make(chan int, 1)
+		errorC := make(chan error, 1)
+		errorC <- errors.New("request queue full")
+		return Subscription[T]{
+			id:      -1,
+			ErrorC:  errorC,
+			StreamC: streamC,
+			deleteC: deleteC,
+		}
 	}
 	sub = <-respC
 	return

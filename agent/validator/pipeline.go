@@ -2,6 +2,7 @@ package validator
 
 import (
 	"context"
+	"time"
 
 	log "github.com/sirupsen/logrus"
 	sch "github.com/solpipe/solpipe-tool/scheduler"
@@ -34,13 +35,14 @@ func (in *internal) on_pipeline(p pipe.Pipeline) *pipelineInfo {
 		pi.ps = schpipe.Schedule(in.ctx, in.router, p, 0, fakeLookAheadC)
 		var ctxC context.Context
 		ctxC, pi.cancel = context.WithCancel(in.ctx)
+		newPayoutC := in.newPayoutC
 		go loopPipeline(
 			ctxC,
 			in.errorC,
 			in.controller,
 			pi.p,
 			pi.ps,
-			in.newPayoutC,
+			newPayoutC,
 			lookAheadC,
 		)
 		return pi
@@ -97,6 +99,7 @@ out:
 			break out
 		case err = <-slotSub.ErrorC:
 			slotSub = sh.OnSlot()
+			log.Debugf("renewed slot sub for pipeline=%s", pi.pipeline.Id.String())
 		case pi.slot = <-slotSub.StreamC:
 			if pi.slot%10 == 0 {
 				log.Debugf("pipeline=%s slot=%d", pi.pipeline.Id.String(), pi.slot)
@@ -108,6 +111,7 @@ out:
 		case pwd := <-newPwdStreamC:
 			pi.on_payout(pwd)
 		case pi.lookAhead = <-lookaheadC:
+			log.Debugf("pipeline=%s updated look ahead=%d", pi.pipeline.Id.String(), pi.lookAhead)
 		}
 	}
 
@@ -120,6 +124,7 @@ out:
 }
 
 func (pi *listenPipelineInternal) on_payout(pwd pipe.PayoutWithData) {
+	startTime := time.Now()
 	log.Debugf("on_payout payout=%s", pwd.Id.String())
 	doneC := pi.ctx.Done()
 	if pi.slot+pi.lookAhead < pwd.Data.Period.Start {
@@ -146,6 +151,7 @@ func (pi *listenPipelineInternal) on_payout(pwd pipe.PayoutWithData) {
 		}:
 		}
 	}
+	log.Debugf("on_payout diff=%d", time.Now().Unix()-startTime.Unix())
 
 }
 

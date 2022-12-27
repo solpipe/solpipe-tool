@@ -2,7 +2,6 @@ package validator
 
 import (
 	"context"
-	"errors"
 
 	log "github.com/sirupsen/logrus"
 	cba "github.com/solpipe/cba"
@@ -16,6 +15,7 @@ import (
 
 type internal struct {
 	ctx                      context.Context
+	pipeline                 pipe.Pipeline
 	errorC                   chan<- error
 	eventC                   chan<- sch.Event
 	closeSignalCList         []chan<- error
@@ -46,6 +46,7 @@ func loopInternal(
 	ctx context.Context,
 	cancel context.CancelFunc,
 	internalC <-chan func(*internal),
+	pipeline pipe.Pipeline,
 	pwd pipe.PayoutWithData,
 	ps sch.Schedule,
 	v val.Validator,
@@ -69,6 +70,7 @@ func loopInternal(
 
 	in := new(internal)
 	in.ctx = ctx
+	in.pipeline = pipeline
 	in.closeSignalCList = make([]chan<- error, 0)
 	in.trackHome = trackHome
 	defer trackHome.Close()
@@ -91,6 +93,7 @@ func loopInternal(
 		ctxValidatorSetPayout,
 		in.cancelValidatorSetPayout,
 		in.errorC,
+		in.pipeline,
 		rC,
 		in.eventC,
 		in.pwd.Payout,
@@ -152,6 +155,7 @@ func (in *internal) on_payout_event(event sch.Event) {
 		}
 		in.errorC <- nil
 	default:
+		log.Debugf("on_payout_event unknown event: %s", event.String())
 	}
 }
 
@@ -166,9 +170,17 @@ func (in *internal) on_receipt_event(event sch.Event) {
 		in.run_validator_withdraw(event.IsStateChange)
 	case sch.EVENT_STAKER_HAVE_WITHDRAWN:
 		in.run_validator_withdraw(event.IsStateChange)
+	case sch.TRIGGER_VALIDATOR_SET_PAYOUT:
+		in.run_validator_set(event)
 	default:
-		in.errorC <- errors.New("unknown event")
+		log.Debugf("on_receipt_event unknown event: %s", event.String())
+		//in.errorC <- fmt.Errorf("on_receipt_event unknown event: %s", event.String())
 	}
+}
+
+func (in *internal) run_validator_set(event sch.Event) {
+	log.Debugf("setting validator")
+	in.trackHome.Broadcast(event)
 }
 
 func (in *internal) run_validator_withdraw(isStateChange bool) {
@@ -183,6 +195,7 @@ func (in *internal) run_validator_withdraw(isStateChange bool) {
 			Payout:    in.pwd.Payout,
 			Validator: in.v,
 			Receipt:   in.receipt,
+			Pipeline:  in.pipeline,
 		},
 	))
 }

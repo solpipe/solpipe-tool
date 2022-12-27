@@ -98,5 +98,13 @@ func (a adminExternal) SetDefault(
 	if err != nil {
 		return nil, err
 	}
+	select {
+	case <-doneC:
+		err = errors.New("canceled")
+	case err = <-errorC:
+	}
+	if err != nil {
+		return nil, err
+	}
 	return req, nil
 }
