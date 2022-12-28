@@ -9,14 +9,11 @@ import (
 	sgorpc "github.com/SolmateDev/solana-go/rpc"
 	sgows "github.com/SolmateDev/solana-go/rpc/ws"
 	log "github.com/sirupsen/logrus"
-	cba "github.com/solpipe/cba"
 	pba "github.com/solpipe/solpipe-tool/proto/admin"
 	rly "github.com/solpipe/solpipe-tool/proxy/relay"
 	sch "github.com/solpipe/solpipe-tool/scheduler"
 	spt "github.com/solpipe/solpipe-tool/script"
 	ctr "github.com/solpipe/solpipe-tool/state/controller"
-	pipe "github.com/solpipe/solpipe-tool/state/pipeline"
-	rpt "github.com/solpipe/solpipe-tool/state/receipt"
 	rtr "github.com/solpipe/solpipe-tool/state/router"
 	val "github.com/solpipe/solpipe-tool/state/validator"
 )
@@ -41,14 +38,6 @@ type internal struct {
 	payoutM            map[string]*payoutInfo
 	eventC             chan<- sch.Event
 	latestPeriodFinish uint64
-}
-
-type validatorReceiptInfo struct {
-	rsf      *cba.ReceiptWithStartFinish
-	ctx      context.Context
-	cancel   context.CancelFunc
-	rwd      rpt.ReceiptWithData
-	pipeline pipe.Pipeline
 }
 
 const START_BUFFER = uint64(10)

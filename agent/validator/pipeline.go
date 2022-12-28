@@ -2,21 +2,21 @@ package validator
 
 import (
 	"context"
-	"time"
 
 	log "github.com/sirupsen/logrus"
 	sch "github.com/solpipe/solpipe-tool/scheduler"
+	schpyt "github.com/solpipe/solpipe-tool/scheduler/payout"
 	schpipe "github.com/solpipe/solpipe-tool/scheduler/pipeline"
-	ctr "github.com/solpipe/solpipe-tool/state/controller"
 	pipe "github.com/solpipe/solpipe-tool/state/pipeline"
+	rtr "github.com/solpipe/solpipe-tool/state/router"
 	slt "github.com/solpipe/solpipe-tool/state/slot"
 )
 
 type pipelineInfo struct {
-	p          pipe.Pipeline
-	ps         sch.Schedule
-	cancel     context.CancelFunc
-	lookAheadC chan<- uint64
+	p                pipe.Pipeline
+	pipelineSchedule sch.Schedule
+	cancel           context.CancelFunc
+	lookAheadC       chan<- uint64
 }
 
 func (in *internal) on_pipeline(p pipe.Pipeline) *pipelineInfo {
@@ -32,16 +32,16 @@ func (in *internal) on_pipeline(p pipe.Pipeline) *pipelineInfo {
 		fakeLookAheadC <- 0
 		lookAheadC := make(chan uint64, 1)
 		pi.lookAheadC = lookAheadC
-		pi.ps = schpipe.Schedule(in.ctx, in.router, p, 0, fakeLookAheadC)
+		pi.pipelineSchedule = schpipe.Schedule(in.ctx, in.router, p, 0, fakeLookAheadC)
 		var ctxC context.Context
 		ctxC, pi.cancel = context.WithCancel(in.ctx)
 		newPayoutC := in.newPayoutC
 		go loopPipeline(
 			ctxC,
 			in.errorC,
-			in.controller,
+			in.router,
 			pi.p,
-			pi.ps,
+			pi.pipelineSchedule,
 			newPayoutC,
 			lookAheadC,
 		)
@@ -52,6 +52,7 @@ func (in *internal) on_pipeline(p pipe.Pipeline) *pipelineInfo {
 type listenPipelineInternal struct {
 	ctx        context.Context
 	errorC     chan<- error
+	router     rtr.Router
 	pipeline   pipe.Pipeline
 	ps         sch.Schedule
 	newPayoutC chan<- payoutWithPipeline
@@ -64,7 +65,7 @@ type listenPipelineInternal struct {
 func loopPipeline(
 	ctx context.Context,
 	errorC chan<- error,
-	controller ctr.Controller,
+	router rtr.Router,
 	pipeline pipe.Pipeline,
 	ps sch.Schedule,
 	newPayoutC chan<- payoutWithPipeline,
@@ -73,13 +74,14 @@ func loopPipeline(
 	var err error
 	doneC := ctx.Done()
 	log.Debugf("on listen pipeline=%s", pipeline.Id.String())
-
+	controller := router.Controller
 	sh := controller.SlotHome()
 	slotSub := sh.OnSlot()
 	defer slotSub.Unsubscribe()
 
 	pi := new(listenPipelineInternal)
 	pi.ctx = ctx
+	pi.router = router
 	pi.errorC = errorC
 	pi.newPayoutC = newPayoutC
 	pi.sh = sh
@@ -124,7 +126,8 @@ out:
 }
 
 func (pi *listenPipelineInternal) on_payout(pwd pipe.PayoutWithData) {
-	startTime := time.Now()
+
+	payoutSchedule := schpyt.Schedule(pi.ctx, pi.router, pwd)
 	log.Debugf("on_payout payout=%s", pwd.Id.String())
 	doneC := pi.ctx.Done()
 	if pi.slot+pi.lookAhead < pwd.Data.Period.Start {
@@ -134,9 +137,10 @@ func (pi *listenPipelineInternal) on_payout(pwd pipe.PayoutWithData) {
 			pi.errorC,
 			pi.newPayoutC,
 			payoutWithPipeline{
-				pwd:      pwd,
-				pipeline: pi.pipeline,
-				ps:       pi.ps,
+				pwd:              pwd,
+				pipeline:         pi.pipeline,
+				pipelineSchedule: pi.ps,
+				payoutSchedule:   payoutSchedule,
 			},
 			pi.sh,
 			pi.slot+delta,
@@ -145,13 +149,13 @@ func (pi *listenPipelineInternal) on_payout(pwd pipe.PayoutWithData) {
 		select {
 		case <-doneC:
 		case pi.newPayoutC <- payoutWithPipeline{
-			pwd:      pwd,
-			pipeline: pi.pipeline,
-			ps:       pi.ps,
+			pwd:              pwd,
+			pipeline:         pi.pipeline,
+			pipelineSchedule: pi.ps,
+			payoutSchedule:   payoutSchedule,
 		}:
 		}
 	}
-	log.Debugf("on_payout diff=%d", time.Now().Unix()-startTime.Unix())
 
 }
 

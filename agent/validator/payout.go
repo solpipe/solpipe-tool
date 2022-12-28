@@ -10,9 +10,10 @@ import (
 )
 
 type payoutWithPipeline struct {
-	pipeline pipe.Pipeline
-	pwd      pipe.PayoutWithData
-	ps       sch.Schedule
+	pipeline         pipe.Pipeline
+	pwd              pipe.PayoutWithData
+	pipelineSchedule sch.Schedule
+	payoutSchedule   sch.Schedule
 }
 
 type payoutInfo struct {
@@ -39,7 +40,7 @@ func (in *internal) on_payout(pwp payoutWithPipeline) {
 	in.payoutM[pwp.pwd.Id.String()] = pi
 	pi.pwp = pwp
 	ctxC, pi.cancel = context.WithCancel(in.ctx)
-	pi.s = schval.Schedule(ctxC, pwp.pwd, pwp.pipeline, pwp.ps, in.validator)
+	pi.s = schval.Schedule(ctxC, pwp.pwd, pwp.pipeline, pwp.pipelineSchedule, in.validator)
 	go loopPayout(ctxC, in.eventC, in.errorC, *pi)
 }
 

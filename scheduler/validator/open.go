@@ -3,6 +3,7 @@ package validator
 import (
 	"context"
 
+	log "github.com/sirupsen/logrus"
 	sch "github.com/solpipe/solpipe-tool/scheduler"
 	pyt "github.com/solpipe/solpipe-tool/state/payout"
 	pipe "github.com/solpipe/solpipe-tool/state/pipeline"
@@ -35,6 +36,7 @@ func loopOpenReceipt(
 	payoutId := payout.Id
 	rwd, present := v.ReceiptByPayoutId(payoutId)
 	if present {
+		log.Debug("sending receipt back - 1")
 		select {
 		case <-doneC:
 			return
@@ -45,6 +47,7 @@ func loopOpenReceipt(
 		}
 	} else {
 		// no receipt has been created yet
+		log.Debug("sending trigger validator set payout")
 		select {
 		case <-doneC:
 			return
@@ -67,6 +70,7 @@ out:
 			break out
 		case <-clockPeriodStartC:
 			// period started before we received a receipt, so exit the loop
+			log.Debug("lock period start")
 			select {
 			case <-doneC:
 			case errorC <- nil:
@@ -75,7 +79,9 @@ out:
 		case err = <-sub.ErrorC:
 			break out
 		case rwd = <-sub.StreamC:
+			log.Debugf("receipt=%s for payout=%s vs required payout=%s", rwd.Receipt.Id.String(), rwd.Data.Payout.String(), payoutId.String())
 			if rwd.Data.Payout.Equals(payoutId) {
+				log.Debug("sending receipt back - 2")
 				select {
 				case <-doneC:
 					break out
@@ -89,6 +95,7 @@ out:
 		}
 	}
 
+	log.Debug("exiting open receipt loop")
 	if err != nil {
 		select {
 		case errorC <- err:

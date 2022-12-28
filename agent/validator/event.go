@@ -86,6 +86,7 @@ func runValidatorSetPayout(
 	if err != nil {
 		return err
 	}
+	log.Debug("successfully set validator to payout")
 	return nil
 }
 

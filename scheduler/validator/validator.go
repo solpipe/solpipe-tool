@@ -25,7 +25,8 @@ func Schedule(
 	ctx context.Context,
 	pwd pipe.PayoutWithData,
 	pipeline pipe.Pipeline,
-	ps sch.Schedule,
+	pipelineSchedule sch.Schedule,
+	payoutSchedule sch.Schedule,
 	v val.Validator,
 ) sch.Schedule {
 	trackHome := dssub.CreateSubHome[sch.Event]()
@@ -37,7 +38,8 @@ func Schedule(
 		internalC,
 		pipeline,
 		pwd,
-		ps,
+		pipelineSchedule,
+		payoutSchedule,
 		v,
 		trackHome,
 	)

@@ -94,16 +94,22 @@ out:
 			switch event.Type {
 			case sch.EVENT_PERIOD_PRE_START:
 				in.on_pre_start(event.IsStateChange)
+				in.eventHome.Broadcast(event)
 			case sch.EVENT_PERIOD_START:
 				in.on_start(event.IsStateChange)
+				in.eventHome.Broadcast(event)
 			case sch.EVENT_PERIOD_FINISH:
 				in.on_finish(event.IsStateChange)
+				in.eventHome.Broadcast(event)
 			case sch.EVENT_DELAY_CLOSE_PAYOUT:
 				in.on_clock_close_payout(event.IsStateChange)
+				in.eventHome.Broadcast(event)
 			case sch.EVENT_BID_CLOSED:
 				in.on_bid_closed(event.IsStateChange)
+				in.eventHome.Broadcast(event)
 			case sch.EVENT_BID_FINAL:
 				in.on_bid_final(event.IsStateChange)
+				in.eventHome.Broadcast(event)
 			case sch.EVENT_VALIDATOR_IS_ADDING:
 				in.on_validator_is_adding(event.IsStateChange)
 			case sch.EVENT_VALIDATOR_HAVE_WITHDRAWN:
