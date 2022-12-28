@@ -5,6 +5,8 @@ import (
 	"errors"
 	"os"
 	"time"
+
+	log "github.com/sirupsen/logrus"
 )
 
 // ignore the ctx in script
@@ -157,6 +159,8 @@ func (w Wrapper) Send(
 	case <-parentDoneC:
 		return errors.New("parent canceled")
 	case <-doneC:
+		replay.Count = replay.Max + 1
+		log.Debug("wrap context canceled - 1")
 		return nil
 	case w.internalC <- func(in *internal) (CallbackReplay, error) {
 		replay.Count++
@@ -172,6 +176,8 @@ func (w Wrapper) Send(
 		return errors.New("parent canceled")
 	case <-doneC:
 		// handle this error somewhere else
+		replay.Count = replay.Max + 1
+		log.Debug("wrap context canceled - 2")
 		return nil //errors.New("canceled")
 	case err := <-errorC:
 		return err

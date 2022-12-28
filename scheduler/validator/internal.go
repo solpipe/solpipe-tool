@@ -122,7 +122,7 @@ out:
 			req(in)
 		case rwd := <-rC:
 			in.on_receipt(rwd)
-		case event = <-receiptEventC:
+		case event = <-receiptEventC: // from in.eventC
 			in.on_receipt_event(event)
 		}
 	}
