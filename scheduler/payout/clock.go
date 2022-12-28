@@ -3,6 +3,7 @@ package payout
 import (
 	"context"
 
+	log "github.com/sirupsen/logrus"
 	cba "github.com/solpipe/cba"
 	sch "github.com/solpipe/solpipe-tool/scheduler"
 	ctr "github.com/solpipe/solpipe-tool/state/controller"
@@ -45,6 +46,7 @@ out:
 		case slot = <-slotSub.StreamC:
 
 			if !sentStart && start <= slot {
+				log.Debug("SENDING+++++ EVENT_PERIOD_START")
 				sentStart = true
 				select {
 				case <-doneC:
@@ -52,6 +54,7 @@ out:
 				case eventC <- sch.Create(sch.EVENT_PERIOD_START, isStartStateTransition, slot):
 				}
 			} else if !isStartStateTransition {
+				log.Debug("SENDING+++++ EVENT_PERIOD_PRE_START")
 				isStartStateTransition = true
 				select {
 				case <-doneC:
@@ -60,6 +63,7 @@ out:
 				}
 			}
 			if !sentFinish && finish <= slot {
+				log.Debug("SENDING+++++ EVENT_PERIOD_FINISH")
 				sentFinish = true
 				select {
 				case <-doneC:

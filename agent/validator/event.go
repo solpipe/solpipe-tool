@@ -41,10 +41,19 @@ func (in *internal) run_validator_set_payout(event sch.Event) error {
 	validatorId := in.validator.Id
 	validatorAdmin := in.config.Admin
 
+	log.Debugf(
+		"validator set payout: (%s;%s;%s;%s;%s)",
+		controllerId.String(),
+		payoutId.String(),
+		pipelineId.String(),
+		validatorId.String(),
+		validatorAdmin.PublicKey().String(),
+	)
+
 	in.scriptWrapper.SendDetached(
 		util.MergeCtx(in.ctx, trigger.Context),
 		MAX_TRIES_VALIDATOR_SET_PAYOUT,
-		30*time.Second,
+		5*time.Second,
 		func(script *spt.Script) error {
 			return runValidatorSetPayout(
 				script,
@@ -84,6 +93,7 @@ func runValidatorSetPayout(
 	}
 	err = script.FinishTx(true)
 	if err != nil {
+		log.Debugf("run set validator failed: %s", err.Error())
 		return err
 	}
 	log.Debug("successfully set validator to payout")

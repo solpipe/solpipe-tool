@@ -157,6 +157,7 @@ func (w Wrapper) Send(
 	case <-parentDoneC:
 		return errors.New("parent canceled")
 	case <-doneC:
+		return nil
 	case w.internalC <- func(in *internal) (CallbackReplay, error) {
 		replay.Count++
 		in.script.ctx = ctx

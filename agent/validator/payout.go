@@ -17,9 +17,9 @@ type payoutWithPipeline struct {
 }
 
 type payoutInfo struct {
-	pwp    payoutWithPipeline
-	s      sch.Schedule
-	cancel context.CancelFunc
+	pwp               payoutWithPipeline
+	validatorSchedule sch.Schedule
+	cancel            context.CancelFunc
 }
 
 func (in *internal) on_payout(pwp payoutWithPipeline) {
@@ -40,7 +40,14 @@ func (in *internal) on_payout(pwp payoutWithPipeline) {
 	in.payoutM[pwp.pwd.Id.String()] = pi
 	pi.pwp = pwp
 	ctxC, pi.cancel = context.WithCancel(in.ctx)
-	pi.s = schval.Schedule(ctxC, pwp.pwd, pwp.pipeline, pwp.pipelineSchedule, in.validator)
+	pi.validatorSchedule = schval.Schedule(
+		ctxC,
+		pwp.pwd,
+		pwp.pipeline,
+		pwp.pipelineSchedule,
+		pwp.payoutSchedule,
+		in.validator,
+	)
 	go loopPayout(ctxC, in.eventC, in.errorC, *pi)
 }
 
@@ -53,7 +60,7 @@ func loopPayout(
 
 	var err error
 	doneC := ctx.Done()
-	sub := pi.s.OnEvent()
+	sub := pi.validatorSchedule.OnEvent()
 	defer sub.Unsubscribe()
 	var event sch.Event
 out:
