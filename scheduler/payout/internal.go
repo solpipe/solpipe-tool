@@ -116,6 +116,9 @@ out:
 				err = errors.New("unknown event")
 				break out
 			}
+			if !event.IsTrigger() {
+				in.eventHome.Broadcast(event)
+			}
 		case id := <-eventHome.DeleteC:
 			eventHome.Delete(id)
 		case r := <-eventHome.ReqC:

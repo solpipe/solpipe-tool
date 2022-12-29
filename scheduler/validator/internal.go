@@ -14,24 +14,26 @@ import (
 )
 
 type internal struct {
-	ctx                      context.Context
-	pipeline                 pipe.Pipeline
-	errorC                   chan<- error
-	eventC                   chan<- sch.Event
-	closeSignalCList         []chan<- error
-	clockPeriodStartC        chan<- bool
-	clockPeriodPostCloseC    chan bool
-	trackHome                *dssub.SubHome[sch.Event]
-	pwd                      pipe.PayoutWithData
-	v                        val.Validator
-	data                     cba.ValidatorManager
-	receiptData              *cba.Receipt
-	receipt                  rpt.Receipt
-	cancelValidatorSetPayout context.CancelFunc
-	cancelStake              context.CancelFunc
-	cancelValidatorWithraw   context.CancelFunc
-	validatorHasAdded        bool
-	validatorHasWithdrawn    bool
+	ctx                           context.Context
+	pipeline                      pipe.Pipeline
+	errorC                        chan<- error
+	eventC                        chan<- sch.Event
+	closeSignalCList              []chan<- error
+	clockPeriodStartC             chan<- bool
+	clockPeriodPostCloseC         chan bool
+	trackHome                     *dssub.SubHome[sch.Event]
+	pwd                           pipe.PayoutWithData
+	validator                     val.Validator
+	data                          cba.ValidatorManager
+	receiptData                   *cba.Receipt
+	receipt                       rpt.Receipt
+	cancelValidatorSetPayout      context.CancelFunc
+	cancelStake                   context.CancelFunc
+	ctxValidatorWithraw           context.Context
+	cancelValidatorWithraw        context.CancelFunc
+	isValidatorWithdrawTransition bool
+	validatorHasAdded             bool
+	validatorHasWithdrawn         bool
 }
 
 func (in *internal) Payout() pyt.Payout {
@@ -39,7 +41,7 @@ func (in *internal) Payout() pyt.Payout {
 }
 
 func (in *internal) Validator() val.Validator {
-	return in.v
+	return in.validator
 }
 
 func loopInternal(
@@ -56,7 +58,7 @@ func loopInternal(
 	defer cancel()
 
 	errorC := make(chan error, 1)
-	rC := make(chan receiptWithTransition)
+	receiptC := make(chan receiptWithTransition)
 	doneC := ctx.Done()
 	receiptEventC := make(chan sch.Event)
 	clockPeriodStartC := make(chan bool, 1)
@@ -77,10 +79,11 @@ func loopInternal(
 	defer trackHome.Close()
 	in.errorC = errorC
 	in.eventC = receiptEventC
+	in.isValidatorWithdrawTransition = false
 	in.clockPeriodStartC = clockPeriodStartC
 	in.clockPeriodPostCloseC = clockPeriodPostCloseC
 	in.pwd = pwd
-	in.v = v
+	in.validator = v
 	in.validatorHasAdded = false
 	in.validatorHasWithdrawn = false
 
@@ -88,15 +91,19 @@ func loopInternal(
 	if err != nil {
 		in.errorC <- err
 	}
+	if in.pwd.Id.String() == "B2weAoPHiLYtANsEPXzsmDrKjoNB1bRs2QZNXat64LiF" {
+		log.Debugf("got target")
+	}
 
 	var ctxValidatorSetPayout context.Context
 	ctxValidatorSetPayout, in.cancelValidatorSetPayout = context.WithCancel(ctx)
+	log.Debugf("open receipt payout=%s", in.pwd.Id.String())
 	go loopOpenReceipt(
 		ctxValidatorSetPayout,
 		in.cancelValidatorSetPayout,
 		in.errorC,
 		in.pipeline,
-		rC,
+		receiptC,
 		in.pwd.Payout,
 		v,
 		clockPeriodStartC,
@@ -119,7 +126,7 @@ out:
 			in.on_payout_event(event)
 		case req := <-internalC:
 			req(in)
-		case rwd := <-rC:
+		case rwd := <-receiptC:
 			in.on_receipt(rwd)
 		case event = <-receiptEventC:
 			in.on_receipt_event(event)
@@ -152,3 +159,15 @@ func (in *internal) run_validator_withdraw(isStateChange bool) {
 		},
 	))
 }*/
+
+func (in *internal) trigger(ctx context.Context) *TriggerValidator {
+	log.Debugf("receipt=%+v", in.receipt)
+	log.Debugf("receipt id=%s", in.receipt.Id.String())
+	return &TriggerValidator{
+		Context:   ctx,
+		Validator: in.validator,
+		Pipeline:  in.pipeline,
+		Payout:    in.pwd.Payout,
+		Receipt:   in.receipt,
+	}
+}

@@ -3,7 +3,6 @@ package validator
 import (
 	"context"
 
-	log "github.com/sirupsen/logrus"
 	sch "github.com/solpipe/solpipe-tool/scheduler"
 	schval "github.com/solpipe/solpipe-tool/scheduler/validator"
 	pipe "github.com/solpipe/solpipe-tool/state/pipeline"
@@ -23,7 +22,7 @@ type payoutInfo struct {
 }
 
 func (in *internal) on_payout(pwp payoutWithPipeline) {
-	log.Debugf("on payout=%s", pwp.pwd.Id.String())
+
 	_, present := in.payoutM[pwp.pwd.Id.String()]
 	if present {
 		return
@@ -31,10 +30,7 @@ func (in *internal) on_payout(pwp payoutWithPipeline) {
 	in.on_pipeline(pwp.pipeline)
 	var ctxC context.Context
 	finish := pwp.pwd.Data.Period.Start + pwp.pwd.Data.Period.Length - 1
-	if finish <= in.latestPeriodFinish {
-		log.Debugf("payout=%s finish is too late (%d vs %d)", pwp.pwd.Id.String(), finish, in.latestPeriodFinish)
-		return
-	}
+
 	in.latestPeriodFinish = finish
 
 	pi := new(payoutInfo)

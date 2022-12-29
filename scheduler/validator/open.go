@@ -21,7 +21,7 @@ func loopOpenReceipt(
 	cancel context.CancelFunc,
 	errorC chan<- error,
 	pipeline pipe.Pipeline,
-	rC chan<- receiptWithTransition,
+	receiptC chan<- receiptWithTransition,
 	payout pyt.Payout,
 	v val.Validator,
 	clockPeriodStartC <-chan bool,
@@ -32,17 +32,19 @@ func loopOpenReceipt(
 	sub := v.OnReceipt()
 	defer sub.Unsubscribe()
 	payoutId := payout.Id
+
 	rwd, present := v.ReceiptByPayoutId(payoutId)
 	if present {
 		log.Debug("sending receipt back - 1")
 		select {
 		case <-doneC:
 			return
-		case rC <- receiptWithTransition{
+		case receiptC <- receiptWithTransition{
 			rwd:           rwd,
 			isStateChange: false,
 		}:
 		}
+		return
 	}
 	// we used to send a trigger validator_set_payout here, but decided to send it instead from the payout schedule
 out:
@@ -67,7 +69,7 @@ out:
 				select {
 				case <-doneC:
 					break out
-				case rC <- receiptWithTransition{
+				case receiptC <- receiptWithTransition{
 					rwd:           rwd,
 					isStateChange: true,
 				}:

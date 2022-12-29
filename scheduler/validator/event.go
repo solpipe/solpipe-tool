@@ -42,13 +42,20 @@ func (in *internal) on_payout_event(event sch.Event) {
 		in.trackHome.Broadcast(event)
 	case sch.TRIGGER_VALIDATOR_WITHDRAW_RECEIPT:
 		log.Debugf("withdrawing validator")
-		in.trackHome.Broadcast(event)
+		if in.cancelValidatorWithraw == nil {
+			in.ctxValidatorWithraw, in.cancelValidatorWithraw = context.WithCancel(in.ctx)
+			in.isValidatorWithdrawTransition = event.IsStateChange
+			in.run_validator_withdraw()
+		} else {
+			in.errorC <- errors.New("duplicate withdraw trigger")
+		}
 	case sch.EVENT_PERIOD_START:
 		log.Debug("event_period_start")
-		if in.cancelValidatorSetPayout != nil {
-			in.cancelValidatorSetPayout()
-			in.cancelValidatorSetPayout = nil
-		}
+		// do not cancel context here or else we will never get a receipt
+		//if in.cancelValidatorSetPayout != nil {
+		//	in.cancelValidatorSetPayout()
+		//	in.cancelValidatorSetPayout = nil
+		//}
 		if in.receiptData == nil {
 			// we have not received receipt data
 			in.clockPeriodStartC <- event.IsStateChange
@@ -58,6 +65,21 @@ func (in *internal) on_payout_event(event sch.Event) {
 	default:
 		log.Debugf("on_payout_event unknown event: %s", event.String())
 	}
+}
+
+func (in *internal) run_validator_withdraw() {
+	if in.receiptData == nil {
+		return
+	}
+	if in.ctxValidatorWithraw == nil {
+		return
+	}
+	in.trackHome.Broadcast(sch.CreateWithPayload(
+		sch.TRIGGER_VALIDATOR_WITHDRAW_RECEIPT,
+		in.isValidatorWithdrawTransition,
+		0,
+		in.trigger(in.ctxValidatorWithraw),
+	))
 }
 
 // track stakers and validator receipt withdrawal

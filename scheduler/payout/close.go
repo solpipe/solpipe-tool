@@ -87,7 +87,8 @@ out:
 			log.Debugf("payout=%s post time!", pei.pwd.Id.String())
 			if !pei.postDelayClockPast {
 				pei.on_post_delay_close(isStateTransition)
-				if !pei.validatorHasWithdrawn {
+				if !pei.validatorHasAdded && newData.ValidatorCount == 0 {
+					// we are here because no validator added itself to this payout
 					pei.on_validator_has_withdrawn(isStateTransition)
 				}
 			}
@@ -122,7 +123,7 @@ func (pei *payoutEventInfo) on_post_delay_close(isStateTransition bool) {
 
 func (pei *payoutEventInfo) on_validator_has_withdrawn(isStateTransition bool) {
 	doneC := pei.ctx.Done()
-	log.Debugf("payout=%s validator has withdrawn", pei.pwd.Id.String())
+	log.Debugf("pei payout=%s validator has withdrawn", pei.pwd.Id.String())
 	pei.validatorHasWithdrawn = true
 	select {
 	case <-doneC:

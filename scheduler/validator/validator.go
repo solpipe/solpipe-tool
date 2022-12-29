@@ -3,6 +3,7 @@ package validator
 import (
 	"context"
 
+	log "github.com/sirupsen/logrus"
 	dssub "github.com/solpipe/solpipe-tool/ds/sub"
 	sch "github.com/solpipe/solpipe-tool/scheduler"
 	pipe "github.com/solpipe/solpipe-tool/state/pipeline"
@@ -29,6 +30,9 @@ func Schedule(
 	payoutSchedule sch.Schedule,
 	v val.Validator,
 ) sch.Schedule {
+	if pwd.Id.String() == "B2weAoPHiLYtANsEPXzsmDrKjoNB1bRs2QZNXat64LiF" {
+		log.Debugf("got target")
+	}
 	trackHome := dssub.CreateSubHome[sch.Event]()
 	ctxC, cancel := context.WithCancel(ctx)
 	internalC := make(chan func(*internal))

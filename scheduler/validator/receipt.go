@@ -34,6 +34,7 @@ func (in *internal) on_receipt(rt receiptWithTransition) {
 		in.eventC,
 		in.clockPeriodPostCloseC,
 	)
+	in.run_validator_withdraw()
 }
 
 // events: EVENT_STAKER_IS_ADDING, EVENT_STAKER_HAVE_WITHDRAWN(_EMPTY), EVENT_VALIDATOR_HAVE_WITHDRAWN
