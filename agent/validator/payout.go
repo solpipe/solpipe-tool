@@ -23,6 +23,7 @@ type payoutInfo struct {
 }
 
 func (in *internal) on_payout(pwp payoutWithPipeline) {
+	log.Debugf("on payout=%s", pwp.pwd.Id.String())
 	_, present := in.payoutM[pwp.pwd.Id.String()]
 	if present {
 		return

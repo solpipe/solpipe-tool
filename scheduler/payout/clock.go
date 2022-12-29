@@ -26,6 +26,7 @@ func loopClock(
 	doneC := ctx.Done()
 	slotSub := controller.SlotHome().OnSlot()
 	defer slotSub.Unsubscribe()
+	sentPreStart := false
 	start := data.Period.Start
 	sentStart := false
 	isStartStateTransition := false
@@ -54,8 +55,11 @@ out:
 				case eventC <- sch.Create(sch.EVENT_PERIOD_START, isStartStateTransition, slot):
 				}
 			} else if !isStartStateTransition {
-				log.Debug("SENDING+++++ EVENT_PERIOD_PRE_START")
 				isStartStateTransition = true
+			}
+			if !sentPreStart && isStartStateTransition && slot < start {
+				sentPreStart = true
+				log.Debug("SENDING+++++ EVENT_PERIOD_PRE_START")
 				select {
 				case <-doneC:
 					break out

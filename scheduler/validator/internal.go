@@ -97,7 +97,6 @@ func loopInternal(
 		in.errorC,
 		in.pipeline,
 		rC,
-		in.eventC,
 		in.pwd.Payout,
 		v,
 		clockPeriodStartC,
@@ -122,7 +121,7 @@ out:
 			req(in)
 		case rwd := <-rC:
 			in.on_receipt(rwd)
-		case event = <-receiptEventC: // from in.eventC
+		case event = <-receiptEventC:
 			in.on_receipt_event(event)
 		}
 	}
@@ -136,62 +135,7 @@ func (in *internal) finish(err error) {
 	}
 }
 
-func (in *internal) on_payout_event(event sch.Event) {
-	log.Debugf("on_payout_event: %s", event.String())
-	switch event.Type {
-	case sch.EVENT_PERIOD_START:
-		log.Debug("event_period_start")
-		if in.cancelValidatorSetPayout != nil {
-			in.cancelValidatorSetPayout()
-			in.cancelValidatorSetPayout = nil
-		}
-		if in.receiptData == nil {
-			// we have not received receipt data
-			in.clockPeriodStartC <- event.IsStateChange
-		}
-	//case sch.EVENT_PERIOD_FINISH:
-
-	case sch.EVENT_DELAY_CLOSE_PAYOUT:
-		in.clockPeriodPostCloseC <- event.IsStateChange
-	case sch.EVENT_VALIDATOR_HAVE_WITHDRAWN:
-		// exit the loop
-		if in.cancelValidatorWithraw != nil {
-			in.cancelValidatorWithraw()
-			in.cancelValidatorWithraw = nil
-		}
-		in.errorC <- nil
-	default:
-		log.Debugf("on_payout_event unknown event: %s", event.String())
-	}
-}
-
-func (in *internal) on_receipt_event(event sch.Event) {
-	log.Debugf("on_receipt_event: %s", event.String())
-	if event.Type != sch.TRIGGER_VALIDATOR_SET_PAYOUT {
-		if in.cancelValidatorSetPayout != nil {
-			in.cancelValidatorSetPayout()
-		}
-	}
-	switch event.Type {
-	case sch.TRIGGER_VALIDATOR_SET_PAYOUT:
-		in.run_validator_set(event)
-	case sch.EVENT_STAKER_IS_ADDING:
-		in.trackHome.Broadcast(event)
-	case sch.EVENT_STAKER_HAVE_WITHDRAWN_EMPTY:
-		in.run_validator_withdraw(event.IsStateChange)
-	case sch.EVENT_STAKER_HAVE_WITHDRAWN:
-		in.run_validator_withdraw(event.IsStateChange)
-	default:
-		log.Debugf("on_receipt_event unknown event: %s", event.String())
-		//in.errorC <- fmt.Errorf("on_receipt_event unknown event: %s", event.String())
-	}
-}
-
-func (in *internal) run_validator_set(event sch.Event) {
-	log.Debugf("setting validator")
-	in.trackHome.Broadcast(event)
-}
-
+/*
 func (in *internal) run_validator_withdraw(isStateChange bool) {
 	var ctxC context.Context
 	ctxC, in.cancelValidatorWithraw = context.WithCancel(in.ctx)
@@ -207,4 +151,4 @@ func (in *internal) run_validator_withdraw(isStateChange bool) {
 			Pipeline:  in.pipeline,
 		},
 	))
-}
+}*/

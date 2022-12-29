@@ -4,7 +4,6 @@ import (
 	"context"
 
 	log "github.com/sirupsen/logrus"
-	sch "github.com/solpipe/solpipe-tool/scheduler"
 	pyt "github.com/solpipe/solpipe-tool/state/payout"
 	pipe "github.com/solpipe/solpipe-tool/state/pipeline"
 	rpt "github.com/solpipe/solpipe-tool/state/receipt"
@@ -23,7 +22,6 @@ func loopOpenReceipt(
 	errorC chan<- error,
 	pipeline pipe.Pipeline,
 	rC chan<- receiptWithTransition,
-	eventC chan<- sch.Event,
 	payout pyt.Payout,
 	v val.Validator,
 	clockPeriodStartC <-chan bool,
@@ -45,24 +43,8 @@ func loopOpenReceipt(
 			isStateChange: false,
 		}:
 		}
-	} else {
-		// no receipt has been created yet
-		log.Debug("sending trigger validator set payout")
-		select {
-		case <-doneC:
-			return
-		case eventC <- sch.CreateWithPayload(
-			sch.TRIGGER_VALIDATOR_SET_PAYOUT,
-			false,
-			0,
-			&TriggerValidator{
-				Context:  ctx,
-				Payout:   payout,
-				Pipeline: pipeline,
-			},
-		):
-		}
 	}
+	// we used to send a trigger validator_set_payout here, but decided to send it instead from the payout schedule
 out:
 	for {
 		select {

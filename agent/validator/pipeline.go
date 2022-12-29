@@ -93,7 +93,7 @@ func loopPipeline(
 	payoutSub := pi.pipeline.OnPayout()
 	defer payoutSub.Unsubscribe()
 	newPwdStreamC := make(chan pipe.PayoutWithData)
-
+	go loopPipelineLookupPayout(pi.ctx, pi.errorC, pi.pipeline, newPwdStreamC)
 out:
 	for {
 		select {
@@ -187,6 +187,32 @@ out:
 		select {
 		case <-doneC:
 		case newPayoutC <- pwp:
+		}
+	}
+}
+
+func loopPipelineLookupPayout(
+	ctx context.Context,
+	errorC chan<- error,
+	pipeline pipe.Pipeline,
+	pwdC chan<- pipe.PayoutWithData,
+) {
+	var err error
+	doneC := ctx.Done()
+
+	list, err := pipeline.AllPayouts()
+	if err != nil {
+		select {
+		case errorC <- err:
+		default:
+		}
+		return
+	}
+	for _, pwd := range list {
+		select {
+		case <-doneC:
+			return
+		case pwdC <- pwd:
 		}
 	}
 }

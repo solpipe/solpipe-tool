@@ -9,8 +9,11 @@ import (
 
 // this function only gets called once
 func (in *internal) on_receipt(rt receiptWithTransition) {
-	in.cancelValidatorSetPayout()
-	in.cancelValidatorSetPayout = nil
+	if in.cancelValidatorSetPayout != nil {
+		in.cancelValidatorSetPayout()
+		in.cancelValidatorSetPayout = nil
+	}
+
 	select {
 	case <-in.ctx.Done():
 	case in.eventC <- sch.Create(
@@ -33,7 +36,7 @@ func (in *internal) on_receipt(rt receiptWithTransition) {
 	)
 }
 
-// events: EVENT_STAKER_IS_ADDING, EVENT_STAKER_HAVE_WITHDRAWN(_EMPTY)
+// events: EVENT_STAKER_IS_ADDING, EVENT_STAKER_HAVE_WITHDRAWN(_EMPTY), EVENT_VALIDATOR_HAVE_WITHDRAWN
 func loopWaitStakeFinish(
 	ctx context.Context,
 	cancel context.CancelFunc,
@@ -90,6 +93,7 @@ out:
 				break out
 			}
 		case err = <-dataSub.ErrorC:
+			// when the receipt account closes, we get a nil error
 			break out
 		case data = <-dataSub.StreamC:
 			stakerCounter = data.StakerCounter
@@ -121,5 +125,16 @@ out:
 	}
 	if err != nil {
 		errorC <- err
+	} else {
+		// the receipt account has been closed
+		select {
+		case <-doneC:
+			return
+		case eventC <- sch.Create(
+			sch.EVENT_VALIDATOR_HAVE_WITHDRAWN,
+			true,
+			0,
+		):
+		}
 	}
 }
