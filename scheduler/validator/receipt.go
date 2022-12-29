@@ -14,14 +14,12 @@ func (in *internal) on_receipt(rt receiptWithTransition) {
 		in.cancelValidatorSetPayout = nil
 	}
 
-	select {
-	case <-in.ctx.Done():
-	case in.eventC <- sch.Create(
+	in.on_receipt_event(sch.Create(
 		sch.EVENT_VALIDATOR_IS_ADDING,
 		rt.isStateChange,
 		0,
-	):
-	}
+	))
+
 	in.receipt = rt.rwd.Receipt
 	in.receiptData = &rt.rwd.Data
 	var ctxC context.Context
@@ -74,14 +72,21 @@ func loopWaitStakeFinish(
 		}
 	}
 
+	parentCtxDone := false
+	sentStakerAreAdding := false
+	sentStakerHaveWithdrawnEmpty := false
+	sentStakerHaveWithdrawn := false
+
 out:
 	for {
 		select {
 		case <-doneC:
+			parentCtxDone = true
 			break out
 		case isClockPostPeriodTransition = <-clockPeriodPostCloseC:
 			// validator withdraw without staker adding
-			if !stakersAddingStarted && stakerCounter == 0 {
+			if !sentStakerHaveWithdrawnEmpty && !stakersAddingStarted && stakerCounter == 0 {
+				sentStakerHaveWithdrawnEmpty = true
 				select {
 				case <-doneC:
 					return
@@ -91,14 +96,14 @@ out:
 					0,
 				):
 				}
-				break out
 			}
 		case err = <-dataSub.ErrorC:
 			// when the receipt account closes, we get a nil error
 			break out
 		case data = <-dataSub.StreamC:
 			stakerCounter = data.StakerCounter
-			if !stakersAddingStarted && 0 < stakerCounter {
+			if !sentStakerAreAdding && !stakersAddingStarted && 0 < stakerCounter {
+				sentStakerAreAdding = true
 				stakersAddingStarted = true
 				select {
 				case <-doneC:
@@ -110,7 +115,8 @@ out:
 				):
 				}
 			}
-			if stakersAddingStarted && stakerCounter == 0 {
+			if !sentStakerHaveWithdrawn && stakersAddingStarted && stakerCounter == 0 {
+				sentStakerHaveWithdrawn = true
 				select {
 				case <-doneC:
 					return
@@ -120,13 +126,12 @@ out:
 					0,
 				):
 				}
-				break out
 			}
 		}
 	}
 	if err != nil {
 		errorC <- err
-	} else {
+	} else if !parentCtxDone {
 		// the receipt account has been closed
 		select {
 		case <-doneC:
