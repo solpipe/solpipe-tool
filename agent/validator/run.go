@@ -14,7 +14,7 @@ import (
 	"github.com/solpipe/solpipe-tool/util"
 )
 
-const MAX_TRIES_VALIDATOR_SET_PAYOUT = 5
+const MAX_TRIES_VALIDATOR_SET_PAYOUT = 30
 
 func (in *internal) run_validator_set_payout(event sch.Event) error {
 	trigger, err := schval.ReadTrigger(event)
@@ -40,7 +40,7 @@ func (in *internal) run_validator_set_payout(event sch.Event) error {
 	in.scriptWrapper.SendDetached(
 		util.MergeCtx(in.ctx, trigger.Context),
 		MAX_TRIES_VALIDATOR_SET_PAYOUT,
-		5*time.Second,
+		10*time.Second,
 		func(script *spt.Script) error {
 			return runValidatorSetPayout(
 				script,

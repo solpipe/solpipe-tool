@@ -36,12 +36,14 @@ func ReadTrigger(
 
 func (in *internal) on_payout_event(event sch.Event) {
 	log.Debugf("on_payout_event: %s", event.String())
+
 	switch event.Type {
-	case sch.TRIGGER_VALIDATOR_SET_PAYOUT:
-		log.Debugf("setting validator")
-		in.trackHome.Broadcast(event)
 	case sch.EVENT_PERIOD_START:
 		log.Debug("event_period_start")
+		if in.cancelValidatorSetPayout != nil {
+			in.cancelValidatorSetPayout()
+			in.cancelValidatorSetPayout = nil
+		}
 		// do not cancel context here or else we will never get a receipt
 		//if in.cancelValidatorSetPayout != nil {
 		//	in.cancelValidatorSetPayout()
@@ -63,7 +65,7 @@ func (in *internal) on_receipt_event(event sch.Event) {
 	log.Debugf("on_receipt_event: %s", event.String())
 	switch event.Type {
 	case sch.EVENT_STAKER_IS_ADDING:
-		in.trackHome.Broadcast(event)
+		in.eventHome.Broadcast(event)
 	case sch.EVENT_STAKER_HAVE_WITHDRAWN:
 		in.on_staker_have_withdrawn(event)
 	case sch.EVENT_STAKER_HAVE_WITHDRAWN_EMPTY:
@@ -75,7 +77,7 @@ func (in *internal) on_receipt_event(event sch.Event) {
 			in.cancelValidatorWithraw()
 			in.cancelValidatorWithraw = nil
 		}
-		in.trackHome.Broadcast(event)
+		in.eventHome.Broadcast(event)
 		in.errorC <- nil
 	default:
 		log.Debugf("on_receipt_event unknown event: %s", event.String())
@@ -83,7 +85,7 @@ func (in *internal) on_receipt_event(event sch.Event) {
 }
 
 func (in *internal) on_staker_have_withdrawn(event sch.Event) {
-	in.trackHome.Broadcast(event)
+	in.eventHome.Broadcast(event)
 	log.Debugf("withdrawing validator")
 	if in.cancelValidatorWithraw == nil {
 		in.ctxValidatorWithraw, in.cancelValidatorWithraw = context.WithCancel(in.ctx)

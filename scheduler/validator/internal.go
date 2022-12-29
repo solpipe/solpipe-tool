@@ -2,6 +2,7 @@ package validator
 
 import (
 	"context"
+	"errors"
 
 	log "github.com/sirupsen/logrus"
 	cba "github.com/solpipe/cba"
@@ -21,7 +22,7 @@ type internal struct {
 	closeSignalCList              []chan<- error
 	clockPeriodStartC             chan<- bool
 	clockPeriodPostCloseC         chan bool
-	trackHome                     *dssub.SubHome[sch.Event]
+	eventHome                     *dssub.SubHome[sch.Event]
 	pwd                           pipe.PayoutWithData
 	validator                     val.Validator
 	data                          cba.ValidatorManager
@@ -34,6 +35,7 @@ type internal struct {
 	isValidatorWithdrawTransition bool
 	validatorHasAdded             bool
 	validatorHasWithdrawn         bool
+	preStartEvent                 *sch.Event
 }
 
 func (in *internal) Payout() pyt.Payout {
@@ -53,7 +55,7 @@ func loopInternal(
 	pipelineSchedule sch.Schedule,
 	payoutSchedule sch.Schedule,
 	v val.Validator,
-	trackHome *dssub.SubHome[sch.Event],
+	eventHome *dssub.SubHome[sch.Event],
 ) {
 	defer cancel()
 
@@ -75,8 +77,8 @@ func loopInternal(
 	in.ctx = ctx
 	in.pipeline = pipeline
 	in.closeSignalCList = make([]chan<- error, 0)
-	in.trackHome = trackHome
-	defer trackHome.Close()
+	in.eventHome = eventHome
+	defer eventHome.Close()
 	in.errorC = errorC
 	in.eventC = receiptEventC
 	in.isValidatorWithdrawTransition = false
@@ -108,6 +110,7 @@ func loopInternal(
 		v,
 		clockPeriodStartC,
 	)
+	in.run_validator_set_payout(ctxValidatorSetPayout)
 
 out:
 	for {
@@ -116,10 +119,6 @@ out:
 			break out
 		case err = <-errorC:
 			break out
-		case id := <-trackHome.DeleteC:
-			trackHome.Delete(id)
-		case r := <-trackHome.ReqC:
-			trackHome.Receive(r)
 		case err = <-payoutEventSub.ErrorC:
 			break out
 		case event = <-payoutEventSub.StreamC:
@@ -130,6 +129,19 @@ out:
 			in.on_receipt(rwd)
 		case event = <-receiptEventC:
 			in.on_receipt_event(event)
+		case id := <-eventHome.DeleteC:
+			eventHome.Delete(id)
+		case r := <-eventHome.ReqC:
+			streamC := eventHome.Receive(r)
+			if in.preStartEvent != nil {
+				select {
+				case streamC <- *in.preStartEvent:
+					log.Debugf("broadcasted prestartevent for validator payout=%s", in.pwd.Id.String())
+				default:
+					err = errors.New("failed to broadcast")
+					break out
+				}
+			}
 		}
 	}
 	in.finish(err)

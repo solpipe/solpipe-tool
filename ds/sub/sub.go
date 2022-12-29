@@ -111,7 +111,7 @@ func (sh *SubHome[T]) Close() {
 	sh.subs = make(map[int]*innerSubscription[T])
 }
 
-func (sh *SubHome[T]) Receive(resp ResponseChannel[T]) {
+func (sh *SubHome[T]) Receive(resp ResponseChannel[T]) chan<- T {
 	id := sh.id
 	sh.id++
 	streamC := make(chan T, resp.requestedBufferSize)
@@ -120,4 +120,5 @@ func (sh *SubHome[T]) Receive(resp ResponseChannel[T]) {
 		id: id, streamC: streamC, errorC: errorC, filter: resp.filter,
 	}
 	resp.RespC <- Subscription[T]{id: id, StreamC: streamC, ErrorC: errorC, deleteC: sh.DeleteC}
+	return streamC
 }

@@ -34,8 +34,8 @@ type internal struct {
 	cancelCloseBid            context.CancelFunc
 	cancelValidatorSetPayout  context.CancelFunc
 	cancelValidatorWithdraw   context.CancelFunc
-	cancelStakerWithdraw      context.CancelFunc
 	keepPayoutOpen            bool
+	preStartEvent             *sch.Event
 }
 
 func loopInternal(
@@ -82,6 +82,9 @@ func loopInternal(
 	in.stakerAddingIsDone = false
 	in.keepPayoutOpen = true
 
+	// run this first to make sure all subscriptions have the validator_set_payout trigger
+	in.run_validator_set_payout()
+
 out:
 	for in.keepPayoutOpen {
 		select {
@@ -90,40 +93,23 @@ out:
 		case req := <-internalC:
 			req(in)
 		case event := <-eventC:
-			log.Debugf("event payout=%s  %s", pwd.Id.String(), event.String())
-			switch event.Type {
-			case sch.EVENT_PERIOD_PRE_START:
-				in.on_pre_start(event.IsStateChange)
-			case sch.EVENT_PERIOD_START:
-				in.on_start(event.IsStateChange)
-			case sch.EVENT_PERIOD_FINISH:
-				in.on_finish(event.IsStateChange)
-			case sch.EVENT_DELAY_CLOSE_PAYOUT:
-				in.on_clock_close_payout(event.IsStateChange)
-			case sch.EVENT_BID_CLOSED:
-				in.on_bid_closed(event.IsStateChange)
-			case sch.EVENT_BID_FINAL:
-				in.on_bid_final(event.IsStateChange)
-			case sch.EVENT_VALIDATOR_IS_ADDING:
-				in.on_validator_is_adding(event.IsStateChange)
-			case sch.EVENT_VALIDATOR_HAVE_WITHDRAWN:
-				in.on_validator_have_withdrawn(event.IsStateChange)
-			case sch.EVENT_STAKER_IS_ADDING:
-				in.on_staker_is_adding(event.IsStateChange)
-			case sch.EVENT_STAKER_HAVE_WITHDRAWN:
-				in.on_staker_have_withdrawn(event.IsStateChange)
-			default:
-				err = errors.New("unknown event")
+			err = in.on_event(event)
+			if err != nil {
 				break out
-			}
-			if !event.IsTrigger() {
-				in.eventHome.Broadcast(event)
 			}
 		case id := <-eventHome.DeleteC:
 			eventHome.Delete(id)
 		case r := <-eventHome.ReqC:
-			eventHome.Receive(r)
-
+			streamC := eventHome.Receive(r)
+			if in.preStartEvent != nil {
+				select {
+				case streamC <- *in.preStartEvent:
+					log.Debugf("broadcasted prestartevent for payout=%s", in.payout.Id.String())
+				default:
+					err = errors.New("failed to broadcast")
+					break out
+				}
+			}
 		}
 	}
 	in.finish(err)

@@ -1,8 +1,49 @@
 package payout
 
 import (
+	"errors"
+
 	log "github.com/sirupsen/logrus"
+	sch "github.com/solpipe/solpipe-tool/scheduler"
 )
+
+func (in *internal) on_event(event sch.Event) error {
+
+	log.Debugf("event payout=%s  %s", in.payout.Id.String(), event.String())
+	isPreStart := false
+	switch event.Type {
+	case sch.EVENT_PERIOD_PRE_START:
+		in.on_pre_start(event.IsStateChange)
+		isPreStart = true
+	case sch.EVENT_PERIOD_START:
+		in.on_start(event.IsStateChange)
+	case sch.EVENT_PERIOD_FINISH:
+		in.on_finish(event.IsStateChange)
+	case sch.EVENT_DELAY_CLOSE_PAYOUT:
+		in.on_clock_close_payout(event.IsStateChange)
+	case sch.EVENT_BID_CLOSED:
+		in.on_bid_closed(event.IsStateChange)
+	case sch.EVENT_BID_FINAL:
+		in.on_bid_final(event.IsStateChange)
+	case sch.EVENT_VALIDATOR_IS_ADDING:
+		in.on_validator_is_adding(event.IsStateChange)
+	case sch.EVENT_VALIDATOR_HAVE_WITHDRAWN:
+		in.on_validator_have_withdrawn(event.IsStateChange)
+	case sch.EVENT_STAKER_IS_ADDING:
+		in.on_staker_is_adding(event.IsStateChange)
+	case sch.EVENT_STAKER_HAVE_WITHDRAWN:
+		in.on_staker_have_withdrawn(event.IsStateChange)
+	default:
+		return errors.New("unknown event")
+	}
+	if !event.IsTrigger() {
+		in.eventHome.Broadcast(event)
+	}
+	if !isPreStart {
+		in.preStartEvent = nil
+	}
+	return nil
+}
 
 func (in *internal) on_pre_start(isTransition bool) {
 	in.run_validator_set_payout()

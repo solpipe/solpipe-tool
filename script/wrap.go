@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"os"
+	"sync"
 	"time"
 
 	log "github.com/sirupsen/logrus"
@@ -37,9 +38,10 @@ type internal struct {
 	script *Script
 }
 
-type Callback = func(*internal) (CallbackReplay, error)
+type Callback = func(*internal) (*CallbackReplay, error)
 
 type CallbackReplay struct {
+	mu     sync.Mutex
 	Delay  time.Duration
 	Count  int
 	Max    int
@@ -79,7 +81,7 @@ out:
 
 func loopReplay(
 	ctx context.Context,
-	cr CallbackReplay,
+	cr *CallbackReplay,
 	cb Callback,
 	err error,
 	replayC chan<- Callback,
@@ -148,26 +150,36 @@ func (w Wrapper) Send(
 	parentDoneC := w.ctx.Done()
 	doneC := ctx.Done()
 	errorC := make(chan error, 1)
+
 	replay := &CallbackReplay{
+		mu:     sync.Mutex{},
 		Delay:  delay,
 		Count:  0,
 		Max:    maxTries,
 		ErrorC: errorC,
 	}
-
+	go w.loopMaxReplay(ctx, replay)
+	internalReplay := replay
+	// this section does maxTries with delay
 	select {
 	case <-parentDoneC:
 		return errors.New("parent canceled")
 	case <-doneC:
-		replay.Count = replay.Max + 1
 		log.Debug("wrap context canceled - 1")
 		return nil
-	case w.internalC <- func(in *internal) (CallbackReplay, error) {
-		replay.Count++
-		in.script.ctx = ctx
-		cbError := cb(in.script)
-		in.script.txBuilder = nil
-		return *replay, cbError
+	case w.internalC <- func(in *internal) (*CallbackReplay, error) {
+		internalReplay.mu.Lock()
+		if internalReplay.Count < internalReplay.Max {
+			internalReplay.Count++
+			internalReplay.mu.Unlock()
+			in.script.ctx = ctx
+			cbError := cb(in.script)
+			in.script.txBuilder = nil
+			return internalReplay, cbError
+		} else {
+			internalReplay.mu.Unlock()
+			return internalReplay, nil
+		}
 	}:
 	}
 
@@ -176,11 +188,25 @@ func (w Wrapper) Send(
 		return errors.New("parent canceled")
 	case <-doneC:
 		// handle this error somewhere else
-		replay.Count = replay.Max + 1
 		log.Debug("wrap context canceled - 2")
 		return nil //errors.New("canceled")
 	case err := <-errorC:
 		return err
+	}
+}
+
+func (w Wrapper) loopMaxReplay(
+	ctx context.Context,
+	replay *CallbackReplay,
+) {
+	select {
+	case <-w.ctx.Done():
+		return
+	case <-ctx.Done():
+		log.Debug("stop looping!")
+		replay.mu.Lock()
+		replay.Count = replay.Max + 1
+		replay.mu.Unlock()
 	}
 }
 
