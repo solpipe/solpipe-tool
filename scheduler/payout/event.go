@@ -10,11 +10,10 @@ import (
 func (in *internal) on_event(event sch.Event) error {
 
 	log.Debugf("event payout=%s  %s", in.payout.Id.String(), event.String())
-	isPreStart := false
+
 	switch event.Type {
 	case sch.EVENT_PERIOD_PRE_START:
 		in.on_pre_start(event.IsStateChange)
-		isPreStart = true
 	case sch.EVENT_PERIOD_START:
 		in.on_start(event.IsStateChange)
 	case sch.EVENT_PERIOD_FINISH:
@@ -39,9 +38,7 @@ func (in *internal) on_event(event sch.Event) error {
 	if !event.IsTrigger() {
 		in.eventHome.Broadcast(event)
 	}
-	if !isPreStart {
-		in.preStartEvent = nil
-	}
+
 	return nil
 }
 

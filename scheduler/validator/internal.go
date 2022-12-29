@@ -21,7 +21,9 @@ type internal struct {
 	eventC                        chan<- sch.Event
 	closeSignalCList              []chan<- error
 	clockPeriodStartC             chan<- bool
+	sentPeriodStart               bool
 	clockPeriodPostCloseC         chan bool
+	sentPeriodPostClose           bool
 	eventHome                     *dssub.SubHome[sch.Event]
 	pwd                           pipe.PayoutWithData
 	validator                     val.Validator
@@ -83,7 +85,9 @@ func loopInternal(
 	in.eventC = receiptEventC
 	in.isValidatorWithdrawTransition = false
 	in.clockPeriodStartC = clockPeriodStartC
+	in.sentPeriodStart = false
 	in.clockPeriodPostCloseC = clockPeriodPostCloseC
+	in.sentPeriodPostClose = false
 	in.pwd = pwd
 	in.validator = v
 	in.validatorHasAdded = false
@@ -92,9 +96,6 @@ func loopInternal(
 	in.data, err = v.Data()
 	if err != nil {
 		in.errorC <- err
-	}
-	if in.pwd.Id.String() == "B2weAoPHiLYtANsEPXzsmDrKjoNB1bRs2QZNXat64LiF" {
-		log.Debugf("got target")
 	}
 
 	var ctxValidatorSetPayout context.Context
@@ -119,16 +120,6 @@ out:
 			break out
 		case err = <-errorC:
 			break out
-		case err = <-payoutEventSub.ErrorC:
-			break out
-		case event = <-payoutEventSub.StreamC:
-			in.on_payout_event(event)
-		case req := <-internalC:
-			req(in)
-		case rwd := <-receiptC:
-			in.on_receipt(rwd)
-		case event = <-receiptEventC:
-			in.on_receipt_event(event)
 		case id := <-eventHome.DeleteC:
 			eventHome.Delete(id)
 		case r := <-eventHome.ReqC:
@@ -141,7 +132,18 @@ out:
 					err = errors.New("failed to broadcast")
 					break out
 				}
+				in.preStartEvent = nil
 			}
+		case err = <-payoutEventSub.ErrorC:
+			break out
+		case event = <-payoutEventSub.StreamC:
+			in.on_payout_event(event)
+		case req := <-internalC:
+			req(in)
+		case rwd := <-receiptC:
+			in.on_receipt(rwd)
+		case event = <-receiptEventC:
+			in.on_receipt_event(event)
 		}
 	}
 	in.finish(err)

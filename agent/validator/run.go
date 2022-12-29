@@ -14,7 +14,7 @@ import (
 	"github.com/solpipe/solpipe-tool/util"
 )
 
-const MAX_TRIES_VALIDATOR_SET_PAYOUT = 30
+const MAX_TRIES_VALIDATOR_SET_PAYOUT = 5
 
 func (in *internal) run_validator_set_payout(event sch.Event) error {
 	trigger, err := schval.ReadTrigger(event)
@@ -27,15 +27,6 @@ func (in *internal) run_validator_set_payout(event sch.Event) error {
 	pipelineId := trigger.Pipeline.Id
 	validatorId := in.validator.Id
 	validatorAdmin := in.config.Admin
-
-	log.Debugf(
-		"validator set payout: (%s;%s;%s;%s;%s)",
-		controllerId.String(),
-		payoutId.String(),
-		pipelineId.String(),
-		validatorId.String(),
-		validatorAdmin.PublicKey().String(),
-	)
 
 	in.scriptWrapper.SendDetached(
 		trigger.Context, //util.MergeCtx(in.ctx, trigger.Context),
@@ -68,6 +59,10 @@ func runValidatorSetPayout(
 	if err != nil {
 		return err
 	}
+	log.Debugf(
+		"validator set payout=%s",
+		payoutId.String(),
+	)
 	_, err = script.ValidatorSetPipeline(
 		controllerId,
 		payoutId,
@@ -80,10 +75,10 @@ func runValidatorSetPayout(
 	}
 	err = script.FinishTx(true)
 	if err != nil {
-		log.Debugf("run set validator failed: %s", err.Error())
+		log.Debugf("run set validator failed (payout=%s): %s", payoutId.String(), err.Error())
 		return err
 	}
-	log.Debug("successfully set validator to payout")
+	log.Debugf("successfully set validator to payout=%s", payoutId.String())
 	return nil
 }
 

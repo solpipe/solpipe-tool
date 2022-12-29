@@ -37,31 +37,43 @@ func ReadTrigger(
 func (in *internal) on_payout_event(event sch.Event) {
 	log.Debugf("on_payout_event: %s", event.String())
 
-	keepValidatorSetPayout := false
 	switch event.Type {
 	case sch.EVENT_PERIOD_PRE_START:
-		keepValidatorSetPayout = true
+		log.Debugf("event_period_start payout=%s", in.pwd.Id.String())
 	case sch.EVENT_PERIOD_START:
-		log.Debug("event_period_start")
-		// do not cancel context here or else we will never get a receipt
-		//if in.cancelValidatorSetPayout != nil {
-		//	in.cancelValidatorSetPayout()
-		//	in.cancelValidatorSetPayout = nil
-		//}
-		if in.receiptData == nil {
-			// we have not received receipt data
-			in.clockPeriodStartC <- event.IsStateChange
-		}
+		log.Debugf("event_period_start payout=%s", in.pwd.Id.String())
+		in.on_pre_start_kill(event)
+	case sch.EVENT_PERIOD_FINISH:
+		log.Debugf("event_period_finish payout=%s", in.pwd.Id.String())
+		in.on_pre_start_kill(event)
 	case sch.EVENT_DELAY_CLOSE_PAYOUT:
-		in.clockPeriodPostCloseC <- event.IsStateChange
+		log.Debugf("event_period_post_close payout=%s", in.pwd.Id.String())
+		in.on_pre_start_kill(event)
+		in.on_post(event)
 	default:
 		log.Debugf("on_payout_event unknown event: %s", event.String())
 	}
 
-	if !keepValidatorSetPayout {
-		if in.cancelValidatorSetPayout != nil {
-			in.cancelValidatorSetPayout()
-			in.cancelValidatorSetPayout = nil
+}
+
+func (in *internal) on_pre_start_kill(event sch.Event) {
+	in.preStartEvent = nil
+	if !in.sentPeriodStart {
+		in.sentPeriodStart = true
+		select {
+		case <-in.ctx.Done():
+		case in.clockPeriodStartC <- event.IsStateChange:
+		}
+	}
+}
+
+func (in *internal) on_post(event sch.Event) {
+
+	if !in.sentPeriodPostClose {
+		in.sentPeriodPostClose = true
+		select {
+		case <-in.ctx.Done():
+		case in.clockPeriodPostCloseC <- event.IsStateChange:
 		}
 	}
 }

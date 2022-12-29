@@ -35,7 +35,7 @@ func loopOpenReceipt(
 
 	rwd, present := v.ReceiptByPayoutId(payoutId)
 	if present {
-		log.Debug("sending receipt back - 1")
+		log.Debugf("sending receipt back - 1 payout=%s", payout.Id.String())
 		select {
 		case <-doneC:
 			return
@@ -52,20 +52,12 @@ out:
 		select {
 		case <-doneC:
 			break out
-		case <-clockPeriodStartC:
-			// period started before we received a receipt, so exit the loop
-			log.Debug("lock period start")
-			select {
-			case <-doneC:
-			case errorC <- nil:
-			}
-			return
 		case err = <-sub.ErrorC:
 			break out
 		case rwd = <-sub.StreamC:
 			log.Debugf("receipt=%s for payout=%s vs required payout=%s", rwd.Receipt.Id.String(), rwd.Data.Payout.String(), payoutId.String())
 			if rwd.Data.Payout.Equals(payoutId) {
-				log.Debug("sending receipt back - 2")
+				log.Debugf("sending receipt back - 2 payout=%s", payoutId.String())
 				select {
 				case <-doneC:
 					break out
@@ -76,10 +68,15 @@ out:
 				}
 				break out
 			}
+		case <-clockPeriodStartC:
+			// period started before we received a receipt, so exit the loop
+			log.Debugf("lock period start payout=%s", payoutId.String())
+			break out
+
 		}
 	}
 
-	log.Debug("exiting open receipt loop")
+	log.Debugf("exiting open receipt loop; payout=%s", payoutId.String())
 	if err != nil {
 		select {
 		case errorC <- err:

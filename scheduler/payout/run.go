@@ -107,19 +107,13 @@ func (in *internal) run_validator_set_payout() {
 		return
 	}
 	var trigger *Trigger
-	trigger, in.cancelValidatorSetPayout = in.generic_trigger()
-	log.Debugf("event home broadcast size=%d", in.eventHome.SubscriberCount())
-	event := sch.CreateWithPayload(
+	trigger, in.cancelValidatorWithdraw = in.generic_trigger()
+	in.eventHome.Broadcast(sch.CreateWithPayload(
 		sch.TRIGGER_VALIDATOR_SET_PAYOUT,
 		true,
 		0,
 		trigger,
-	)
-	if 0 < in.eventHome.SubscriberCount() {
-		in.eventHome.Broadcast(event)
-	} else {
-		in.preStartEvent = &event
-	}
+	))
 }
 
 func (in *internal) run_validator_withdraw() {

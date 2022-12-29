@@ -2,7 +2,6 @@ package payout
 
 import (
 	"context"
-	"errors"
 
 	log "github.com/sirupsen/logrus"
 	cba "github.com/solpipe/cba"
@@ -35,7 +34,6 @@ type internal struct {
 	cancelValidatorSetPayout  context.CancelFunc
 	cancelValidatorWithdraw   context.CancelFunc
 	keepPayoutOpen            bool
-	preStartEvent             *sch.Event
 }
 
 func loopInternal(
@@ -59,7 +57,7 @@ func loopInternal(
 	eventC := make(chan sch.Event)
 	clockPeriodStartC := make(chan bool, 1)
 	clockPeriodPostC := make(chan bool, 1)
-	go loopClock(ctx, router.Controller, eventC, errorC, clockPeriodStartC, clockPeriodPostC, pwd.Data)
+	go loopClock(ctx, router.Controller, eventC, errorC, clockPeriodStartC, clockPeriodPostC, pwd.Data, pwd.Id)
 	go loopPayoutEvent(ctx, pwd, eventC, errorC, clockPeriodStartC, clockPeriodPostC)
 
 	in := new(internal)
@@ -83,7 +81,7 @@ func loopInternal(
 	in.keepPayoutOpen = true
 
 	// run this first to make sure all subscriptions have the validator_set_payout trigger
-	in.run_validator_set_payout()
+	//in.run_validator_set_payout()
 
 out:
 	for in.keepPayoutOpen {
@@ -100,16 +98,7 @@ out:
 		case id := <-eventHome.DeleteC:
 			eventHome.Delete(id)
 		case r := <-eventHome.ReqC:
-			streamC := eventHome.Receive(r)
-			if in.preStartEvent != nil {
-				select {
-				case streamC <- *in.preStartEvent:
-					log.Debugf("broadcasted prestartevent for payout=%s", in.payout.Id.String())
-				default:
-					err = errors.New("failed to broadcast")
-					break out
-				}
-			}
+			eventHome.Receive(r)
 		}
 	}
 	in.finish(err)

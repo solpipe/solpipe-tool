@@ -132,6 +132,7 @@ func (pi *listenPipelineInternal) on_payout(pwd pipe.PayoutWithData) {
 	doneC := pi.ctx.Done()
 	if pi.slot+pi.lookAhead < pwd.Data.Period.Start {
 		delta := pwd.Data.Period.Start - (pi.slot + pi.lookAhead)
+		log.Debugf("delay is delta=%d for payout=%s", delta, pwd.Id.String())
 		go loopDelaySendPayout(
 			pi.ctx,
 			pi.errorC,
