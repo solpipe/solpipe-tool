@@ -21,27 +21,31 @@ func (in *internal) on_pipeline_event(event sch.Event) {
 }
 
 func (in *internal) on_payout_event(event sch.Event) {
-	var err error
-	payload, err := schpyt.ReadTrigger(event)
-	if err != nil {
-		in.errorC <- err
-		return
+
+	if event.IsTrigger() {
+		payload, err := schpyt.ReadTrigger(event)
+		if err != nil {
+			log.Debugf("error with event=%s", event.String())
+			in.errorC <- err
+			return
+		}
+
+		switch event.Type {
+		case sch.TRIGGER_CRANK:
+			log.Debugf("payout=%s crank event=%s", payload.Payout.Id.String(), event.String())
+			err = in.run_payout_crank(event)
+		case sch.TRIGGER_CLOSE_BIDS:
+			log.Debugf("payout=%s close bids event=%s", payload.Payout.Id.String(), event.String())
+			err = in.run_payout_close_bids(event)
+		case sch.TRIGGER_CLOSE_PAYOUT:
+			log.Debugf("payout=%s close payout event=%s", payload.Payout.Id.String(), event.String())
+			err = in.run_payout_close_payout(event)
+		default:
+			log.Debugf("payout=%s unfiltered event=%s", payload.Payout.Id.String(), event.String())
+		}
+		if err != nil {
+			in.errorC <- err
+		}
 	}
 
-	switch event.Type {
-	case sch.TRIGGER_CRANK:
-		log.Debugf("payout=%s crank event=%s", payload.Payout.Id.String(), event.String())
-		err = in.run_payout_crank(event)
-	case sch.TRIGGER_CLOSE_BIDS:
-		log.Debugf("payout=%s close bids event=%s", payload.Payout.Id.String(), event.String())
-		err = in.run_payout_close_bids(event)
-	case sch.TRIGGER_CLOSE_PAYOUT:
-		log.Debugf("payout=%s close payout event=%s", payload.Payout.Id.String(), event.String())
-		err = in.run_payout_close_payout(event)
-	default:
-		log.Debugf("payout=%s unfiltered event=%s", payload.Payout.Id.String(), event.String())
-	}
-	if err != nil {
-		in.errorC <- err
-	}
 }
