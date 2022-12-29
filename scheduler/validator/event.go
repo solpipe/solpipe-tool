@@ -37,13 +37,12 @@ func ReadTrigger(
 func (in *internal) on_payout_event(event sch.Event) {
 	log.Debugf("on_payout_event: %s", event.String())
 
+	keepValidatorSetPayout := false
 	switch event.Type {
+	case sch.EVENT_PERIOD_PRE_START:
+		keepValidatorSetPayout = true
 	case sch.EVENT_PERIOD_START:
 		log.Debug("event_period_start")
-		if in.cancelValidatorSetPayout != nil {
-			in.cancelValidatorSetPayout()
-			in.cancelValidatorSetPayout = nil
-		}
 		// do not cancel context here or else we will never get a receipt
 		//if in.cancelValidatorSetPayout != nil {
 		//	in.cancelValidatorSetPayout()
@@ -57,6 +56,13 @@ func (in *internal) on_payout_event(event sch.Event) {
 		in.clockPeriodPostCloseC <- event.IsStateChange
 	default:
 		log.Debugf("on_payout_event unknown event: %s", event.String())
+	}
+
+	if !keepValidatorSetPayout {
+		if in.cancelValidatorSetPayout != nil {
+			in.cancelValidatorSetPayout()
+			in.cancelValidatorSetPayout = nil
+		}
 	}
 }
 

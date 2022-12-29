@@ -38,7 +38,7 @@ func (in *internal) run_validator_set_payout(event sch.Event) error {
 	)
 
 	in.scriptWrapper.SendDetached(
-		util.MergeCtx(in.ctx, trigger.Context),
+		trigger.Context, //util.MergeCtx(in.ctx, trigger.Context),
 		MAX_TRIES_VALIDATOR_SET_PAYOUT,
 		10*time.Second,
 		func(script *spt.Script) error {
