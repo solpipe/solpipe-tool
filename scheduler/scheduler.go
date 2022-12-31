@@ -8,6 +8,7 @@ import (
 type Schedule interface {
 	util.Base
 	OnEvent() dssub.Subscription[Event]
+	History() ([]Event, error)
 }
 
 func Create(eventType EventType, isStateChange bool, slot uint64) Event {

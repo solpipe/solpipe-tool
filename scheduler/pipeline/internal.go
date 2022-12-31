@@ -5,6 +5,7 @@ import (
 
 	log "github.com/sirupsen/logrus"
 	cba "github.com/solpipe/cba"
+	ll "github.com/solpipe/solpipe-tool/ds/list"
 	dssub "github.com/solpipe/solpipe-tool/ds/sub"
 	sch "github.com/solpipe/solpipe-tool/scheduler"
 	ctr "github.com/solpipe/solpipe-tool/state/controller"
@@ -27,6 +28,7 @@ type internal struct {
 	lookAhead        uint64
 	cancelAppend     context.CancelFunc
 	deleteCancelC    chan<- uint64
+	history          *ll.Generic[sch.Event]
 }
 
 func loopInternal(
@@ -59,6 +61,7 @@ func loopInternal(
 	in.lastPeriodStart = 0
 	in.lastPeriodFinish = 0
 	in.lastSentAppend = 0
+	in.history = ll.CreateGeneric[sch.Event]()
 
 	periodRing, err := pipeline.PeriodRing()
 	if err != nil {
@@ -89,14 +92,21 @@ out:
 		case id := <-eventHome.DeleteC:
 			eventHome.Delete(id)
 		case r := <-eventHome.ReqC:
-			eventHome.Receive(r)
+			streamC := eventHome.Receive(r)
+			for _, l := range in.history.Array() {
+				select {
+				case streamC <- l:
+				default:
+					log.Debug("should not have a stuffed stream channel")
+				}
+			}
 		case err = <-periodSub.ErrorC:
 			break out
 		case periodRing = <-periodSub.StreamC:
 			in.on_period(periodRing)
 		case event = <-eventC:
 			log.Debugf("pipeline=%s; broadcasting event=%s", event.String())
-			in.eventHome.Broadcast(event)
+			in.broadcast(event)
 		case in.lookAhead = <-lookAheadC:
 			log.Debugf("lookahead=%d from slot=%d", in.lookAhead, in.slot)
 			in.on_latest()
@@ -105,6 +115,11 @@ out:
 		}
 	}
 	in.finish(err)
+}
+
+func (in *internal) broadcast(event sch.Event) {
+	in.history.Append(event)
+	in.eventHome.Broadcast(event)
 }
 
 const SLOT_TOO_CLOSE_THRESHOLD uint64 = 50

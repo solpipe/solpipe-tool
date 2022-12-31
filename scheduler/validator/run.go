@@ -1,28 +1,27 @@
 package validator
 
 import (
-	"context"
-
 	log "github.com/sirupsen/logrus"
 	sch "github.com/solpipe/solpipe-tool/scheduler"
+	schpyt "github.com/solpipe/solpipe-tool/scheduler/payout"
 )
 
 // protection from running this function multiple times comes from schpyt
-func (in *internal) run_validator_set_payout(ctxC context.Context) {
+func (in *internal) run_validator_set_payout(event sch.Event) {
+	oldTrigger, err := schpyt.ReadTrigger(event)
+	if err != nil {
+		in.errorC <- err
+		return
+	}
 
 	log.Debugf("setting validator")
 	newEvent := sch.CreateWithPayload(
 		sch.TRIGGER_VALIDATOR_SET_PAYOUT,
 		false,
 		0,
-		in.trigger(ctxC),
+		in.trigger(oldTrigger.Context),
 	)
-	if 0 < in.eventHome.SubscriberCount() {
-		in.eventHome.Broadcast(newEvent)
-	} else {
-		in.preStartEvent = &newEvent
-	}
-
+	in.broadcast(newEvent)
 }
 
 func (in *internal) run_validator_withdraw() {
@@ -32,7 +31,7 @@ func (in *internal) run_validator_withdraw() {
 	if in.ctxValidatorWithraw == nil {
 		return
 	}
-	in.eventHome.Broadcast(sch.CreateWithPayload(
+	in.broadcast(sch.CreateWithPayload(
 		sch.TRIGGER_VALIDATOR_WITHDRAW_RECEIPT,
 		in.isValidatorWithdrawTransition,
 		0,

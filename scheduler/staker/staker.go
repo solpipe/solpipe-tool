@@ -2,6 +2,7 @@ package staker
 
 import (
 	"context"
+	"errors"
 
 	dssub "github.com/solpipe/solpipe-tool/ds/sub"
 	sch "github.com/solpipe/solpipe-tool/scheduler"
@@ -70,4 +71,22 @@ type TriggerStaker struct {
 	Staker  skr.Staker
 	Receipt rpt.Receipt
 	Payout  pyt.Payout
+}
+
+func (e1 external) History() ([]sch.Event, error) {
+	doneC := e1.ctx.Done()
+	ansC := make(chan []sch.Event, 1)
+	select {
+	case <-doneC:
+		return nil, errors.New("canceled")
+	case e1.internalC <- func(in *internal) {
+		ansC <- in.history.Array()
+	}:
+	}
+	select {
+	case <-doneC:
+		return nil, errors.New("canceled")
+	case list := <-ansC:
+		return list, nil
+	}
 }

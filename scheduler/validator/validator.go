@@ -2,6 +2,7 @@ package validator
 
 import (
 	"context"
+	"errors"
 
 	log "github.com/sirupsen/logrus"
 	dssub "github.com/solpipe/solpipe-tool/ds/sub"
@@ -54,7 +55,23 @@ func Schedule(
 		reqC:   trackHome.ReqC,
 	}
 }
-
+func (e1 external) History() ([]sch.Event, error) {
+	doneC := e1.ctx.Done()
+	ansC := make(chan []sch.Event, 1)
+	select {
+	case <-doneC:
+		return nil, errors.New("canceled")
+	case e1.internalC <- func(in *internal) {
+		ansC <- in.history.Array()
+	}:
+	}
+	select {
+	case <-doneC:
+		return nil, errors.New("canceled")
+	case list := <-ansC:
+		return list, nil
+	}
+}
 func (e1 external) Close() error {
 	signalC := e1.CloseSignal()
 	e1.cancel()

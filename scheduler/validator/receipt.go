@@ -9,10 +9,6 @@ import (
 
 // this function only gets called once
 func (in *internal) on_receipt(rt receiptWithTransition) {
-	if in.cancelValidatorSetPayout != nil {
-		in.cancelValidatorSetPayout()
-		in.cancelValidatorSetPayout = nil
-	}
 
 	in.on_receipt_event(sch.Create(
 		sch.EVENT_VALIDATOR_IS_ADDING,

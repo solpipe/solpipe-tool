@@ -5,6 +5,7 @@ import (
 
 	log "github.com/sirupsen/logrus"
 	cba "github.com/solpipe/cba"
+	ll "github.com/solpipe/solpipe-tool/ds/list"
 	dssub "github.com/solpipe/solpipe-tool/ds/sub"
 	sch "github.com/solpipe/solpipe-tool/scheduler"
 	pyt "github.com/solpipe/solpipe-tool/state/payout"
@@ -34,6 +35,7 @@ type internal struct {
 	cancelValidatorSetPayout  context.CancelFunc
 	cancelValidatorWithdraw   context.CancelFunc
 	keepPayoutOpen            bool
+	history                   *ll.Generic[sch.Event]
 }
 
 func loopInternal(
@@ -68,6 +70,7 @@ func loopInternal(
 	in.data = pwd.Data
 	in.payout = pwd.Payout
 	in.eventHome = eventHome
+	in.history = ll.CreateGeneric[sch.Event]()
 
 	in.hasStarted = false
 	in.hasFinished = false
@@ -98,7 +101,14 @@ out:
 		case id := <-eventHome.DeleteC:
 			eventHome.Delete(id)
 		case r := <-eventHome.ReqC:
-			eventHome.Receive(r)
+			streamC := eventHome.Receive(r)
+			for _, l := range in.history.Array() {
+				select {
+				case streamC <- l:
+				default:
+					log.Debug("should not have a stuffed stream channel")
+				}
+			}
 		}
 	}
 	in.finish(err)
@@ -109,4 +119,9 @@ func (in *internal) finish(err error) {
 	for i := 0; i < len(in.closeSignalCList); i++ {
 		in.closeSignalCList[i] <- err
 	}
+}
+
+func (in *internal) broadcast(event sch.Event) {
+	in.history.Append(event)
+	in.eventHome.Broadcast(event)
 }

@@ -36,7 +36,7 @@ func (in *internal) on_event(event sch.Event) error {
 		return errors.New("unknown event")
 	}
 	if !event.IsTrigger() {
-		in.eventHome.Broadcast(event)
+		in.broadcast(event)
 	}
 
 	return nil

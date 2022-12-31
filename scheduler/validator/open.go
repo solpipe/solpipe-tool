@@ -18,7 +18,6 @@ type receiptWithTransition struct {
 // loop until a receipt corresponding to our payout is received
 func loopOpenReceipt(
 	ctx context.Context,
-	cancel context.CancelFunc,
 	errorC chan<- error,
 	pipeline pipe.Pipeline,
 	receiptC chan<- receiptWithTransition,
@@ -26,7 +25,6 @@ func loopOpenReceipt(
 	v val.Validator,
 	clockPeriodStartC <-chan bool,
 ) {
-	defer cancel()
 	var err error
 	doneC := ctx.Done()
 	sub := v.OnReceipt()

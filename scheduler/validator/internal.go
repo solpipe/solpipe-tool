@@ -2,10 +2,10 @@ package validator
 
 import (
 	"context"
-	"errors"
 
 	log "github.com/sirupsen/logrus"
 	cba "github.com/solpipe/cba"
+	ll "github.com/solpipe/solpipe-tool/ds/list"
 	dssub "github.com/solpipe/solpipe-tool/ds/sub"
 	sch "github.com/solpipe/solpipe-tool/scheduler"
 	pyt "github.com/solpipe/solpipe-tool/state/payout"
@@ -20,7 +20,7 @@ type internal struct {
 	errorC                        chan<- error
 	eventC                        chan<- sch.Event
 	closeSignalCList              []chan<- error
-	clockPeriodStartC             chan<- bool
+	clockPeriodStartC             chan bool
 	sentPeriodStart               bool
 	clockPeriodPostCloseC         chan bool
 	sentPeriodPostClose           bool
@@ -30,14 +30,14 @@ type internal struct {
 	data                          cba.ValidatorManager
 	receiptData                   *cba.Receipt
 	receipt                       rpt.Receipt
-	cancelValidatorSetPayout      context.CancelFunc
+	receiptC                      chan<- receiptWithTransition
 	cancelStake                   context.CancelFunc
 	ctxValidatorWithraw           context.Context
 	cancelValidatorWithraw        context.CancelFunc
 	isValidatorWithdrawTransition bool
 	validatorHasAdded             bool
 	validatorHasWithdrawn         bool
-	preStartEvent                 *sch.Event
+	history                       *ll.Generic[sch.Event]
 }
 
 func (in *internal) Payout() pyt.Payout {
@@ -83,6 +83,7 @@ func loopInternal(
 	defer eventHome.Close()
 	in.errorC = errorC
 	in.eventC = receiptEventC
+	in.receiptC = receiptC
 	in.isValidatorWithdrawTransition = false
 	in.clockPeriodStartC = clockPeriodStartC
 	in.sentPeriodStart = false
@@ -92,26 +93,22 @@ func loopInternal(
 	in.validator = v
 	in.validatorHasAdded = false
 	in.validatorHasWithdrawn = false
+	in.history = ll.CreateGeneric[sch.Event]()
 
 	in.data, err = v.Data()
 	if err != nil {
 		in.errorC <- err
 	}
 
-	var ctxValidatorSetPayout context.Context
-	ctxValidatorSetPayout, in.cancelValidatorSetPayout = context.WithCancel(ctx)
-	log.Debugf("open receipt payout=%s", in.pwd.Id.String())
 	go loopOpenReceipt(
-		ctxValidatorSetPayout,
-		in.cancelValidatorSetPayout,
+		in.ctx,
 		in.errorC,
 		in.pipeline,
-		receiptC,
+		in.receiptC,
 		in.pwd.Payout,
-		v,
-		clockPeriodStartC,
+		in.validator,
+		in.clockPeriodStartC,
 	)
-	in.run_validator_set_payout(ctxValidatorSetPayout)
 
 out:
 	for {
@@ -123,16 +120,13 @@ out:
 		case id := <-eventHome.DeleteC:
 			eventHome.Delete(id)
 		case r := <-eventHome.ReqC:
-			streamC := eventHome.Receive(r)
-			if in.preStartEvent != nil {
+			streamC := in.eventHome.Receive(r)
+			for _, l := range in.history.Array() {
 				select {
-				case streamC <- *in.preStartEvent:
-					log.Debugf("broadcasted prestartevent for validator payout=%s", in.pwd.Id.String())
+				case streamC <- l:
 				default:
-					err = errors.New("failed to broadcast")
-					break out
+					log.Debug("should not have a stuffed stream channel")
 				}
-				in.preStartEvent = nil
 			}
 		case err = <-payoutEventSub.ErrorC:
 			break out
@@ -149,6 +143,11 @@ out:
 	in.finish(err)
 }
 
+func (in *internal) broadcast(event sch.Event) {
+	in.history.Append(event)
+	in.eventHome.Broadcast(event)
+}
+
 func (in *internal) finish(err error) {
 	log.Debug(err)
 	for i := 0; i < len(in.closeSignalCList); i++ {
@@ -160,7 +159,7 @@ func (in *internal) finish(err error) {
 func (in *internal) run_validator_withdraw(isStateChange bool) {
 	var ctxC context.Context
 	ctxC, in.cancelValidatorWithraw = context.WithCancel(in.ctx)
-	in.trackHome.Broadcast(sch.CreateWithPayload(
+	in.broadcast(sch.CreateWithPayload(
 		sch.TRIGGER_VALIDATOR_WITHDRAW_RECEIPT,
 		isStateChange,
 		0,

@@ -38,6 +38,9 @@ func (in *internal) on_payout_event(event sch.Event) {
 	log.Debugf("on_payout_event: %s", event.String())
 
 	switch event.Type {
+	case sch.TRIGGER_VALIDATOR_SET_PAYOUT:
+		log.Debugf("trigger_validator_set_payout payout=%s", in.pwd.Id.String())
+		in.run_validator_set_payout(event)
 	case sch.EVENT_PERIOD_PRE_START:
 		log.Debugf("event_period_start payout=%s", in.pwd.Id.String())
 	case sch.EVENT_PERIOD_START:
@@ -57,7 +60,6 @@ func (in *internal) on_payout_event(event sch.Event) {
 }
 
 func (in *internal) on_pre_start_kill(event sch.Event) {
-	in.preStartEvent = nil
 	if !in.sentPeriodStart {
 		in.sentPeriodStart = true
 		select {
@@ -83,7 +85,7 @@ func (in *internal) on_receipt_event(event sch.Event) {
 	log.Debugf("on_receipt_event: %s", event.String())
 	switch event.Type {
 	case sch.EVENT_STAKER_IS_ADDING:
-		in.eventHome.Broadcast(event)
+		in.broadcast(event)
 	case sch.EVENT_STAKER_HAVE_WITHDRAWN:
 		in.on_staker_have_withdrawn(event)
 	case sch.EVENT_STAKER_HAVE_WITHDRAWN_EMPTY:
@@ -95,7 +97,7 @@ func (in *internal) on_receipt_event(event sch.Event) {
 			in.cancelValidatorWithraw()
 			in.cancelValidatorWithraw = nil
 		}
-		in.eventHome.Broadcast(event)
+		in.broadcast(event)
 		in.errorC <- nil
 	default:
 		log.Debugf("on_receipt_event unknown event: %s", event.String())
@@ -103,7 +105,7 @@ func (in *internal) on_receipt_event(event sch.Event) {
 }
 
 func (in *internal) on_staker_have_withdrawn(event sch.Event) {
-	in.eventHome.Broadcast(event)
+	in.broadcast(event)
 	log.Debugf("withdrawing validator")
 	if in.cancelValidatorWithraw == nil {
 		in.ctxValidatorWithraw, in.cancelValidatorWithraw = context.WithCancel(in.ctx)
