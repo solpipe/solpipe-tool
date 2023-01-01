@@ -120,7 +120,7 @@ out:
 		case <-doneC:
 			return errors.New("canceled")
 		case <-taskEarlyTerminateC:
-			return nil
+			break out
 		case w.internalC <- func(in *internal) {
 			errorC <- in.run(taskCtx, cb)
 		}:
@@ -129,7 +129,7 @@ out:
 		case <-doneC:
 			return errors.New("canceled")
 		case <-taskEarlyTerminateC:
-			return nil
+			break out
 		case err = <-errorC:
 		}
 		if err == nil {
@@ -139,11 +139,14 @@ out:
 		case <-doneC:
 			return errors.New("canceled")
 		case <-taskEarlyTerminateC:
-			return nil
+			break out
 		case <-time.After(delay):
 		}
 	}
-	return err
+	if err != nil {
+		return err
+	}
+	return nil
 }
 
 func (in *internal) run(

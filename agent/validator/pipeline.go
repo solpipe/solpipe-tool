@@ -130,7 +130,8 @@ func (pi *listenPipelineInternal) on_payout(pwd pipe.PayoutWithData) {
 	payoutSchedule := schpyt.Schedule(pi.ctx, pi.router, pwd)
 	log.Debugf("on_payout payout=%s", pwd.Id.String())
 	doneC := pi.ctx.Done()
-	if pi.slot+pi.lookAhead < pwd.Data.Period.Start {
+	if false {
+		//if pi.slot+pi.lookAhead < pwd.Data.Period.Start {
 		delta := pwd.Data.Period.Start - (pi.slot + pi.lookAhead)
 		log.Debugf("delay is delta=%d for payout=%s", delta, pwd.Id.String())
 		go loopDelaySendPayout(
@@ -144,7 +145,9 @@ func (pi *listenPipelineInternal) on_payout(pwd pipe.PayoutWithData) {
 				payoutSchedule:   payoutSchedule,
 			},
 			pi.sh,
-			pi.slot+delta,
+			pi.slot,
+			pwd.Data.Period.Start,
+			pi.lookAhead,
 		)
 	} else {
 		select {
@@ -166,14 +169,15 @@ func loopDelaySendPayout(
 	newPayoutC chan<- payoutWithPipeline,
 	pwp payoutWithPipeline,
 	sh slt.SlotHome,
-	trigger uint64,
+	slot uint64,
+	start uint64,
+	lookahead uint64,
 ) {
 	var err error
-	var slot uint64
 	doneC := ctx.Done()
 	slotSub := sh.OnSlot()
 out:
-	for slot <= trigger {
+	for slot+lookahead < start {
 		select {
 		case <-doneC:
 			return

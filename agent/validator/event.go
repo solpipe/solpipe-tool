@@ -15,5 +15,8 @@ func (in *internal) on_event(event sch.Event) error {
 	default:
 		log.Debugf("received unmatched event: %s", event.String())
 	}
-	return err
+	if err != nil {
+		return err
+	}
+	return nil
 }

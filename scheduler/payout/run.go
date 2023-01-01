@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 
+	sgo "github.com/SolmateDev/solana-go"
 	log "github.com/sirupsen/logrus"
 	sch "github.com/solpipe/solpipe-tool/scheduler"
 	pyt "github.com/solpipe/solpipe-tool/state/payout"
@@ -106,14 +107,25 @@ func (in *internal) run_validator_set_payout() {
 	if in.cancelValidatorSetPayout != nil {
 		return
 	}
+	log.Debugf("trigger set payout=%s", in.payout.Id.String())
 	var trigger *Trigger
 	trigger, in.cancelValidatorWithdraw = in.generic_trigger()
+	go loopDebugReadTrigger(trigger.Context, in.payout.Id)
 	in.broadcast(sch.CreateWithPayload(
 		sch.TRIGGER_VALIDATOR_SET_PAYOUT,
 		true,
 		0,
 		trigger,
 	))
+
+}
+
+func loopDebugReadTrigger(
+	ctx context.Context,
+	payoutId sgo.PublicKey,
+) {
+	<-ctx.Done()
+	log.Debugf("canceling validator set payout=%s", payoutId.String())
 }
 
 func (in *internal) run_validator_withdraw() {

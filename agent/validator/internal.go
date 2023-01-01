@@ -100,13 +100,13 @@ out:
 		case <-doneC:
 			break out
 		case req := <-internalC:
-			log.Debugf("validator=%s req start", in.validator.Id.String())
+			//log.Debugf("validator=%s req start", in.validator.Id.String())
 			req(in)
-			log.Debugf("validator=%s req finished", in.validator.Id.String())
+			//log.Debugf("validator=%s req finished", in.validator.Id.String())
 		case pp := <-newPayoutC:
-			log.Debugf("validator on_payout start")
+			//log.Debugf("validator on_payout start")
 			in.on_payout(pp)
-			log.Debugf("validator on_payout finished")
+			//log.Debugf("validator on_payout finished")
 		case event := <-eventC:
 			err = in.on_event(event)
 			if err != nil {
