@@ -12,6 +12,7 @@ import (
 	log "github.com/sirupsen/logrus"
 	valagent "github.com/solpipe/solpipe-tool/agent/validator"
 	valadmin "github.com/solpipe/solpipe-tool/agent/validator/admin"
+	"github.com/solpipe/solpipe-tool/proxy"
 	"github.com/solpipe/solpipe-tool/proxy/relay"
 )
 
@@ -172,13 +173,18 @@ func (r *ValidatorAgent) Run(kongCtx *CLIContext) error {
 		clearConfig.Port = uint16(z)
 		relayConfig.ClearNet = clearConfig
 	}
-
+	torMgr, err := proxy.SetupTor(ctx, false)
+	if err != nil {
+		return err
+	}
+	go loopCloseTor(ctx, torMgr)
 	agent, err := valagent.Create(
 		ctx,
 		relayConfig,
 		router,
 		validator,
 		r.ConfigFilePath,
+		torMgr,
 	)
 	if err != nil {
 		return err

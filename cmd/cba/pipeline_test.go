@@ -11,6 +11,7 @@ import (
 	cba "github.com/solpipe/cba"
 	ap "github.com/solpipe/solpipe-tool/agent/pipeline"
 	"github.com/solpipe/solpipe-tool/proto/test"
+	"github.com/solpipe/solpipe-tool/proxy"
 	"github.com/solpipe/solpipe-tool/state"
 	pipe "github.com/solpipe/solpipe-tool/state/pipeline"
 	"github.com/solpipe/solpipe-tool/test/sandbox"
@@ -66,7 +67,10 @@ func TestPipeline(t *testing.T) {
 			RefundSpace: 20,
 		},
 	}
-
+	torMgr, err := proxy.SetupTor(ctx, true)
+	if err != nil {
+		t.Fatal(err)
+	}
 	t.Logf("need to create pipeline")
 	var resultC <-chan ap.ListenResult
 	args.Program.Pipeline = new(sgo.PublicKey)
@@ -78,6 +82,7 @@ func TestPipeline(t *testing.T) {
 		nil,
 		args.Program.Settings.BidSpace,
 		args.Program.Settings.RefundSpace,
+		torMgr,
 	)
 	if err != nil {
 		t.Fatal(err)

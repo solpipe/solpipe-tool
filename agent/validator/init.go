@@ -7,6 +7,7 @@ import (
 
 	sgo "github.com/SolmateDev/solana-go"
 	sgorpc "github.com/SolmateDev/solana-go/rpc"
+	"github.com/cretz/bine/tor"
 	"github.com/solpipe/solpipe-tool/proxy/relay"
 	"github.com/solpipe/solpipe-tool/script"
 	rtr "github.com/solpipe/solpipe-tool/state/router"
@@ -30,6 +31,7 @@ func Initialize(
 	router rtr.Router,
 	timeout time.Duration,
 	args *InitializationArg,
+	torMgr *tor.Tor,
 ) (l ListenResult, err error) {
 
 	if args == nil {
@@ -99,6 +101,7 @@ func Initialize(
 		args.Vote.PublicKey(),
 		timeout,
 		args.ConfigFilePath,
+		torMgr,
 	)
 
 	err = s1.FinishTx(true)

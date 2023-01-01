@@ -84,21 +84,8 @@ func SetupTor(ctx context.Context, isClient bool) (torMgr *tor.Tor, err error) {
 	if err != nil {
 		return
 	}
-	go loopKillTor(ctx, torMgr)
+	//go loopKillTor(ctx, torMgr)
 	return
-}
-
-func loopKillTor(ctx context.Context, torMgr *tor.Tor) {
-	<-ctx.Done()
-	if torMgr != nil {
-		if torMgr.ProcessCancelFunc != nil {
-			torMgr.Close()
-		} else {
-			log.Debug("no cancel function for tor")
-		}
-	} else {
-		log.Debug("tor mgr is null")
-	}
 }
 
 func loopDeleteFile(ctx context.Context, fp string) {

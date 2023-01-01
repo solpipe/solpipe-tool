@@ -3,9 +3,9 @@ package pipeline
 import (
 	"context"
 
+	"github.com/cretz/bine/tor"
 	log "github.com/sirupsen/logrus"
 	pbj "github.com/solpipe/solpipe-tool/proto/job"
-	"github.com/solpipe/solpipe-tool/proxy"
 	"github.com/solpipe/solpipe-tool/proxy/relay"
 	ntk "github.com/solpipe/solpipe-tool/state/network"
 	pipe "github.com/solpipe/solpipe-tool/state/pipeline"
@@ -28,17 +28,14 @@ func Create(
 	config relay.Configuration,
 	router rtr.Router,
 	pipeline pipe.Pipeline,
+	torMgr *tor.Tor,
 ) (relay.Relay, error) {
 	log.Debugf("starting relay for pipeline=%s", pipeline.Id.String())
 	ctx2, cancel := context.WithCancel(ctx)
 	internalC := make(chan func(*internal), 10)
 	txSubmitC := make(chan requestForSubmitChannel)
 	slotHome := router.Controller.SlotHome()
-	torMgr, err := proxy.SetupTor(ctx2, false)
-	if err != nil {
-		cancel()
-		return nil, err
-	}
+
 	dialer, err := torMgr.Dialer(ctx2, nil)
 	if err != nil {
 		cancel()

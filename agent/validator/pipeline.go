@@ -103,9 +103,9 @@ out:
 			slotSub = sh.OnSlot()
 			log.Debugf("renewed slot sub for pipeline=%s", pi.pipeline.Id.String())
 		case pi.slot = <-slotSub.StreamC:
-			if pi.slot%10 == 0 {
-				log.Debugf("pipeline=%s slot=%d", pi.pipeline.Id.String(), pi.slot)
-			}
+			//if pi.slot%10 == 0 {
+			//	log.Debugf("pipeline=%s slot=%d", pi.pipeline.Id.String(), pi.slot)
+			//}
 		case err = <-payoutSub.ErrorC:
 			break out
 		case pwd := <-payoutSub.StreamC:

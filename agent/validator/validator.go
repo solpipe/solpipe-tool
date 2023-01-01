@@ -54,6 +54,7 @@ func CreateFromListener(
 	vote sgo.PublicKey,
 	timeout time.Duration,
 	configFilePath string,
+	torMgr *tor.Tor,
 ) (l ListenResult) {
 	ctxShort, cancelShort := context.WithTimeout(ctx, timeout)
 
@@ -90,6 +91,7 @@ func CreateFromListener(
 		wsClient,
 		router,
 		configFilePath,
+		torMgr,
 	)
 
 	return
@@ -107,6 +109,7 @@ func loopListener(
 	wsClient *sgows.Client,
 	router rtr.Router,
 	configFilePath string,
+	torMgr *tor.Tor,
 ) {
 	defer cancelShort()
 	defer sh.Unsubscribe()
@@ -125,7 +128,7 @@ func loopListener(
 		errorC <- err
 		return
 	}
-	a, err := Create(ctx, config, router, v, configFilePath)
+	a, err := Create(ctx, config, router, v, configFilePath, torMgr)
 	errorC <- err
 	if err != nil {
 		return
@@ -140,6 +143,7 @@ func Create(
 	router rtr.Router,
 	validator val.Validator,
 	configFilePath string,
+	torMgr *tor.Tor,
 ) (agent Agent, err error) {
 	var data cba.ValidatorManager
 	data, err = validator.Data()
@@ -149,11 +153,7 @@ func Create(
 	controller := router.Controller
 
 	ctxC, cancel := context.WithCancel(ctx)
-	t1, err := proxy.SetupTor(ctxC, true)
-	if err != nil {
-		cancel()
-		return
-	}
+
 	adminListener, err := config.AdminListener(ctxC)
 	if err != nil {
 		cancel()
@@ -172,11 +172,7 @@ func Create(
 		cancel()
 		return Agent{}, err
 	}
-	torMgr, err := proxy.SetupTor(ctx, false)
-	if err != nil {
-		cancel()
-		return Agent{}, err
-	}
+
 	torLi, err = proxy.CreateListenerTor(
 		ctx,
 		config.Admin,
@@ -252,11 +248,11 @@ func Create(
 	}
 	reflection.Register(grpcServerTor)
 	go loopGrpcListen(ctxC, torLi.Listener, grpcServerTor, serverErrorC)
-	go loopGrpcShutdown(ctxC, t1, torLi.Listener, grpcServerTor)
+	go loopGrpcShutdown(ctxC, torMgr, torLi.Listener, grpcServerTor)
 	if grpcServerClearNet != nil {
 		reflection.Register(grpcServerClearNet)
 		go loopGrpcListen(ctxC, clearLi.Listener, grpcServerClearNet, serverErrorC)
-		go loopGrpcShutdown(ctxC, t1, clearLi.Listener, grpcServerClearNet)
+		go loopGrpcShutdown(ctxC, torMgr, clearLi.Listener, grpcServerClearNet)
 	}
 
 	log.Debug("entering internal loop for validator agent")

@@ -104,6 +104,9 @@ func (in *internal) run_close_payout() {
 
 // stakers can add once the context in the trigger has Done() fired
 func (in *internal) run_validator_set_payout() {
+	if in.hasStarted {
+		return
+	}
 	if in.cancelValidatorSetPayout != nil {
 		return
 	}

@@ -43,6 +43,9 @@ func (in *internal) on_event(event sch.Event) error {
 }
 
 func (in *internal) on_pre_start(isTransition bool) {
+	if in.hasStarted {
+		return
+	}
 	in.run_validator_set_payout()
 }
 
@@ -51,6 +54,7 @@ func (in *internal) on_start(isTransition bool) {
 	in.hasStarted = true
 	log.Debugf("payout=%s period has started", in.payout.Id.String())
 	if in.cancelValidatorSetPayout != nil {
+		log.Debugf("CANCEL SET PAYOUT=%s", in.payout.Id.String())
 		in.cancelValidatorSetPayout()
 	}
 	if !in.bidIsFinal {
@@ -76,7 +80,9 @@ func (in *internal) on_finish(isTransition bool) {
 // clock: 100 slots after finish
 // it is now possible to send a ClosePayout instruction
 func (in *internal) on_clock_close_payout(isTransition bool) {
-
+	if !in.hasFinished {
+		in.on_finish(false)
+	}
 	in.isClockReadyToClose = true
 	log.Debugf("payout=%s time to close payout", in.payout.Id.String())
 	in.run_close_payout()
