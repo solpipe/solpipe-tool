@@ -186,6 +186,8 @@ func (e1 external) ws_server_http(w http.ResponseWriter, r *http.Request) {
 	payoutSub := e1.router.ObjectOnPayout()
 	defer payoutSub.Unsubscribe()
 
+	closeServer := false
+
 out:
 	for {
 		select {
@@ -193,6 +195,9 @@ out:
 			err = errors.New("server done")
 			break out
 		case <-clientDoneC:
+			break out
+		case err = <-errorC:
+			closeServer = true
 			break out
 		case err = <-slotSub.ErrorC:
 			slotSub = e1.router.Controller.SlotHome().OnSlot()
@@ -211,6 +216,7 @@ out:
 				break out
 			}
 		case err = <-pipelineSub.ErrorC:
+			closeServer = true
 			break out
 		case p := <-pipelineSub.StreamC:
 			go e1.ws_on_pipeline(
@@ -240,6 +246,7 @@ out:
 				break out
 			}
 		case err = <-valSub.ErrorC:
+			closeServer = true
 			break out
 		case x := <-valSub.StreamC:
 			// covers new validators
@@ -261,6 +268,7 @@ out:
 				break out
 			}
 		case err = <-payoutSub.ErrorC:
+			closeServer = true
 			break out
 		case p := <-payoutSub.StreamC:
 			// covers new payouts
@@ -292,5 +300,8 @@ out:
 	}
 	if err != nil {
 		log.Debug(err)
+	}
+	if closeServer {
+		e1.closeErrorC <- err
 	}
 }
