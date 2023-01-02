@@ -1,6 +1,7 @@
 package sub
 
 import (
+	"errors"
 	"fmt"
 
 	log "github.com/sirupsen/logrus"
@@ -24,17 +25,40 @@ type innerSubscription[T any] struct {
 	filter  func(T) bool
 }
 type ResponseChannel[T any] struct {
-	RespC  chan<- Subscription[T]
-	filter func(T) bool
+	RespC               chan<- Subscription[T]
+	filter              func(T) bool
+	requestedBufferSize uint16
 }
 
+const DEFAULT_STREAM_BUFFER_SIZE uint16 = 10
+
 func SubscriptionRequest[T any](reqC chan<- ResponseChannel[T], filterCallback func(T) bool) Subscription[T] {
-	respC := make(chan Subscription[T], 10)
-	reqC <- ResponseChannel[T]{
-		RespC:  respC,
-		filter: filterCallback,
+	return SubscriptionRequestWithBufferSize(reqC, DEFAULT_STREAM_BUFFER_SIZE, filterCallback)
+}
+
+func SubscriptionRequestWithBufferSize[T any](reqC chan<- ResponseChannel[T], bufSize uint16, filterCallback func(T) bool) (sub Subscription[T]) {
+
+	respC := make(chan Subscription[T], 1)
+	select {
+	case reqC <- ResponseChannel[T]{
+		RespC:               respC,
+		filter:              filterCallback,
+		requestedBufferSize: bufSize,
+	}:
+	default:
+		streamC := make(chan T)
+		deleteC := make(chan int, 1)
+		errorC := make(chan error, 1)
+		errorC <- errors.New("request queue full")
+		return Subscription[T]{
+			id:      -1,
+			ErrorC:  errorC,
+			StreamC: streamC,
+			deleteC: deleteC,
+		}
 	}
-	return <-respC
+	sub = <-respC
+	return
 }
 
 type SubHome[T any] struct {
@@ -61,9 +85,10 @@ func (sh *SubHome[T]) Broadcast(value T) {
 			select {
 			case v.streamC <- value:
 			default:
-				log.Debug("subscription timed out (sub type=%T)", value)
+				err := fmt.Errorf("queue is full (sub type=%d)", id)
+				log.Debug(err)
 				// errorC guaranteed to have 1 empty space
-				v.errorC <- fmt.Errorf("queue is full (sub type=%T)", value)
+				v.errorC <- err
 				delete(sh.subs, id)
 			}
 		}
@@ -86,13 +111,14 @@ func (sh *SubHome[T]) Close() {
 	sh.subs = make(map[int]*innerSubscription[T])
 }
 
-func (sh *SubHome[T]) Receive(resp ResponseChannel[T]) {
+func (sh *SubHome[T]) Receive(resp ResponseChannel[T]) chan<- T {
 	id := sh.id
 	sh.id++
-	streamC := make(chan T, 10)
+	streamC := make(chan T, resp.requestedBufferSize)
 	errorC := make(chan error, 1)
 	sh.subs[id] = &innerSubscription[T]{
 		id: id, streamC: streamC, errorC: errorC, filter: resp.filter,
 	}
 	resp.RespC <- Subscription[T]{id: id, StreamC: streamC, ErrorC: errorC, deleteC: sh.DeleteC}
+	return streamC
 }

@@ -13,7 +13,7 @@ import (
 	log "github.com/sirupsen/logrus"
 	cba "github.com/solpipe/cba"
 	sub2 "github.com/solpipe/solpipe-tool/ds/sub"
-	"github.com/solpipe/solpipe-tool/state/slot"
+	slt "github.com/solpipe/solpipe-tool/state/slot"
 	"github.com/solpipe/solpipe-tool/state/sub"
 	vrs "github.com/solpipe/solpipe-tool/state/version"
 )
@@ -26,7 +26,7 @@ type Controller struct {
 	updateControllerC chan<- sub2.ResponseChannel[cba.Controller]
 	rpc               *sgorpc.Client
 	ws                *sgows.Client
-	subSlot           slot.SlotHome
+	subSlot           slt.SlotHome
 }
 
 func (e1 Controller) Print() (string, error) {
@@ -76,7 +76,7 @@ func CreateController(ctx context.Context, rpcClient *sgorpc.Client, wsClient *s
 	log.Infof("controller id 2 =%s", controllerId.String())
 	data := all.Controller
 
-	subSlot, err := slot.SubscribeSlot(ctx, rpcClient, wsClient)
+	subSlot, err := slt.SubscribeSlot(ctx, rpcClient, wsClient)
 	if err != nil {
 		return Controller{}, err
 	}
@@ -98,7 +98,7 @@ func (e1 Controller) Id() sgo.PublicKey {
 	return e1.id
 }
 
-func (e1 Controller) SlotHome() slot.SlotHome {
+func (e1 Controller) SlotHome() slt.SlotHome {
 	return e1.subSlot
 }
 

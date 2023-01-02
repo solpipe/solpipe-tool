@@ -4,6 +4,7 @@ import (
 	"context"
 
 	log "github.com/sirupsen/logrus"
+	ll "github.com/solpipe/solpipe-tool/ds/list"
 	dssub "github.com/solpipe/solpipe-tool/ds/sub"
 	sch "github.com/solpipe/solpipe-tool/scheduler"
 	pipe "github.com/solpipe/solpipe-tool/state/pipeline"
@@ -19,11 +20,12 @@ type internal struct {
 	closeSignalCList []chan<- error
 	cancelAdd        context.CancelFunc
 	cancelWithdraw   context.CancelFunc
-	trackHome        *dssub.SubHome[sch.Event]
+	eventHome        *dssub.SubHome[sch.Event]
 	pwd              pipe.PayoutWithData
 	rwd              rpt.ReceiptWithData
 	ps               sch.Schedule
 	s                skr.Staker
+	history          *ll.Generic[sch.Event]
 }
 
 func loopInternal(
@@ -34,7 +36,7 @@ func loopInternal(
 	ps sch.Schedule,
 	s skr.Staker,
 	rwd rpt.ReceiptWithData,
-	trackHome *dssub.SubHome[sch.Event],
+	eventHome *dssub.SubHome[sch.Event],
 ) {
 	defer cancel()
 	eventC := make(chan sch.Event, 1)
@@ -47,12 +49,13 @@ func loopInternal(
 	in.errorC = errorC
 	in.eventC = eventC
 	in.closeSignalCList = make([]chan<- error, 0)
-	in.trackHome = trackHome
-	defer trackHome.Close()
+	in.eventHome = eventHome
+	defer eventHome.Close()
 	in.ps = ps
 	in.pwd = pwd
 	in.rwd = rwd
 	in.s = s
+	in.history = ll.CreateGeneric[sch.Event]()
 
 	var ctxStakerAdd context.Context
 	ctxStakerAdd, in.cancelAdd = context.WithCancel(ctx)
@@ -72,14 +75,30 @@ out:
 			in.on_staker_receipt(srgt)
 		case event := <-eventC:
 			in.on_event(event)
+		case id := <-in.eventHome.DeleteC:
+			in.eventHome.Delete(id)
+		case r := <-in.eventHome.ReqC:
+			streamC := in.eventHome.Receive(r)
+			for _, l := range in.history.Array() {
+				select {
+				case streamC <- l:
+				default:
+					log.Debug("should not have a stuffed stream channel")
+				}
+			}
 		}
 	}
 
 	in.finish(err)
 }
 
+func (in *internal) broadcast(event sch.Event) {
+	in.history.Append(event)
+	in.eventHome.Broadcast(event)
+}
+
 func (in *internal) on_event(event sch.Event) {
-	in.trackHome.Broadcast(event)
+	in.broadcast(event)
 	switch event.Type {
 	case sch.EVENT_STAKER_HAVE_WITHDRAWN:
 		if in.cancelWithdraw != nil {
@@ -98,7 +117,7 @@ type srgWithTransition struct {
 // this function is only called once
 func (in *internal) on_staker_receipt(srgt srgWithTransition) {
 	// EVENT_STAKER_IS_ADDING
-	in.trackHome.Broadcast(sch.Create(
+	in.broadcast(sch.Create(
 		sch.EVENT_STAKER_IS_ADDING,
 		srgt.isStateChange,
 		0,

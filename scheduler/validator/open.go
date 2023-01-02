@@ -3,9 +3,9 @@ package validator
 import (
 	"context"
 
-	sch "github.com/solpipe/solpipe-tool/scheduler"
-	schpyt "github.com/solpipe/solpipe-tool/scheduler/payout"
+	log "github.com/sirupsen/logrus"
 	pyt "github.com/solpipe/solpipe-tool/state/payout"
+	pipe "github.com/solpipe/solpipe-tool/state/pipeline"
 	rpt "github.com/solpipe/solpipe-tool/state/receipt"
 	val "github.com/solpipe/solpipe-tool/state/validator"
 )
@@ -18,75 +18,63 @@ type receiptWithTransition struct {
 // loop until a receipt corresponding to our payout is received
 func loopOpenReceipt(
 	ctx context.Context,
-	cancel context.CancelFunc,
 	errorC chan<- error,
-	rC chan<- receiptWithTransition,
-	eventC chan<- sch.Event,
+	pipeline pipe.Pipeline,
+	receiptC chan<- receiptWithTransition,
 	payout pyt.Payout,
 	v val.Validator,
 	clockPeriodStartC <-chan bool,
 ) {
-	defer cancel()
 	var err error
 	doneC := ctx.Done()
 	sub := v.OnReceipt()
 	defer sub.Unsubscribe()
 	payoutId := payout.Id
+
 	rwd, present := v.ReceiptByPayoutId(payoutId)
 	if present {
+		log.Debugf("sending receipt back - 1 payout=%s", payout.Id.String())
 		select {
 		case <-doneC:
 			return
-		case rC <- receiptWithTransition{
+		case receiptC <- receiptWithTransition{
 			rwd:           rwd,
 			isStateChange: false,
 		}:
 		}
-	} else {
-		// no receipt has been created yet
-		select {
-		case <-doneC:
-			return
-		case eventC <- sch.CreateWithPayload(
-			sch.TRIGGER_VALIDATOR_SET_PAYOUT,
-			false,
-			0,
-			schpyt.Trigger{
-				Context: ctx,
-				Payout:  payout,
-			},
-		):
-		}
+		return
 	}
+	// we used to send a trigger validator_set_payout here, but decided to send it instead from the payout schedule
 out:
 	for {
 		select {
 		case <-doneC:
 			break out
-		case <-clockPeriodStartC:
-			// period started before we received a receipt, so exit the loop
-			select {
-			case <-doneC:
-			case errorC <- nil:
-			}
-			return
 		case err = <-sub.ErrorC:
 			break out
 		case rwd = <-sub.StreamC:
+			log.Debugf("receipt=%s for payout=%s vs required payout=%s", rwd.Receipt.Id.String(), rwd.Data.Payout.String(), payoutId.String())
 			if rwd.Data.Payout.Equals(payoutId) {
+				log.Debugf("sending receipt back - 2 payout=%s", payoutId.String())
 				select {
 				case <-doneC:
 					break out
-				case rC <- receiptWithTransition{
+				case receiptC <- receiptWithTransition{
 					rwd:           rwd,
 					isStateChange: true,
 				}:
 				}
 				break out
 			}
+		case <-clockPeriodStartC:
+			// period started before we received a receipt, so exit the loop
+			log.Debugf("lock period start payout=%s", payoutId.String())
+			break out
+
 		}
 	}
 
+	log.Debugf("exiting open receipt loop; payout=%s", payoutId.String())
 	if err != nil {
 		select {
 		case errorC <- err:

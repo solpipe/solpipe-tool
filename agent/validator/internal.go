@@ -9,45 +9,35 @@ import (
 	sgorpc "github.com/SolmateDev/solana-go/rpc"
 	sgows "github.com/SolmateDev/solana-go/rpc/ws"
 	log "github.com/sirupsen/logrus"
-	cba "github.com/solpipe/cba"
 	pba "github.com/solpipe/solpipe-tool/proto/admin"
 	rly "github.com/solpipe/solpipe-tool/proxy/relay"
 	sch "github.com/solpipe/solpipe-tool/scheduler"
 	spt "github.com/solpipe/solpipe-tool/script"
 	ctr "github.com/solpipe/solpipe-tool/state/controller"
-	pipe "github.com/solpipe/solpipe-tool/state/pipeline"
-	rpt "github.com/solpipe/solpipe-tool/state/receipt"
 	rtr "github.com/solpipe/solpipe-tool/state/router"
 	val "github.com/solpipe/solpipe-tool/state/validator"
 )
 
 type internal struct {
-	ctx              context.Context
-	errorC           chan<- error
-	closeSignalCList []chan<- error
-	config           rly.Configuration
-	configFilePath   string
-	rpc              *sgorpc.Client
-	ws               *sgows.Client
-	scriptWrapper    spt.Wrapper
-	controller       ctr.Controller
-	router           rtr.Router
-	validator        val.Validator
-	settings         *pba.ValidatorSettings
-	selectedPipeline *pipelineInfo
-	newPayoutC       chan<- payoutWithPipeline
-	deletePipelineC  chan<- sgo.PublicKey
-	pipelineM        map[string]*pipelineInfo
-	payoutM          map[string]*payoutInfo
-	eventC           chan<- sch.Event
-}
-
-type validatorReceiptInfo struct {
-	rsf      *cba.ReceiptWithStartFinish
-	ctx      context.Context
-	cancel   context.CancelFunc
-	rwd      rpt.ReceiptWithData
-	pipeline pipe.Pipeline
+	ctx                context.Context
+	errorC             chan<- error
+	closeSignalCList   []chan<- error
+	config             rly.Configuration
+	configFilePath     string
+	rpc                *sgorpc.Client
+	ws                 *sgows.Client
+	scriptWrapper      spt.Wrapper
+	controller         ctr.Controller
+	router             rtr.Router
+	validator          val.Validator
+	settings           *pba.ValidatorSettings
+	selectedPipeline   *pipelineInfo
+	newPayoutC         chan<- payoutWithPipeline
+	deletePipelineC    chan<- sgo.PublicKey
+	pipelineM          map[string]*pipelineInfo
+	payoutM            map[string]*payoutInfo
+	eventC             chan<- sch.Event
+	latestPeriodFinish uint64
 }
 
 const START_BUFFER = uint64(10)
@@ -88,6 +78,8 @@ func loopInternal(
 	in.settings = nil
 	in.deletePipelineC = deletePipelineC
 	in.newPayoutC = newPayoutC
+	in.pipelineM = make(map[string]*pipelineInfo)
+	in.payoutM = make(map[string]*payoutInfo)
 
 	if in.config_exists() {
 		err = in.config_load()
@@ -96,8 +88,10 @@ func loopInternal(
 		}
 	}
 
+	log.Debugf("entering loop for validator=%s", in.validator.Id.String())
 out:
 	for {
+		log.Debug("....for loop validator")
 		select {
 		case err = <-errorC:
 			break out
@@ -106,9 +100,13 @@ out:
 		case <-doneC:
 			break out
 		case req := <-internalC:
+			//log.Debugf("validator=%s req start", in.validator.Id.String())
 			req(in)
+			//log.Debugf("validator=%s req finished", in.validator.Id.String())
 		case pp := <-newPayoutC:
+			//log.Debugf("validator on_payout start")
 			in.on_payout(pp)
+			//log.Debugf("validator on_payout finished")
 		case event := <-eventC:
 			err = in.on_event(event)
 			if err != nil {
@@ -148,7 +146,7 @@ func (in *internal) config_load() error {
 	if err != nil {
 		return err
 	}
-	return in.settings_change(newSettings)
+	return in.on_settings(newSettings)
 }
 
 func (in *internal) config_save() error {

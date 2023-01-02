@@ -3,6 +3,8 @@ package payout
 import (
 	"context"
 
+	sgo "github.com/SolmateDev/solana-go"
+	log "github.com/sirupsen/logrus"
 	cba "github.com/solpipe/cba"
 	sch "github.com/solpipe/solpipe-tool/scheduler"
 	ctr "github.com/solpipe/solpipe-tool/state/controller"
@@ -19,12 +21,14 @@ func loopClock(
 	clockPeriodStartC chan<- bool,
 	clockPeriodPostC chan<- bool,
 	data cba.Payout,
+	payoutId sgo.PublicKey,
 ) {
 	var err error
 	var slot uint64
 	doneC := ctx.Done()
 	slotSub := controller.SlotHome().OnSlot()
 	defer slotSub.Unsubscribe()
+	sentPreStart := false
 	start := data.Period.Start
 	sentStart := false
 	isStartStateTransition := false
@@ -45,6 +49,7 @@ out:
 		case slot = <-slotSub.StreamC:
 
 			if !sentStart && start <= slot {
+				log.Debugf("SENDING+++++ EVENT_PERIOD_START payout=%s", payoutId.String())
 				sentStart = true
 				select {
 				case <-doneC:
@@ -53,6 +58,10 @@ out:
 				}
 			} else if !isStartStateTransition {
 				isStartStateTransition = true
+			}
+			if !sentPreStart && slot < start {
+				sentPreStart = true
+				log.Debugf("SENDING+++++ EVENT_PERIOD_PRE_START payout=%s", payoutId.String())
 				select {
 				case <-doneC:
 					break out
@@ -60,6 +69,7 @@ out:
 				}
 			}
 			if !sentFinish && finish <= slot {
+				log.Debugf("SENDING+++++ EVENT_PERIOD_FINISH payout=%s", payoutId.String())
 				sentFinish = true
 				select {
 				case <-doneC:

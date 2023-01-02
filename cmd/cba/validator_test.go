@@ -92,6 +92,10 @@ func TestValidator(t *testing.T) {
 			Ipv6: nil,
 		},
 	)
+	torMgr, err := proxy.SetupTor(ctx, true)
+	if err != nil {
+		t.Fatal(err)
+	}
 	var agentListener agentVal.ListenResult
 	agentListener, err = agentVal.Initialize(
 		ctx,
@@ -105,6 +109,7 @@ func TestValidator(t *testing.T) {
 			Stake:          stake.PublicKey(),
 			AdminListenUrl: child.AdminListenUrl,
 		},
+		torMgr,
 	)
 	if err != nil {
 		t.Fatal(err)
@@ -161,10 +166,7 @@ func TestValidator(t *testing.T) {
 		}
 		cancel2()
 	}
-	torMgr, err := proxy.SetupTor(ctx, true)
-	if err != nil {
-		t.Fatal(err)
-	}
+
 	log.Debugf("adding validator=%s to pipeline=%s", agent.Validator.Id.String(), p.Id)
 	err = dialPipeline(ctx, p, torMgr)
 	if err != nil {
@@ -193,31 +195,6 @@ func pickPipeline(router rtr.Router) (pipe.Pipeline, error) {
 	}
 	log.Debugf("pipeline=%d", len(pList))
 	return pList[rand.Intn(len(pList))], nil
-}
-
-func loopCheck(ctx context.Context, wakeMeUpWhenMyValidatorArrivesC chan<- struct{}, router rtr.Router) {
-	doneC := ctx.Done()
-	sub := router.ObjectOnValidator(func(vwd rtr.ValidatorWithData) bool { return true })
-	defer sub.Unsubscribe()
-	streamC := sub.StreamC
-	errorC := sub.ErrorC
-	var vwd rtr.ValidatorWithData
-	var err error
-	select {
-	case vwd = <-streamC:
-		log.Debugf("validator id=%s", vwd.V.Id.String())
-		wakeMeUpWhenMyValidatorArrivesC <- struct{}{}
-	case <-doneC:
-		log.Debug("no validator")
-	case err = <-errorC:
-		if err != nil {
-			log.Debug(err)
-		}
-		log.Debug("validator stream ended")
-	}
-
-	log.Debug("finished loop check")
-
 }
 
 func createWallet(ctx context.Context, child *sandbox.TestChild, amount uint64) (wallet sgo.PrivateKey, err error) {

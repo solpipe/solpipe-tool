@@ -17,6 +17,7 @@ import (
 
 const MAX_TRIES_PERIOD_APPEND = 5
 const DELAY_PERIOD_APPEND = 10 * time.Second
+const PERIOD_START_TOO_CLOSE uint64 = 50
 
 func (in *internal) run_period_append(event sch.Event) error {
 	log.Debugf("received event=%s", event.String())
@@ -34,7 +35,12 @@ func (in *internal) run_period_append(event sch.Event) error {
 	// decrement because later we increment
 
 	sh := in.router.Controller.SlotHome()
-	start := payload.Start
+	var start uint64
+	if in.slot+PERIOD_START_TOO_CLOSE < payload.Start {
+		start = payload.Start
+	} else {
+		start = 0
+	}
 	admin := in.admin
 	length := in.periodSettings.Length
 	withhold := uint16(in.periodSettings.Withhold)

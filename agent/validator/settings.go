@@ -9,7 +9,7 @@ import (
 	pipe "github.com/solpipe/solpipe-tool/state/pipeline"
 )
 
-func (in *internal) settings_change(newSettings *pba.ValidatorSettings) error {
+func (in *internal) on_settings(newSettings *pba.ValidatorSettings) error {
 	var err error
 	log.Debug("settings have change")
 	if newSettings == nil {
@@ -64,5 +64,18 @@ func (in *internal) settings_change(newSettings *pba.ValidatorSettings) error {
 		log.Debug("no change in pipeline")
 	}
 
+	in.on_settings_lookahead()
+
 	return nil
+}
+
+func (in *internal) on_settings_lookahead() {
+	doneC := in.ctx.Done()
+	for _, pi := range in.pipelineM {
+		select {
+		case <-doneC:
+			return
+		case pi.lookAheadC <- in.settings.GetLookahead():
+		}
+	}
 }

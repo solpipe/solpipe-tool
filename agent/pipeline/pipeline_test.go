@@ -14,6 +14,7 @@ import (
 	log "github.com/sirupsen/logrus"
 	cba "github.com/solpipe/cba"
 	ap "github.com/solpipe/solpipe-tool/agent/pipeline"
+	"github.com/solpipe/solpipe-tool/proxy"
 	"github.com/solpipe/solpipe-tool/state"
 	pipe "github.com/solpipe/solpipe-tool/state/pipeline"
 	sle "github.com/solpipe/solpipe-tool/test/single"
@@ -106,6 +107,10 @@ func TestSetup(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	torMgr, err := proxy.SetupTor(ctx, false)
+	if err != nil {
+		t.Fatal(err)
+	}
 	var agent ap.Agent
 	pipeline, err := router.PipelineById(sbox.Pipeline.PublicKey())
 	if err != nil {
@@ -134,6 +139,7 @@ func TestSetup(t *testing.T) {
 			&pid,
 			args.Program.Settings.BidSpace,
 			args.Program.Settings.RefundSpace,
+			torMgr,
 		)
 		if err != nil {
 			t.Fatal(err)
@@ -191,6 +197,7 @@ func TestSetup(t *testing.T) {
 			},
 			router,
 			pipeline,
+			torMgr,
 		)
 		if err != nil {
 			t.Fatal(err)

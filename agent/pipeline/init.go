@@ -7,6 +7,7 @@ import (
 
 	sgo "github.com/SolmateDev/solana-go"
 	sgorpc "github.com/SolmateDev/solana-go/rpc"
+	"github.com/cretz/bine/tor"
 	log "github.com/sirupsen/logrus"
 	"github.com/solpipe/solpipe-tool/script"
 	pipe "github.com/solpipe/solpipe-tool/state/pipeline"
@@ -25,6 +26,7 @@ func Initialize(
 	pipelineIdKeypair *sgo.PrivateKey,
 	bidSpace uint16,
 	residualSpace uint16,
+	torMgr *tor.Tor,
 ) (
 	resultC <-chan ListenResult,
 	pipelineId sgo.PublicKey,
@@ -131,7 +133,7 @@ func Initialize(
 	}
 	pipelineId = pid.PublicKey()
 	*args.Program.Pipeline = pipelineId
-	resultC = CreateFromListener(ctx, args, router, 2*time.Minute)
+	resultC = CreateFromListener(ctx, args, router, 2*time.Minute, torMgr)
 	err = s1.FinishTx(false)
 	if err != nil {
 		return
@@ -150,6 +152,7 @@ func CreateFromListener(
 	args *InitializationArg,
 	router rtr.Router,
 	timeout time.Duration,
+	torMgr *tor.Tor,
 ) <-chan ListenResult {
 	resultC := make(chan ListenResult, 1)
 	if args == nil {
@@ -161,7 +164,7 @@ func CreateFromListener(
 		return resultC
 	}
 
-	go loopListener(ctx, timeout, args, router, resultC)
+	go loopListener(ctx, timeout, args, router, resultC, torMgr)
 	return resultC
 }
 
@@ -171,6 +174,7 @@ func loopListener(
 	args *InitializationArg,
 	router rtr.Router,
 	resultC chan<- ListenResult,
+	torMgr *tor.Tor,
 ) {
 
 	var err error
@@ -197,7 +201,7 @@ out:
 		resultC <- ListenResult{Error: err}
 		return
 	}
-	a, err := Create(ctx, args, router, p)
+	a, err := Create(ctx, args, router, p, torMgr)
 	if err != nil {
 		resultC <- ListenResult{Error: err}
 		return

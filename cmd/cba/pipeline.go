@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -11,9 +12,11 @@ import (
 	"strings"
 
 	sgo "github.com/SolmateDev/solana-go"
+	"github.com/cretz/bine/tor"
 	log "github.com/sirupsen/logrus"
 	cba "github.com/solpipe/cba"
 	ap "github.com/solpipe/solpipe-tool/agent/pipeline"
+	"github.com/solpipe/solpipe-tool/proxy"
 	"github.com/solpipe/solpipe-tool/proxy/relay"
 	"github.com/solpipe/solpipe-tool/state"
 	pipe "github.com/solpipe/solpipe-tool/state/pipeline"
@@ -306,7 +309,11 @@ func (r *PipelineAgent) Run(kongCtx *CLIContext) error {
 		clearConfig.Port = uint16(z)
 		relayConfig.ClearNet = clearConfig
 	}
-
+	torMgr, err := proxy.SetupTor(ctx, false)
+	if err != nil {
+		return err
+	}
+	go loopCloseTor(ctx, torMgr)
 	agent, err := ap.Create(
 		ctx,
 		&ap.InitializationArg{
@@ -325,6 +332,7 @@ func (r *PipelineAgent) Run(kongCtx *CLIContext) error {
 		},
 		router,
 		pipeline,
+		torMgr,
 	)
 	log.Debug("create - 8")
 	if err != nil {
@@ -334,6 +342,13 @@ func (r *PipelineAgent) Run(kongCtx *CLIContext) error {
 	<-agent.CloseSignal()
 	log.Debug("create - 10")
 	return nil
+}
+
+func loopCloseTor(ctx context.Context, torMgr *tor.Tor) {
+	<-ctx.Done()
+	if torMgr != nil {
+		torMgr.Close()
+	}
 }
 
 type PipelineStatus struct {

@@ -2,10 +2,10 @@ package payout
 
 import (
 	"context"
-	"errors"
 
 	log "github.com/sirupsen/logrus"
 	cba "github.com/solpipe/cba"
+	ll "github.com/solpipe/solpipe-tool/ds/list"
 	dssub "github.com/solpipe/solpipe-tool/ds/sub"
 	sch "github.com/solpipe/solpipe-tool/scheduler"
 	pyt "github.com/solpipe/solpipe-tool/state/payout"
@@ -34,8 +34,8 @@ type internal struct {
 	cancelCloseBid            context.CancelFunc
 	cancelValidatorSetPayout  context.CancelFunc
 	cancelValidatorWithdraw   context.CancelFunc
-	cancelStakerWithdraw      context.CancelFunc
 	keepPayoutOpen            bool
+	history                   *ll.Generic[sch.Event]
 }
 
 func loopInternal(
@@ -59,7 +59,7 @@ func loopInternal(
 	eventC := make(chan sch.Event)
 	clockPeriodStartC := make(chan bool, 1)
 	clockPeriodPostC := make(chan bool, 1)
-	go loopClock(ctx, router.Controller, eventC, errorC, clockPeriodStartC, clockPeriodPostC, pwd.Data)
+	go loopClock(ctx, router.Controller, eventC, errorC, clockPeriodStartC, clockPeriodPostC, pwd.Data, pwd.Id)
 	go loopPayoutEvent(ctx, pwd, eventC, errorC, clockPeriodStartC, clockPeriodPostC)
 
 	in := new(internal)
@@ -70,6 +70,7 @@ func loopInternal(
 	in.data = pwd.Data
 	in.payout = pwd.Payout
 	in.eventHome = eventHome
+	in.history = ll.CreateGeneric[sch.Event]()
 
 	in.hasStarted = false
 	in.hasFinished = false
@@ -82,6 +83,9 @@ func loopInternal(
 	in.stakerAddingIsDone = false
 	in.keepPayoutOpen = true
 
+	// run this first to make sure all subscriptions have the validator_set_payout trigger
+	//in.run_validator_set_payout()
+
 out:
 	for in.keepPayoutOpen {
 		select {
@@ -90,37 +94,21 @@ out:
 		case req := <-internalC:
 			req(in)
 		case event := <-eventC:
-			log.Debugf("event payout=%s  %s", pwd.Id.String(), event.String())
-			switch event.Type {
-			case sch.EVENT_PERIOD_PRE_START:
-				in.on_pre_start(event.IsStateChange)
-			case sch.EVENT_PERIOD_START:
-				in.on_start(event.IsStateChange)
-			case sch.EVENT_PERIOD_FINISH:
-				in.on_finish(event.IsStateChange)
-			case sch.EVENT_DELAY_CLOSE_PAYOUT:
-				in.on_clock_close_payout(event.IsStateChange)
-			case sch.EVENT_BID_CLOSED:
-				in.on_bid_closed(event.IsStateChange)
-			case sch.EVENT_BID_FINAL:
-				in.on_bid_final(event.IsStateChange)
-			case sch.EVENT_VALIDATOR_IS_ADDING:
-				in.on_validator_is_adding(event.IsStateChange)
-			case sch.EVENT_VALIDATOR_HAVE_WITHDRAWN:
-				in.on_validator_have_withdrawn(event.IsStateChange)
-			case sch.EVENT_STAKER_IS_ADDING:
-				in.on_staker_is_adding(event.IsStateChange)
-			case sch.EVENT_STAKER_HAVE_WITHDRAWN:
-				in.on_staker_have_withdrawn(event.IsStateChange)
-			default:
-				err = errors.New("unknown event")
+			err = in.on_event(event)
+			if err != nil {
 				break out
 			}
 		case id := <-eventHome.DeleteC:
 			eventHome.Delete(id)
 		case r := <-eventHome.ReqC:
-			eventHome.Receive(r)
-
+			streamC := eventHome.Receive(r)
+			for _, l := range in.history.Array() {
+				select {
+				case streamC <- l:
+				default:
+					log.Debug("should not have a stuffed stream channel")
+				}
+			}
 		}
 	}
 	in.finish(err)
@@ -131,4 +119,9 @@ func (in *internal) finish(err error) {
 	for i := 0; i < len(in.closeSignalCList); i++ {
 		in.closeSignalCList[i] <- err
 	}
+}
+
+func (in *internal) broadcast(event sch.Event) {
+	in.history.Append(event)
+	in.eventHome.Broadcast(event)
 }

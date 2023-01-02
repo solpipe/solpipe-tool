@@ -17,9 +17,9 @@ import (
 )
 
 type payoutInfo struct {
-	cancel context.CancelFunc
-	pwd    pipe.PayoutWithData
-	s      sch.Schedule
+	cancel         context.CancelFunc
+	pwd            pipe.PayoutWithData
+	payoutSchedule sch.Schedule
 }
 
 func (in *internal) on_payout(pwd pipe.PayoutWithData) {
@@ -29,23 +29,23 @@ func (in *internal) on_payout(pwd pipe.PayoutWithData) {
 		var ctxC context.Context
 		ctxC, pi.cancel = context.WithCancel(in.ctx)
 		pi.pwd = pwd
-		pi.s = schpyt.Schedule(ctxC, in.router, pwd)
+		pi.payoutSchedule = schpyt.Schedule(ctxC, in.router, pwd)
 		in.payoutM[pwd.Id.String()] = pi
 		go loopDeletePayout(in.ctx, ctxC, in.deletePayoutC, pwd.Id)
-		go loopPayoutScheduler(ctxC, pi.s, in.errorC, in.eventC)
+		go loopPayoutScheduler(ctxC, pi.payoutSchedule, in.errorC, in.eventC)
 	}
 }
 
 func loopPayoutScheduler(
 	ctx context.Context,
-	s sch.Schedule,
+	payoutSchedule sch.Schedule,
 	errorC chan<- error,
 	eventC chan<- sch.Event,
 ) {
 	var err error
 
 	doneC := ctx.Done()
-	sub := s.OnEvent()
+	sub := payoutSchedule.OnEvent()
 	defer sub.Unsubscribe()
 	var event sch.Event
 	log.Debugf("loop payout scheduler")

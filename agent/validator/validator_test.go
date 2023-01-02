@@ -12,6 +12,7 @@ import (
 	log "github.com/sirupsen/logrus"
 	av "github.com/solpipe/solpipe-tool/agent/validator"
 	valadmin "github.com/solpipe/solpipe-tool/agent/validator/admin"
+	"github.com/solpipe/solpipe-tool/proxy"
 	pipe "github.com/solpipe/solpipe-tool/state/pipeline"
 	sle "github.com/solpipe/solpipe-tool/test/single"
 )
@@ -24,7 +25,9 @@ func TestSetup(t *testing.T) {
 	}
 	log.SetLevel(log.DebugLevel)
 	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
+	t.Cleanup(func() {
+		cancel()
+	})
 	t.Cleanup(func() {
 		time.Sleep(3 * time.Second)
 	})
@@ -59,6 +62,10 @@ func TestSetup(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	torMgr, err := proxy.SetupTor(ctx, false)
+	if err != nil {
+		t.Fatal(err)
+	}
 
 	var agent av.Agent
 	adminSocket := "unix:///tmp/validator.socket"
@@ -77,6 +84,7 @@ func TestSetup(t *testing.T) {
 			router,
 			10*time.Minute,
 			args,
+			torMgr,
 		)
 		if err != nil {
 			t.Fatal(err)
@@ -94,12 +102,14 @@ func TestSetup(t *testing.T) {
 			t.Fatal(err)
 		}
 		t.Logf("validator admin=%s", data.Admin.String())
+
 		agent, err = av.Create(
 			ctx,
 			relayConfig,
 			router,
 			validator,
 			"/tmp/validator-config.json", // TODO: change this
+			torMgr,
 		)
 		if err != nil {
 			t.Fatal(err)
@@ -130,7 +140,9 @@ func TestSetup(t *testing.T) {
 	}
 	select {
 	case <-ctx.Done():
-	case <-time.After(5 * time.Minute):
+		log.Debug("top context done")
+	case <-time.After(120 * time.Minute):
+		cancel()
 	case err = <-switchedC:
 	}
 

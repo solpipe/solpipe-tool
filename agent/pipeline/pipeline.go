@@ -37,6 +37,7 @@ func Create(
 	args *InitializationArg,
 	router rtr.Router,
 	pipeline pipe.Pipeline,
+	torMgr *tor.Tor,
 ) (Agent, error) {
 	log.Debug("creating pipeline agent")
 	var err error
@@ -71,12 +72,6 @@ func Create(
 
 	grpcAdminServer := grpc.NewServer()
 	tpsUpdateErrorC := make(chan error, 1)
-	torMgr, err := proxy.SetupTor(ctx, false)
-	if err != nil {
-		cancel()
-		return Agent{}, err
-	}
-	go loopCloseTor(ctx, torMgr)
 
 	// listen on the tor onion address
 	var grpcServerTor *grpc.Server
@@ -171,6 +166,7 @@ func Create(
 		*args.Relay,
 		router,
 		pipeline,
+		torMgr,
 	)
 	if err != nil {
 		cancel()
@@ -242,12 +238,6 @@ func loopCloseFromError(ctx context.Context, cancel context.CancelFunc, errorC <
 	case <-ctx.Done():
 	case <-errorC:
 	}
-}
-
-func loopCloseTor(ctx context.Context, t *tor.Tor) {
-	<-ctx.Done()
-	// TODO: tor library panics on close
-	t.Close()
 }
 
 func (s Agent) CloseSignal() <-chan error {
