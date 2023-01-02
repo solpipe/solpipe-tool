@@ -8,6 +8,7 @@ import (
 	"time"
 
 	sgo "github.com/SolmateDev/solana-go"
+	log "github.com/sirupsen/logrus"
 	"github.com/solpipe/solpipe-tool/ds/ts/lite"
 	prc "github.com/solpipe/solpipe-tool/state/pricing"
 	rtr "github.com/solpipe/solpipe-tool/state/router"
@@ -15,6 +16,7 @@ import (
 
 type external struct {
 	ctx         context.Context
+	closeErrorC chan<- error
 	healthC     chan func(*healthInternal)
 	router      rtr.Router
 	frontendUrl *url.URL
@@ -37,6 +39,7 @@ func Run(
 	config *Configuration,
 	router rtr.Router,
 ) (signalC <-chan error) {
+	ctxC, cancel := context.WithCancel(ctx)
 	var err error
 	errorC := make(chan error, 1)
 	signalC = errorC
@@ -46,26 +49,30 @@ func Run(
 		proxyUrl, err = url.Parse(config.FrontendUrl)
 		if err != nil {
 			errorC <- err
+			cancel()
 			return
 		}
 	}
 
-	handle, err := lite.Create(ctx)
+	handle, err := lite.Create(ctxC)
 	if err != nil {
 		errorC <- err
+		cancel()
 		return
 	}
 	fakeBidder, err := sgo.NewRandomPrivateKey()
 	if err != nil {
 		errorC <- err
+		cancel()
 		return
 	}
-	pc := prc.Create(ctx, router, fakeBidder.PublicKey(), handle)
+	pc := prc.Create(ctxC, router, fakeBidder.PublicKey(), handle)
 
 	var rpcUrl *url.URL
 	rpcUrl, err = url.Parse(config.RpcUrl)
 	if err != nil {
 		errorC <- err
+		cancel()
 		return
 	}
 
@@ -73,6 +80,7 @@ func Run(
 	wsUrl, err = url.Parse(config.WsUrl)
 	if err != nil {
 		errorC <- err
+		cancel()
 		return
 	}
 
@@ -80,11 +88,15 @@ func Run(
 	grpcWebUrl, err = url.Parse(config.GrpcWebUrl)
 	if err != nil {
 		errorC <- err
+		cancel()
 		return
 	}
 
+	closeErrorC := make(chan error, 1)
+
 	e1 := external{
-		ctx:         ctx,
+		ctx:         ctxC,
+		closeErrorC: closeErrorC,
 		healthC:     healthC,
 		router:      router,
 		frontendUrl: proxyUrl,
@@ -99,9 +111,10 @@ func Run(
 		Handler:     e1,
 		ReadTimeout: 5 * time.Second,
 	}
-	go loopClose(ctx, server)
+
+	go loopClose(ctxC, cancel, closeErrorC, server)
 	go loopServe(server, errorC)
-	go loopHealth(ctx, healthC)
+	go loopHealth(ctxC, healthC)
 
 	e1.has_started()
 
@@ -112,7 +125,12 @@ func loopServe(server *http.Server, errorC chan<- error) {
 	errorC <- server.ListenAndServe()
 }
 
-func loopClose(ctx context.Context, server *http.Server) {
-	<-ctx.Done()
+func loopClose(ctx context.Context, cancel context.CancelFunc, closeErrorC <-chan error, server *http.Server) {
+	defer cancel()
+	select {
+	case <-ctx.Done():
+	case err := <-closeErrorC:
+		log.Debug(err)
+	}
 	server.Shutdown(context.Background())
 }

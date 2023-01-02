@@ -347,7 +347,11 @@ func (r *PipelineAgent) Run(kongCtx *CLIContext) error {
 func loopCloseTor(ctx context.Context, torMgr *tor.Tor) {
 	<-ctx.Done()
 	if torMgr != nil {
-		torMgr.Close()
+		log.Debug("attempting to close tor daemon")
+		err := torMgr.Close()
+		if err != nil {
+			log.Debug(err)
+		}
 	}
 }
 

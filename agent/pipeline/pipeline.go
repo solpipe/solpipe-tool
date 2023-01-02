@@ -150,17 +150,6 @@ func Create(
 		return Agent{}, err
 	}
 
-	{
-		xC := ctx.Done()
-		go func() {
-			select {
-			case <-xC:
-				break
-			case err4 := <-signalC:
-				errorC <- err4
-			}
-		}()
-	}
 	pipelineRelay, err := pxypipe.Create(
 		ctx,
 		*args.Relay,
@@ -221,7 +210,7 @@ func Create(
 	reflection.Register(grpcAdminServer)
 	go loopListen(grpcAdminServer, adminListener, errorC)
 
-	go loopCloseFromError(ctx, cancel, errorC)
+	go loopCloseFromError(ctx, cancel, errorC, signalC)
 
 	return Agent{
 		ctx:       ctx,
@@ -232,11 +221,20 @@ func Create(
 	}, nil
 }
 
-func loopCloseFromError(ctx context.Context, cancel context.CancelFunc, errorC <-chan error) {
+func loopCloseFromError(
+	ctx context.Context,
+	cancel context.CancelFunc,
+	errorC <-chan error,
+	adminErrorC <-chan error,
+) {
 	defer cancel()
+	var err error
 	select {
 	case <-ctx.Done():
-	case <-errorC:
+	case err = <-errorC:
+		log.Debugf("server error: %s", err.Error())
+	case err = <-adminErrorC:
+		log.Debugf("admin error: %s", err.Error())
 	}
 }
 

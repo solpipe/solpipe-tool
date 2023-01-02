@@ -15,6 +15,7 @@ import (
 type internal struct {
 	ctx              context.Context
 	errorC           chan<- error
+	closeServer      bool
 	closeSignalCList []chan<- error
 	configFilePath   string
 	rateSettings     *pba.RateSettings
@@ -67,6 +68,7 @@ func loopInternal(
 	in := new(internal)
 	in.ctx = ctx
 	in.errorC = errorC
+	in.closeServer = false
 	in.configFilePath = configFilePath
 	in.closeSignalCList = make([]chan<- error, 0)
 	in.periodSettings = DefaultPeriodSettings()
@@ -92,12 +94,14 @@ func loopInternal(
 	in.settings_change()
 
 out:
-	for {
+	for !in.closeServer {
 		select {
 		case <-doneC:
 			break out
 		case err = <-errorC:
-			break out
+			if err != nil {
+				break out
+			}
 		case id := <-in.homeLog.DeleteC:
 			in.homeLog.Delete(id)
 		case x := <-in.homeLog.ReqC:
